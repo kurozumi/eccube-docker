@@ -1,0 +1,64 @@
+# 本番用オーバーレイ。開発ツールを外し、公開層をプロファイルで選ぶ。
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+#   （.env で COMPOSE_FILE=compose.yaml:compose.prod.yaml を設定すれば -f 省略可）
+#
+# 公開方式は .env の COMPOSE_PROFILES で選択:
+#   tunnel … Cloudflare Tunnel（ポート開放不要・既定）
+#   caddy  … Caddy 自動HTTPS（ドメイン＋80/443開放。どの VPS/AWS でも）
+#   （未設定）… host nginx / ALB の背後。nginx はループバックのみに束縛
+services:
+  ec-cube:
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: 0
+    restart: always
+
+  nginx:
+    # 外から直接叩かせない。公開層（cloudflared/caddy/ホスト nginx）から nginx:80 へ来る。
+    ports: !override
+      - "127.0.0.1:${HTTP_PORT:-8080}:80"
+    restart: always
+
+  db:
+    restart: always
+
+  mailpit:
+    restart: always
+
+  # ── tunnel プロファイル: Cloudflare Tunnel ──
+  # サーバーからの outbound だけで公開。80/443 を開けず、オリジン IP も隠れる。
+  # TUNNEL_TOKEN は Cloudflare Zero Trust の Tunnel 作成時に発行。公開ホスト名は
+  # ダッシュボード側で <ドメイン> → http://nginx:80 を設定する。
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      - nginx
+    restart: always
+
+  # ── caddy プロファイル: 自動 HTTPS（Let's Encrypt）──
+  # ドメインの A レコードをこのサーバーへ向け、80/443 を開ける。SITE_DOMAIN を .env で指定。
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["caddy"]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+    volumes:
+      - eccube_app:/var/www/html:ro
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - ec-cube
+    restart: always
+
+volumes:
+  caddy_data:
+  caddy_config:

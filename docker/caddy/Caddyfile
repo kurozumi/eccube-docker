@@ -1,0 +1,14 @@
+# caddy プロファイル用。ドメイン＋80/443 でどの VPS/AWS でも自動 HTTPS。
+# SITE_DOMAIN は .env で指定（未設定なら :80 でリッスン）。
+# web ルートはプロジェクトルート（/var/www/html）、フロントは index.php。
+{$SITE_DOMAIN::80} {
+	root * /var/www/html
+	encode gzip zstd
+
+	# アプリ内部ディレクトリ・ドットファイルへの直接アクセスを禁止
+	@denied path /var/* /tests/* /test/* /vendor/* /app/* /src/* /bin/* /.*
+	respond @denied 403
+
+	php_fastcgi ec-cube:9000
+	file_server
+}

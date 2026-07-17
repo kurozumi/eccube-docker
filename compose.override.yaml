@@ -1,0 +1,29 @@
+# 開発用オーバーレイ（`docker compose up -d` で自動読み込みされる）。
+# 自分のコード（Customize / template / DoctrineMigrations）を rw で live 編集できるようにし、
+# phpMyAdmin と Mailpit UI を公開する。
+#
+# APP_ENV はここで上書きしない。既定は .env の prod。デバッグ時だけ .env を dev に。
+services:
+  ec-cube:
+    volumes:
+      # base の :ro を rw で上書き（同じ target は override が勝つ）
+      - ./app/Customize:/var/www/html/app/Customize
+      - ./app/template:/var/www/html/app/template
+      - ./app/DoctrineMigrations:/var/www/html/app/DoctrineMigrations
+
+  mailpit:
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"   # メール確認 UI
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    environment:
+      PMA_HOST: db
+      PMA_USER: ${DB_USER:-eccube}
+      PMA_PASSWORD: ${DB_PASSWORD:-eccube_pass}
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "${PMA_PORT:-8081}:80"            # DB 管理
+    depends_on:
+      - db
+    restart: unless-stopped

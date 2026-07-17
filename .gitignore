@@ -1,0 +1,11 @@
+# 環境ごとの秘密・生成物
+/.env
+/.env.bak
+
+# Claude Code の個人設定（共有しない。共有は .claude/settings.json）
+/.claude/settings.local.json
+
+# EC-CUBE 本体はイメージにベイクするので、このリポジトリには持たない。
+# app/ 配下（Customize / template / DoctrineMigrations / config）は
+# あなたの成果物なので Git 管理する。
+/var/

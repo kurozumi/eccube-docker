@@ -1,0 +1,17 @@
+# app/Customize/Resource/config/services.yaml
+# あなたのカスタマイズ用の DI 設定。EC-CUBE 本体は触らず、ここに書く。
+# EC-CUBE 4 の Kernel は起動時にこのファイルを読み込む。
+#
+# 参考: monolog などの framework 級設定もこの Kernel::configureContainer と
+# 同じ $loader で読まれるため、この services.yaml に monolog: を書いても拾われる。
+# ただし責務分離のため、本テンプレートでは app/config/eccube/packages/ に置いている。
+services:
+  _defaults:
+    autowire: true
+    autoconfigure: true
+
+  # クラス（Controller / Service など）を app/Customize 配下に追加したら、
+  # 以下のコメントを外して PSR-4 で一括登録する:
+  # Customize\:
+  #   resource: '../../*'
+  #   exclude: '../../{Entity,Resource,Tests}'

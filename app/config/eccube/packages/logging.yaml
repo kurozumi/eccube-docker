@@ -1,0 +1,17 @@
+# app/config/eccube/packages/logging.yaml
+# 独自 monolog チャンネル/ハンドラの例（entrypoint が本体の app/config へマージする）。
+#
+# 【検証メモ】この monolog: ブロックは、EC-CUBE 4.3 の Kernel::configureContainer が
+# app/Customize/Resource/config/services.yaml を「同じ $loader・同じビルドフェーズ」で
+# 読むため、services.yaml 側へ移しても拾われる。よって
+# 「framework 級設定は Customize の services.yaml では拾えない」は 4.3 では成立しない。
+# ここに分けているのは “拾えないから” ではなく、DI 設定と分離する設計方針のため。
+monolog:
+  channels: ['custom']
+  handlers:
+    custom:
+      type: rotating_file
+      max_files: 30
+      path: '%kernel.logs_dir%/%kernel.environment%/custom.log'
+      level: info
+      channels: ['custom']
