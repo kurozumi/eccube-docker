@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 # 本番用オーバーレイ。開発ツールを外し、公開層をプロファイルで選ぶ。
 #   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
 #   （.env で COMPOSE_FILE=compose.yaml:compose.prod.yaml を設定すれば -f 省略可）
@@ -27,6 +33,7 @@ services:
   # TUNNEL_TOKEN は Cloudflare Zero Trust の Tunnel 作成時に発行。公開ホスト名は
   # ダッシュボード側で <ドメイン> → http://nginx:80 を設定する。
   cloudflared:
+    logging: *default-logging
     image: cloudflare/cloudflared:latest
     profiles: ["tunnel"]
     command: tunnel --no-autoupdate run
@@ -39,6 +46,7 @@ services:
   # ── caddy プロファイル: 自動 HTTPS（Let's Encrypt）──
   # ドメインの A レコードをこのサーバーへ向け、80/443 を開ける。SITE_DOMAIN を .env で指定。
   caddy:
+    logging: *default-logging
     image: caddy:2-alpine
     profiles: ["caddy"]
     ports:

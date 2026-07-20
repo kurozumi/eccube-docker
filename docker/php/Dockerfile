@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         default-mysql-client \
         openssh-client \
         gettext-base \
+        libfcgi-bin \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- PHP 拡張 ----
