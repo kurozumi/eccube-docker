@@ -136,9 +136,16 @@ bin/publish.sh   # docker compose -f compose.yaml -f compose.prod.yaml up -d --b
 docker compose up -d --scale ec-cube=3
 ```
 
-nginx は Docker 内蔵 DNS を毎回引き直して 3 レプリカへ分散する（内部ロードバランス）。
+nginx は Docker 内蔵 DNS を毎回引き直して各レプリカへ分散する（内部ロードバランス）。
+実測で 2 レプリカに約 11:9 で振り分き、1 台停止時も残りが 200 を返し継続（フェイルオーバー）。
 レプリカは同じ `eccube_app` ボリュームを共有するので、セッション（`var/sessions`）も
 共有され、**この構成なら別途 LB もセッション共有も要らずカート/ログインが保たれる**。
+
+注意点:
+- 各レプリカは起動時に `migrate` と `cache:clear` を実行する。未適用マイグレーションが
+  ある状態で一斉起動すると競合しうるので、**先に 1 台で適用してからスケール**する。
+- `docker compose up` を `--scale` なしで実行すると台数が既定(1)に戻る。スケール状態を
+  保つなら毎回 `--scale ec-cube=N` を付けるか、`deploy.replicas` を設定する。
 
 ### さらに上（Tier 2 以降）
 
