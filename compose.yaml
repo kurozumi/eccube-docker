@@ -32,6 +32,9 @@ services:
       DB_NAME: ${DB_NAME:-eccube_db}
       # Symfony アプリキャッシュの Redis 共有（app/config/eccube/packages/cache.yaml が参照）
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # セッション保存用 Redis（Tier 2）。app/Customize/Resource/config/services.yaml が参照。
+      # キャッシュ用 redis とは別インスタンス（永続化・noeviction）を既定にする。
+      SESSION_REDIS_URL: ${SESSION_REDIS_URL:-redis://redis-session:6379}
       # php-fpm プールのチューニング（entrypoint が生成）。サーバー規模に合わせて調整。
       PHP_FPM_PM: ${PHP_FPM_PM:-dynamic}
       PHP_FPM_MAX_CHILDREN: ${PHP_FPM_MAX_CHILDREN:-20}
@@ -59,6 +62,8 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      redis-session:
         condition: service_healthy
     restart: unless-stopped
 
@@ -118,9 +123,30 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # セッション保存用 Redis（Tier 2: 複数ホストでセッション共有）。キャッシュ用とは分離。
+  # セッションは失うとログアウトされるため、永続化（appendonly）＋noeviction（LRU で
+  # 勝手に消さない）にする。
+  redis-session:
+    image: redis:7-alpine
+    command:
+      - "redis-server"
+      - "--maxmemory-policy"
+      - "noeviction"
+      - "--appendonly"
+      - "yes"
+    volumes:
+      - redis_session_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   # Mailpit は開発専用（送信メールの確認用）。dev だけで起動するため
   # compose.override.yaml に定義している。本番では使わない。
 
 volumes:
   eccube_app:
   db_data:
+  redis_session_data:
