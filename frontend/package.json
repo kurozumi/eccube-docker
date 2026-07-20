@@ -1,0 +1,12 @@
+{
+  "name": "eccube-user-data-assets",
+  "private": true,
+  "description": "独自テーマの Sass ソース。html/user_data/assets/css/customize.css へビルドする。",
+  "scripts": {
+    "build": "sass scss/customize.scss:/output/assets/css/customize.css --load-path=/eccube/html/template/default/assets/scss --style=compressed --no-source-map",
+    "watch": "sass --watch scss/customize.scss:/output/assets/css/customize.css --load-path=/eccube/html/template/default/assets/scss --no-source-map"
+  },
+  "devDependencies": {
+    "sass": "^1.93.0"
+  }
+}
