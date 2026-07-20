@@ -38,6 +38,9 @@ services:
       # DB スキーマ操作の可否。単一ホストは 0（実行）。複数ホストで「app ロール」の
       # ホストは 1 にしてスキーマに触らせない（init ロール 1 台だけ 0 にする）。
       ECCUBE_SKIP_DB_INIT: ${ECCUBE_SKIP_DB_INIT:-0}
+      # --scale の追加レプリカ用: cache:clear もスキップ（共有 var/cache を触らない）。
+      # 使い方は README「水平スケール」参照。
+      ECCUBE_SKIP_CACHE_CLEAR: ${ECCUBE_SKIP_CACHE_CLEAR:-0}
       # ECCUBE_AUTH_MAGIC はここ（environment）では渡さない。空文字を注入すると
       # Symfony Dotenv が「設定済み」とみなし、secret が空で bin/console が落ちるため。
       # 値は .env（env_file）で渡す。bin/init.sh が未設定なら自動生成する。

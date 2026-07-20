@@ -84,9 +84,17 @@ done
 #    「app ロール（ECCUBE_SKIP_DB_INIT=1）」はスキーマに触らず cache:clear だけ行う
 #    （全 app ホストが一斉に migrate すると競合するため）。単一ホストなら未設定でよい。
 MARKER="$APP_DIR/var/.eccube_installed"
+# ECCUBE_SKIP_CACHE_CLEAR=1: cache:clear もスキップする。
+# 同一ホストで --scale する際、レプリカは同じ eccube_app ボリューム（var/cache）を
+# 共有するため、追加レプリカの cache:clear が稼働中レプリカのコンパイル済み
+# コンテナを一瞬消して 500 を出し得る。追加レプリカはこのフラグで何も触らせない。
 if [ "${ECCUBE_SKIP_DB_INIT:-0}" = "1" ]; then
-    log "app ロール: DB 初期化/マイグレーションをスキップ（cache:clear のみ）"
-    runuser -u www-data -- php bin/console cache:clear --no-interaction || true
+    if [ "${ECCUBE_SKIP_CACHE_CLEAR:-0}" = "1" ]; then
+        log "scale レプリカ: DB 初期化・cache:clear ともスキップ"
+    else
+        log "app ロール: DB 初期化/マイグレーションをスキップ（cache:clear のみ）"
+        runuser -u www-data -- php bin/console cache:clear --no-interaction || true
+    fi
 elif [ ! -f "$MARKER" ]; then
     log "eccube:install（初回セットアップ）"
     if runuser -u www-data -- php bin/console eccube:install --no-interaction; then
