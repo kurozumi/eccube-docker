@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 # 開発用オーバーレイ（`docker compose up -d` で自動読み込みされる）。
 # 自分のコード（Customize / template / DoctrineMigrations）を rw で live 編集できるようにし、
 # 開発専用ツール（Mailpit・phpMyAdmin）を起動する。
@@ -19,6 +25,7 @@ services:
 
   # 送信メールを外部に出さず受け止め、Web UI で確認する（開発専用）。
   mailpit:
+    logging: *default-logging
     image: axllent/mailpit:latest
     environment:
       MP_MAX_MESSAGES: 500
@@ -33,6 +40,7 @@ services:
   #   本体を汚さず、ソースは frontend/、成果物は html/user_data/ で Git 管理。
   # 手動ビルドは bin/assets.sh build を参照。
   node:
+    logging: *default-logging
     image: node:20-bookworm-slim
     working_dir: /work
     volumes:
@@ -47,6 +55,7 @@ services:
   #   bin/assets.sh core-build   … npm ci && npm run build（一括ビルド）
   # 対象は named volume 内の本体テーマ（＝本体直編集・Git 管理外）である点に注意。
   assets-core:
+    logging: *default-logging
     image: node:20-bookworm
     profiles: ["assets-core"]
     working_dir: /var/www/html
@@ -57,6 +66,7 @@ services:
     command: ["echo 'use: bin/assets.sh core-build'"]
 
   phpmyadmin:
+    logging: *default-logging
     image: phpmyadmin:5
     environment:
       PMA_HOST: db

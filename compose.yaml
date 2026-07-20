@@ -1,7 +1,16 @@
 name: eccube
 
+# 全サービス共通のログ上限。無制限だと高トラフィックでディスクを食い潰し
+# ホストごと停止するため必須（1 サービスあたり最大 10MB×5 世代）。
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   ec-cube:
+    logging: *default-logging
     build:
       context: .
       dockerfile: docker/php/Dockerfile
@@ -78,9 +87,18 @@ services:
         condition: service_healthy
       redis-session:
         condition: service_healthy
+    # php-fpm の死活を FastCGI ping で確認（libfcgi-bin の cgi-fcgi）。
+    # start_period は entrypoint（migrate + cache:clear）の所要時間を見込む。
+    healthcheck:
+      test: ["CMD", "sh", "-c", "SCRIPT_NAME=/fpm-ping SCRIPT_FILENAME=/fpm-ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
     restart: unless-stopped
 
   nginx:
+    logging: *default-logging
     image: nginx:1.27-alpine
     ports:
       - "${HTTP_PORT:-8080}:80"
@@ -92,10 +110,12 @@ services:
       - eccube_upload:/var/www/html/html/upload:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - ec-cube
+      ec-cube:
+        condition: service_healthy
     restart: unless-stopped
 
   db:
+    logging: *default-logging
     image: mariadb:10.6
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change_me_root}
@@ -120,6 +140,7 @@ services:
   # 共有キャッシュ（Symfony アプリキャッシュ）。将来のセッション共有・複数ホスト化の土台。
   # cache 用途なので永続化は無効（--save "" / appendonly no）。maxmemory 到達時は LRU で破棄。
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     command:
       - "redis-server"
@@ -140,11 +161,16 @@ services:
 
   # セッション保存用 Redis（Tier 2: 複数ホストでセッション共有）。キャッシュ用とは分離。
   # セッションは失うとログアウトされるため、永続化（appendonly）＋noeviction（LRU で
-  # 勝手に消さない）にする。
+  # 勝手に消さない）にする。maxmemory は必須: 無制限だとボットのセッション大量生成で
+  # ホストの RAM を圧迫し OOM killer が他コンテナを道連れにする。上限到達時は
+  # 「新規セッションの書込エラー」で済み、既存ユーザーのカート/ログインは守られる。
   redis-session:
+    logging: *default-logging
     image: redis:7-alpine
     command:
       - "redis-server"
+      - "--maxmemory"
+      - "${SESSION_REDIS_MAXMEMORY:-256mb}"
       - "--maxmemory-policy"
       - "noeviction"
       - "--appendonly"

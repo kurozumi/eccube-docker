@@ -16,3 +16,8 @@ pm.max_requests = ${PHP_FPM_MAX_REQUESTS}
 ; ワーカーの stdout/stderr をコンテナログへ
 catch_workers_output = yes
 decorate_workers_output = no
+; 死活・飽和の可観測性。healthcheck が /fpm-ping を叩く。
+; /fpm-status は active/idle プロセス数・listen queue を返す（外部公開はしない）。
+pm.status_path = /fpm-status
+ping.path = /fpm-ping
+ping.response = pong

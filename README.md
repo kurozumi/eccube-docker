@@ -269,6 +269,42 @@ DB=外部）になっているので、**アプリホストを N 台並べて前
 > CSRF トークン・カート・ログイン状態を埋め込むため、誤配信の危険がある。有効化する
 > 場合の雛形と注意は `docker/nginx/default.conf` 末尾のコメントを参照。
 
+## バックアップ / 復元
+
+DB（受注・会員）とアップロード画像を 1 コマンドでバックアップできる。
+
+```bash
+bin/backup.sh                        # ./backups/<日時>/ に db.sql.gz + upload.tar.gz
+BACKUP_DIR=/mnt/nas bin/backup.sh    # 保存先変更
+BACKUP_KEEP=14 bin/backup.sh         # 保持世代数（既定 7）
+
+bin/restore.sh backups/20260721-040000   # 復元（確認プロンプトあり）
+```
+
+- DB は `mysqldump --single-transaction`（InnoDB 前提・**無停止で整合ダンプ**）
+- cron 例（毎日 4:00）:
+  ```
+  0 4 * * * cd /path/to/eccube-docker && bin/backup.sh >> var/backup.log 2>&1
+  ```
+- バックアップ先はサーバー外（NAS / オブジェクトストレージ）へ同期すること。
+  サーバー本体と同じディスクに置くだけでは障害時に共倒れになる。
+
+## 監視 / 可観測性
+
+- **コンテナ死活**: `ec-cube`（php-fpm を FastCGI ping）を含む全サービスに healthcheck が
+  あり、`docker compose ps` で healthy/unhealthy が分かる。nginx は ec-cube が healthy に
+  なってから起動する。
+- **php-fpm の飽和**（`max_children` 到達＝リクエスト滞留）は status page で確認:
+  ```bash
+  docker compose exec ec-cube sh -c \
+    'SCRIPT_NAME=/fpm-status SCRIPT_FILENAME=/fpm-status REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000'
+  # active processes / idle processes / listen queue / max children reached を見る
+  ```
+  `max children reached` が増えていたら `PHP_FPM_MAX_CHILDREN` を上げる（メモリと相談）。
+- **Docker ログ**は全サービス 10MB×5 世代で上限あり（ディスク食い潰し防止）。
+- **外形監視**は UptimeRobot / Cloudflare Health Checks 等で `/` を監視する
+  （`bin/healthcheck.sh` はローカル手動確認用）。
+
 ## ユニットテスト
 
 自分のコードのテストは **`app/Customize/Tests/`** に置く（`Customize\` 名前空間で

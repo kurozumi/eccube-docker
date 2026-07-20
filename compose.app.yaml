@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 # アプリ層のみ（ec-cube + nginx）を動かす構成。複数ホストで LB する際、各アプリホストで
 # これを起動する。DB / Redis / セッション Redis / アップロード共有ストレージは「外部の
 # 共有サービス」を指す（このファイルには db/redis を含めない）。
@@ -19,6 +25,7 @@ name: eccube-app
 
 services:
   ec-cube:
+    logging: *default-logging
     build:
       context: .
       dockerfile: docker/php/Dockerfile
@@ -66,9 +73,16 @@ services:
       - ./app/config/eccube/packages:/opt/eccube-config/packages:ro
       # アップロード画像は全ホスト共有（下部 volumes を NFS/EFS ドライバに差し替える）
       - eccube_upload:/var/www/html/html/upload
+    healthcheck:
+      test: ["CMD", "sh", "-c", "SCRIPT_NAME=/fpm-ping SCRIPT_FILENAME=/fpm-ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
     restart: unless-stopped
 
   nginx:
+    logging: *default-logging
     image: nginx:1.27-alpine
     ports:
       - "${HTTP_PORT:-8080}:80"
@@ -78,7 +92,8 @@ services:
       - eccube_upload:/var/www/html/html/upload:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - ec-cube
+      ec-cube:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
