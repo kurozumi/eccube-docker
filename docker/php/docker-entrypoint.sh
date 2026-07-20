@@ -60,6 +60,13 @@ fi
 # var/ は www-data が書けるように
 chown -R www-data:www-data var 2>/dev/null || true
 
+# アップロード画像は専用ボリューム（初回や NFS 差し替え時は空）。必要な
+# サブディレクトリを用意して www-data 所有にする（無いとアップロードが失敗する）。
+for d in save_image temp_image; do
+    mkdir -p "html/upload/$d"
+done
+chown -R www-data:www-data html/upload 2>/dev/null || true
+
 # 2) DB 待ち（compose の healthcheck の保険）
 log "DB 起動待ち..."
 i=0

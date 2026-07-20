@@ -11,6 +11,9 @@ if [ -z "$ver" ]; then
 fi
 
 echo "[switch] ECCUBE_VERSION=${ver} に切り替えます。既存の DB とアプリのデータは破棄されます。"
+echo "[switch] 注意: アップロード画像（eccube_upload）も削除されます。残したい場合は先にバックアップを:"
+echo "         docker compose cp ec-cube:/var/www/html/html/upload/. ./upload-backup/"
+echo "         （NFS/EFS ドライバで運用していれば外部データは消えません）"
 read -r -p "続行しますか? [y/N] " ans
 [ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
 

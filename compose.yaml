@@ -54,6 +54,13 @@ services:
       # 独自の CSS/JS。本体が default_frame.twig で customize.css / customize.js を
       # 自動読込する公式フック。asset(...,'user_data') → /html/user_data で配信
       - ./html/user_data:/var/www/html/html/user_data:ro
+      # アップロード画像（商品画像等）は専用ボリュームに分離する。理由:
+      #   1) 本体イメージ再ビルド・コンテナ再作成でも消えない（app と分離）
+      #   2) このボリュームを NFS/EFS ドライバに差し替えれば複数ホストで共有でき、
+      #      その場合データは外部サーバー側なので down -v でも失われない
+      #   ※ ローカルボリュームのままだと down -v（reset/switch-version が使う）で消える。
+      #     事前バックアップ方法は README「アップロード画像の共有ストレージ」を参照。
+      - eccube_upload:/var/www/html/html/upload
       # framework 級設定（monolog 等）はステージングへ置き、entrypoint が本体へマージ
       - ./app/config/eccube/packages:/opt/eccube-config/packages:ro
       # ユニットテスト設定（app/Customize/Tests を対象。本体の phpunit.xml.dist は残す）
@@ -75,6 +82,8 @@ services:
       - eccube_app:/var/www/html:ro
       # 独自 CSS/JS はホスト側 bind を直接配信（named volume には無いため）
       - ./html/user_data:/var/www/html/html/user_data:ro
+      # アップロード画像を配信（ec-cube と同じ専用ボリュームを読み取り専用で）
+      - eccube_upload:/var/www/html/html/upload:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - ec-cube
@@ -150,3 +159,12 @@ volumes:
   eccube_app:
   db_data:
   redis_session_data:
+  # アップロード画像。複数ホストで共有するときは NFS/EFS ドライバに差し替える。
+  # 例（NFS）:
+  #   eccube_upload:
+  #     driver: local
+  #     driver_opts:
+  #       type: nfs
+  #       o: "addr=10.0.0.10,rw,nfsvers=4"
+  #       device: ":/export/eccube/upload"
+  eccube_upload:

@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "[reset] DB とアプリのデータを破棄して作り直します。"
+echo "[reset] 注意: アップロード画像（eccube_upload）も削除されます。残したい場合は先にバックアップを:"
+echo "         docker compose cp ec-cube:/var/www/html/html/upload/. ./upload-backup/"
 read -r -p "続行しますか? [y/N] " ans
 [ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
 
