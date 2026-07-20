@@ -49,6 +49,8 @@ services:
       SITE_DOMAIN: ${SITE_DOMAIN:-}
     volumes:
       - eccube_app:/var/www/html:ro
+      # 独自 CSS/JS はホスト側 bind を直接配信（nginx と同様）
+      - ./html/user_data:/var/www/html/html/user_data:ro
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config

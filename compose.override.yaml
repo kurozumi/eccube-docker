@@ -14,6 +14,8 @@ services:
       - ./app/Customize:/var/www/html/app/Customize
       - ./app/template:/var/www/html/app/template
       - ./app/DoctrineMigrations:/var/www/html/app/DoctrineMigrations
+      # プラグイン開発・導入は書き込みが要る（plugin:generate / composer install）
+      - ./app/Plugin:/var/www/html/app/Plugin
 
   # 送信メールを外部に出さず受け止め、Web UI で確認する（開発専用）。
   mailpit:
@@ -23,6 +25,36 @@ services:
     ports:
       - "${MAILPIT_UI_PORT:-8025}:8025"   # メール確認 UI
     restart: unless-stopped
+
+  # ── フロント CSS/JS ビルド（開発） ──
+  # 独自テーマ方式: frontend/scss/customize.scss を Dart Sass で
+  #   html/user_data/assets/css/customize.css へ watch ビルド。
+  #   出力は本体が default_frame.twig で自動読込する（上書き Twig 不要）。
+  #   本体を汚さず、ソースは frontend/、成果物は html/user_data/ で Git 管理。
+  # 手動ビルドは bin/assets.sh build を参照。
+  node:
+    image: node:20-bookworm-slim
+    working_dir: /work
+    volumes:
+      - ./frontend:/work                                  # ソース（scss / package.json）
+      - ./html/user_data:/output                          # 出力先（customize.css）
+      - eccube_app:/eccube:ro                             # 本体 scss を @import する load-path 用
+    command: sh -lc "npm install --no-audit --no-fund && npm run watch"
+    restart: unless-stopped
+
+  # ── 本体テーマ丸ごとの純正ツールチェーン（Gulp/Webpack）──
+  # html/template/default 等を作り替えるとき用。profile 指定時のみ起動。
+  #   bin/assets.sh core-build   … npm ci && npm run build（一括ビルド）
+  # 対象は named volume 内の本体テーマ（＝本体直編集・Git 管理外）である点に注意。
+  assets-core:
+    image: node:20-bookworm
+    profiles: ["assets-core"]
+    working_dir: /var/www/html
+    volumes:
+      - eccube_app:/var/www/html
+      - ./html/user_data:/var/www/html/html/user_data
+    entrypoint: ["sh", "-lc"]
+    command: ["echo 'use: bin/assets.sh core-build'"]
 
   phpmyadmin:
     image: phpmyadmin:5

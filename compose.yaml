@@ -37,6 +37,11 @@ services:
       - ./app/Customize:/var/www/html/app/Customize:ro
       - ./app/template:/var/www/html/app/template:ro
       - ./app/DoctrineMigrations:/var/www/html/app/DoctrineMigrations:ro
+      # プラグイン（開発・導入したものを Git 管理）。dev は override が rw で上書き
+      - ./app/Plugin:/var/www/html/app/Plugin:ro
+      # 独自の CSS/JS。本体が default_frame.twig で customize.css / customize.js を
+      # 自動読込する公式フック。asset(...,'user_data') → /html/user_data で配信
+      - ./html/user_data:/var/www/html/html/user_data:ro
       # framework 級設定（monolog 等）はステージングへ置き、entrypoint が本体へマージ
       - ./app/config/eccube/packages:/opt/eccube-config/packages:ro
       # ユニットテスト設定（app/Customize/Tests を対象。本体の phpunit.xml.dist は残す）
@@ -52,6 +57,8 @@ services:
       - "${HTTP_PORT:-8080}:80"
     volumes:
       - eccube_app:/var/www/html:ro
+      # 独自 CSS/JS はホスト側 bind を直接配信（named volume には無いため）
+      - ./html/user_data:/var/www/html/html/user_data:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - ec-cube

@@ -9,3 +9,7 @@
 # app/ 配下（Customize / template / DoctrineMigrations / config）は
 # あなたの成果物なので Git 管理する。
 /var/
+
+# フロントビルドの依存（生成物）。scss ソースと成果物 css は Git 管理する。
+/frontend/node_modules/
+/html/user_data/assets/css/*.map

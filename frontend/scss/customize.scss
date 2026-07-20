@@ -1,0 +1,32 @@
+// 独自スタイルのソース。ビルドすると
+//   html/user_data/assets/css/customize.css
+// になり、本体の default_frame.twig が style.css の「後」に自動で読み込みます。
+// ＝ ここに書いた指定は本体テーマより優先されます（上書き Twig は不要）。
+//
+// ビルド:  bin/assets.sh build      （一括）
+// 監視:    bin/assets.sh watch      （保存で自動ビルド。ブラウザは手動リロード）
+//
+// ── 本体の Bootstrap 変数を使いたい場合 ──
+// ビルド時に load-path として本体テーマの scss を渡しているので、変数だけを
+// 取り込めます（CSS は出力されません）。コメントアウトを外して利用:
+//
+//   @import "app";        // 本体の変数・mixin をまとめて読む場合
+//   // もしくは Bootstrap の変数のみ:
+//   // @import "bootstrap/scss/functions";
+//   // @import "bootstrap/scss/variables";
+//
+// これで $primary などが使えます（本体テーマの構成に依存するため、
+// 目的の変数がどのパーシャルにあるかは html/template/default/assets/scss を参照）。
+
+// --- サンプル: 好きなアクセントカラーを 1 か所で管理 ---
+$customize-accent: #ec6a29;
+
+:root {
+  --customize-accent: #{$customize-accent};
+}
+
+// デモ用の 1 ルール。実際のカスタマイズはここから追記してください。
+.ec-layoutRole {
+  // 例: サイト全体のリンク色をアクセントに寄せる場合
+  // a { color: $customize-accent; }
+}

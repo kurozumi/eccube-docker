@@ -1,0 +1,8 @@
+/*
+ * このファイルは frontend/scss/customize.scss からビルドされる生成物です。
+ * 直接編集せず、scss を編集して bin/assets.sh build（または watch）してください。
+ * 本体 default_frame.twig が style.css の後に自動読込します。
+ */
+:root {
+  --customize-accent: #ec6a29;
+}
