@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libonig-dev \
         default-mysql-client \
         openssh-client \
+        gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- PHP 拡張 ----
@@ -36,11 +37,23 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
         exif \
         opcache
 
+# ---- phpredis（セッション/キャッシュの Redis 共有用）----
+# pecl のビルドに必要な依存は一時的に入れて、ビルド後に取り除く。
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends $PHPIZE_DEPS; \
+    pecl install redis; \
+    docker-php-ext-enable redis; \
+    apt-get purge -y --auto-remove $PHPIZE_DEPS; \
+    rm -rf /var/lib/apt/lists/* /tmp/pear
+
 # ---- Composer ----
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # ---- PHP 設定 ----
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/zzz-eccube.ini
+# php-fpm プールのテンプレート（entrypoint が env から生成する）
+COPY docker/php/www-pool.conf.tmpl /usr/local/etc/php/eccube/www-pool.conf.tmpl
 
 WORKDIR /var/www/html
 

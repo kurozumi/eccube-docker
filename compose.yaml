@@ -30,6 +30,15 @@ services:
       DB_USER: ${DB_USER:-eccube}
       DB_PASSWORD: ${DB_PASSWORD:-eccube_pass}
       DB_NAME: ${DB_NAME:-eccube_db}
+      # Symfony アプリキャッシュの Redis 共有（app/config/eccube/packages/cache.yaml が参照）
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # php-fpm プールのチューニング（entrypoint が生成）。サーバー規模に合わせて調整。
+      PHP_FPM_PM: ${PHP_FPM_PM:-dynamic}
+      PHP_FPM_MAX_CHILDREN: ${PHP_FPM_MAX_CHILDREN:-20}
+      PHP_FPM_START_SERVERS: ${PHP_FPM_START_SERVERS:-4}
+      PHP_FPM_MIN_SPARE: ${PHP_FPM_MIN_SPARE:-2}
+      PHP_FPM_MAX_SPARE: ${PHP_FPM_MAX_SPARE:-6}
+      PHP_FPM_MAX_REQUESTS: ${PHP_FPM_MAX_REQUESTS:-500}
     volumes:
       # EC-CUBE 本体（イメージ内容）は名前付きボリュームに展開される
       - eccube_app:/var/www/html
@@ -48,6 +57,8 @@ services:
       - ./phpunit.xml:/var/www/html/phpunit.xml:ro
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 
@@ -77,10 +88,33 @@ services:
       --collation-server=utf8mb4_bin
     volumes:
       - db_data:/var/lib/mysql
+      # チューニング（innodb_buffer_pool_size 等）。サーバー RAM に合わせて調整する。
+      - ./docker/mariadb/conf.d:/etc/mysql/conf.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-change_me_root}"]
       interval: 5s
       timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # 共有キャッシュ（Symfony アプリキャッシュ）。将来のセッション共有・複数ホスト化の土台。
+  # cache 用途なので永続化は無効（--save "" / appendonly no）。maxmemory 到達時は LRU で破棄。
+  redis:
+    image: redis:7-alpine
+    command:
+      - "redis-server"
+      - "--maxmemory"
+      - "${REDIS_MAXMEMORY:-256mb}"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--save"
+      - ""
+      - "--appendonly"
+      - "no"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 20
     restart: unless-stopped
 

@@ -1,0 +1,13 @@
+# Symfony アプリキャッシュを Redis に載せる。
+#   - 複数ホストへ水平スケールしたとき、キャッシュを共有できる基盤になる。
+#   - 単一ホストでもファイル I/O が減る。
+# 本体 framework.yaml の cache 設定にマージされる（prefix_seed 等の既定は残る）。
+# REDIS_URL は compose の environment（既定 redis://redis:6379）で渡す。
+#
+# ▸ 無効化してファイルキャッシュに戻したいときは、このファイルを削除するだけ。
+# ▸ セッションは本体の SameSite 対応ハンドラを保つため、ここでは触らない
+#   （複数ホスト対応でセッションも Redis 化する手順は README のスケール節を参照）。
+framework:
+    cache:
+        app: cache.adapter.redis
+        default_redis_provider: '%env(REDIS_URL)%'

@@ -115,6 +115,43 @@ bin/publish.sh   # docker compose -f compose.yaml -f compose.prod.yaml up -d --b
 - **caddy**: `.env` に `SITE_DOMAIN` を設定し、A レコードをこのサーバーへ向ける。
 - **背後配置**: `COMPOSE_PROFILES` を空にすると nginx は `127.0.0.1:8080` のみで待ち受ける。
 
+## 大規模アクセス / スケール（Tier 1）
+
+単一ホストのまま高トラフィックに耐えるための強化が入っている（本体は非編集）。
+
+| 強化 | 場所 | 調整 |
+|---|---|---|
+| php-fpm ワーカー数 | entrypoint が env から生成 | `.env` の `PHP_FPM_*` |
+| 本番 OPcache（`validate_timestamps=0`） | entrypoint（`APP_ENV=prod` で自動） | — |
+| Redis 共有キャッシュ（Symfony app cache） | `redis` サービス＋`app/config/eccube/packages/cache.yaml` | `REDIS_URL` |
+| MariaDB バッファプール等 | `docker/mariadb/conf.d/eccube.cnf` | `innodb_buffer_pool_size` を RAM に合わせる |
+| gzip / 静的長期キャッシュ | `docker/nginx/default.conf` | — |
+
+**まず調整すべき2点**: `PHP_FPM_MAX_CHILDREN`（＝同時処理数。メモリから算出）と
+`innodb_buffer_pool_size`（＝専用 DB なら RAM の 50〜70%）。
+
+### 水平スケール（1台の中で php-fpm を増やす）
+
+```bash
+docker compose up -d --scale ec-cube=3
+```
+
+nginx は Docker 内蔵 DNS を毎回引き直して 3 レプリカへ分散する（内部ロードバランス）。
+レプリカは同じ `eccube_app` ボリュームを共有するので、セッション（`var/sessions`）も
+共有され、**この構成なら別途 LB もセッション共有も要らずカート/ログインが保たれる**。
+
+### さらに上（Tier 2 以降）
+
+- **複数ホスト**へ広げる段階で、セッションをファイルから **Redis 共有**へ移す必要がある
+  （本体は SameSite 対応の独自ハンドラを使うため、単純な DSN 差し替えではなくハンドラを
+  保ったまま Redis バックエンド化する。要検証）。
+- DB リードレプリカ、画像の S3+CDN、マネージド Redis/DB、ECS/k8s + ALB などは
+  コスト・運用が増えるため、必要規模に応じて別途設計する。
+
+> フルページキャッシュ（nginx `fastcgi_cache`）は既定で無効。EC-CUBE はページに
+> CSRF トークン・カート・ログイン状態を埋め込むため、誤配信の危険がある。有効化する
+> 場合の雛形と注意は `docker/nginx/default.conf` 末尾のコメントを参照。
+
 ## ユニットテスト
 
 自分のコードのテストは **`app/Customize/Tests/`** に置く（`Customize\` 名前空間で

@@ -1,0 +1,29 @@
+# MariaDB チューニング（大規模アクセス向けの基本値）。
+# /etc/mysql/conf.d に mount され、compose の command（文字コード指定）と併用される。
+#
+# ★ innodb_buffer_pool_size はサーバー RAM に合わせて調整すること。
+#   専用 DB なら実メモリの 50〜70% が目安。ここでは汎用に 512M を既定とする。
+[mysqld]
+# データ/インデックスのキャッシュ。DB 性能に最も効く。
+innodb_buffer_pool_size = 512M
+innodb_buffer_pool_instances = 1
+
+# 書込み耐久性と速度のバランス。2 = 1秒ごとに flush（クラッシュ時最大1秒分のロスを許容）。
+# 決済の整合性を厳密にしたいなら 1 に戻す。
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+innodb_log_file_size = 128M
+
+# 接続・スレッド
+max_connections = 200
+thread_cache_size = 64
+table_open_cache = 4000
+
+# 一時テーブル（重い集計クエリのディスク落ち抑制）
+tmp_table_size = 64M
+max_heap_table_size = 64M
+
+# 低速クエリの可視化（チューニングの起点）。既定は off。
+# 調査時は slow_query_log = 1 にする（出力先は既定でデータディレクトリ内）。
+slow_query_log = 0
+long_query_time = 1

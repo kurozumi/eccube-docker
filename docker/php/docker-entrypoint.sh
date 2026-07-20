@@ -12,6 +12,44 @@ APP_DIR=/var/www/html
 log() { echo "[entrypoint] $*"; }
 cd "$APP_DIR"
 
+# 0) php-fpm プールを env から生成（envsubst）。テンプレ/コマンドが無ければ黙って飛ばす。
+POOL_TMPL=/usr/local/etc/php/eccube/www-pool.conf.tmpl
+POOL_OUT=/usr/local/etc/php-fpm.d/zzz-eccube-pool.conf
+if command -v envsubst >/dev/null 2>&1 && [ -f "$POOL_TMPL" ]; then
+    : "${PHP_FPM_PM:=dynamic}"
+    : "${PHP_FPM_MAX_CHILDREN:=20}"
+    : "${PHP_FPM_START_SERVERS:=4}"
+    : "${PHP_FPM_MIN_SPARE:=2}"
+    : "${PHP_FPM_MAX_SPARE:=6}"
+    : "${PHP_FPM_MAX_REQUESTS:=500}"
+    export PHP_FPM_PM PHP_FPM_MAX_CHILDREN PHP_FPM_START_SERVERS \
+           PHP_FPM_MIN_SPARE PHP_FPM_MAX_SPARE PHP_FPM_MAX_REQUESTS
+    envsubst '${PHP_FPM_PM} ${PHP_FPM_MAX_CHILDREN} ${PHP_FPM_START_SERVERS} ${PHP_FPM_MIN_SPARE} ${PHP_FPM_MAX_SPARE} ${PHP_FPM_MAX_REQUESTS}' \
+        < "$POOL_TMPL" > "$POOL_OUT"
+    log "php-fpm プール: pm=$PHP_FPM_PM max_children=$PHP_FPM_MAX_CHILDREN"
+fi
+
+# 0b) 環境別 OPcache。prod は timestamp 検証を切って stat を無くす（要リビルドで反映）。
+#     zzzz- は zzz-eccube.ini より後に読まれ、同名ディレクティブを上書きする。
+RUNTIME_INI=/usr/local/etc/php/conf.d/zzzz-eccube-runtime.ini
+if [ "$APP_ENV" = "prod" ]; then
+    {
+        echo "opcache.validate_timestamps=0"
+        echo "opcache.interned_strings_buffer=32"
+        echo "opcache.memory_consumption=256"
+        echo "opcache.max_wasted_percentage=10"
+        echo "realpath_cache_size=4096K"
+        echo "realpath_cache_ttl=600"
+    } > "$RUNTIME_INI"
+    log "OPcache: prod（validate_timestamps=0）"
+else
+    {
+        echo "opcache.validate_timestamps=1"
+        echo "opcache.revalidate_freq=0"
+    } > "$RUNTIME_INI"
+    log "OPcache: dev（validate_timestamps=1）"
+fi
+
 # 1) ホストの app/config/eccube/packages/* を本体へマージ（追加・上書きのみ。既定は消さない）
 if [ -d /opt/eccube-config/packages ] && [ -n "$(ls -A /opt/eccube-config/packages 2>/dev/null)" ]; then
     log "app/config/eccube/packages へホスト設定をマージ"
