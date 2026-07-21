@@ -15,6 +15,9 @@ innodb_flush_method = O_DIRECT
 innodb_log_file_size = 128M
 
 # 接続・スレッド
+# ★ 複数ホスト時の設計式: Σ(各ホストの PHP_FPM_MAX_CHILDREN) + worker数 + 管理用余裕(10〜20)
+#   がこの値を超えると "Too many connections" になる。
+#   例: MAX_CHILDREN=50 × 4 ホスト = 200 で即枯渇 → max_connections を上げるか children を配分。
 max_connections = 200
 thread_cache_size = 64
 table_open_cache = 4000

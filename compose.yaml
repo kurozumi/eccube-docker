@@ -176,7 +176,9 @@ services:
       # チューニング（innodb_buffer_pool_size 等）。サーバー RAM に合わせて調整する。
       - ./docker/mariadb/conf.d:/etc/mysql/conf.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-change_me_root}"]
+      # パスワードは MYSQL_PWD 環境変数で渡す（-p<pass> だとプロセスリストに露出する）。
+      # $$ は compose のエスケープで、コンテナ内の環境変数として実行時に展開される。
+      test: ["CMD", "sh", "-c", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h localhost -u root"]
       interval: 5s
       timeout: 5s
       retries: 20

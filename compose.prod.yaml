@@ -41,6 +41,10 @@ services:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     depends_on:
       - nginx
+    # 公開層の SPOF 対策: 同一トークンで複数レプリカを張れる（Cloudflare 側で自動分散）。
+    # 必要なら次を有効化:
+    # deploy:
+    #   replicas: 2
     restart: always
 
   # ── caddy プロファイル: 自動 HTTPS（Let's Encrypt）──
