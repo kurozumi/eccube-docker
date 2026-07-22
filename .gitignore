@@ -13,4 +13,9 @@
 # フロントビルドの依存（生成物）。scss ソースと成果物 css は Git 管理する。
 /frontend/node_modules/
 /html/user_data/assets/css/*.map
+
+# 導入したプラグインは各自の repo で管理する（この repo では追跡しない）。
+# .gitkeep だけ残す。
+/app/Plugin/*
+!/app/Plugin/.gitkeep
 /backups/
