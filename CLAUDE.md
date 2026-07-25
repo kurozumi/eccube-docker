@@ -36,7 +36,8 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 
 ```bash
 bin/init.sh                    # 初回セットアップ
-bin/switch-version.sh ~4.2.0   # バージョン切替（データ破棄）
+bin/upgrade.sh ~4.3.2          # バージョンアップ（データ保持・運用環境向け）
+bin/switch-version.sh ~4.2.0   # バージョン切替（データ破棄・開発用）
 bin/reset.sh                   # DB 初期化
 bin/publish.sh                 # 本番構成で起動
 docker compose exec ec-cube runuser -u www-data -- php bin/console <cmd>

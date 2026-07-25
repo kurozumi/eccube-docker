@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # EC-CUBE のバージョンを切り替える。スキーマが変わるため DB とアプリのボリュームを作り直す。
 #   使い方: bin/switch-version.sh ~4.2.0
+#
+# これは「指定バージョンをまっさらに立て直す」開発用ツールで、バージョンアップ用ではない。
+# 運用中の環境をデータを保ったまま上げるには bin/upgrade.sh を使うこと。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
