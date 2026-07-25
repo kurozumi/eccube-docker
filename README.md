@@ -122,18 +122,64 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
   本体テーマ（`html/template/default` など）を丸ごと作り替えたいときだけ、純正
   Gulp/Webpack を回す `bin/assets.sh core-build`（＝本体直編集・Git 管理外・データ破棄で戻る）。
 
-## バージョン切替
+## バージョン切替 / バージョンアップ
+
+用途が違う 2 本がある。**運用中の店舗を上げるなら `upgrade.sh`**。
 
 ```bash
-bin/switch-version.sh ~4.2.0   # .env 書換 → build → down -v → up → 再install
+bin/upgrade.sh ~4.3.2          # データを保ったまま上げる（運用中の環境向け）
+bin/switch-version.sh ~4.2.0   # データごと作り直す（開発で別バージョンを試す用）
 ```
 
-スキーマが変わるため、切替はデータを破棄して作り直す。複数バージョンを並行運用したい
-場合は、別ディレクトリに clone するか `.env` の `COMPOSE_PROJECT_NAME` を分ける。
+|                    | DB・アップロード画像 | 用途                     |
+| ------------------ | -------------------- | ------------------------ |
+| `upgrade.sh`       | **残る**             | 運用中の環境を上げる     |
+| `switch-version.sh` | 破棄される（`down -v`） | 開発で別バージョンを試す |
 
-**破棄はビルドが通ってから行う。** 先に `down -v` すると、新バージョンの取得や依存解決に
-失敗したときにデータだけ消えて環境が残らない。ビルドが失敗した場合は `.env` の
+`switch-version.sh` は「指定バージョンをまっさらに立て直す」ツールで、バージョンアップ
+ツールではない。**本番環境に使うと受注・会員データが消える。**
+
+どちらも**破棄はビルドが通ってから行う**。先に `down -v` すると、新バージョンの取得や
+依存解決に失敗したときにデータだけ消えて環境が残らない。ビルドが失敗した場合は `.env` の
 `ECCUBE_VERSION` を元へ戻して終了し、稼働中の環境とデータには触れない。
+
+### bin/upgrade.sh の動き
+
+1. `bin/backup.sh` を実行（失敗したら何も触らずに中止）
+2. `.env` の `ECCUBE_VERSION` を更新してイメージをビルド（ビルド失敗時は `.env` を戻す）
+3. `docker compose down`（`-v` なし）→ **`eccube_app` ボリュームだけ** 削除
+4. 起動前に `var/.eccube_installed` を置く
+5. `up -d` → entrypoint が独自 migration（`app/DoctrineMigrations`）を適用
+6. `doctrine:schema:update` で本体スキーマを追従（差分 SQL を表示してから適用）
+
+手順 3 が要る理由は、`eccube_app` が `/var/www/html` 全体を覆っているため、イメージを
+作り直しても既存ボリュームがある限り新しい本体コードが反映されないから
+（`docker/php/docker-entrypoint.sh` の `1b)` のコメント参照）。
+
+手順 4 が要る理由は、`eccube_app` を作り直すとマーカーが消え、entrypoint が「未インストール」と
+誤判定して**データの入った既存 DB に `eccube:install` を撃ってしまう**ため。先にマーカーを
+置くことで migration 経路へ寄せる。
+
+手順 6 が要る理由は、**EC-CUBE 4.x が本体の migration ファイルを同梱していない**ため。
+`src/Eccube/Resource/doctrine/migration/` は空で、`doctrine_migrations.yaml` が見るのは
+`app/DoctrineMigrations`（自分で書く分）だけ。つまり `doctrine:migrations:migrate` では
+本体スキーマが一切追従せず、バージョンを跨ぐと新しいエンティティが期待するカラムが無くて
+全ページ 500 になる（4.2 → 4.3 なら `dtb_base_info.ga_id`）。エンティティ定義に DB を
+合わせる `doctrine:schema:update` で追従させている。
+
+> `--complete` は付けていない。付けると「エンティティ定義に無い列」を削除するため、
+> プラグインが追加した列を巻き添えで落とす。
+
+注意点:
+
+- migration は前進のみ。**ダウングレードはできない。** 切り戻しは `.env` を戻して
+  `bin/upgrade.sh <旧バージョン>` を実行し、必要なら `bin/restore.sh` で DB を書き戻す。
+- マイナー/メジャーをまたぐ場合、既存プラグインが新バージョン非対応だと起動後にエラーに
+  なりうる。事前に対応状況を確認すること。
+- 完了後は管理画面・フロント・受注データを目視で確認すること。
+
+複数バージョンを並行運用したい場合は、別ディレクトリに clone するか `.env` の
+`COMPOSE_PROJECT_NAME` を分ける。
 
 ## 本番デプロイ（どのサーバーでも）
 
