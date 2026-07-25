@@ -145,7 +145,8 @@ bin/switch-version.sh ~4.2.0   # データごと作り直す（開発で別バ�
 2. `.env` の `ECCUBE_VERSION` を更新してイメージをビルド（ビルド失敗時は `.env` を戻す）
 3. `docker compose down`（`-v` なし）→ **`eccube_app` ボリュームだけ** 削除
 4. 起動前に `var/.eccube_installed` を置く
-5. `up -d` → entrypoint が未適用 migration を適用
+5. `up -d` → entrypoint が独自 migration（`app/DoctrineMigrations`）を適用
+6. `doctrine:schema:update` で本体スキーマを追従（差分 SQL を表示してから適用）
 
 手順 3 が要る理由は、`eccube_app` が `/var/www/html` 全体を覆っているため、イメージを
 作り直しても既存ボリュームがある限り新しい本体コードが反映されないから
@@ -154,6 +155,16 @@ bin/switch-version.sh ~4.2.0   # データごと作り直す（開発で別バ�
 手順 4 が要る理由は、`eccube_app` を作り直すとマーカーが消え、entrypoint が「未インストール」と
 誤判定して**データの入った既存 DB に `eccube:install` を撃ってしまう**ため。先にマーカーを
 置くことで migration 経路へ寄せる。
+
+手順 6 が要る理由は、**EC-CUBE 4.x が本体の migration ファイルを同梱していない**ため。
+`src/Eccube/Resource/doctrine/migration/` は空で、`doctrine_migrations.yaml` が見るのは
+`app/DoctrineMigrations`（自分で書く分）だけ。つまり `doctrine:migrations:migrate` では
+本体スキーマが一切追従せず、バージョンを跨ぐと新しいエンティティが期待するカラムが無くて
+全ページ 500 になる（4.2 → 4.3 なら `dtb_base_info.ga_id`）。エンティティ定義に DB を
+合わせる `doctrine:schema:update` で追従させている。
+
+> `--complete` は付けていない。付けると「エンティティ定義に無い列」を削除するため、
+> プラグインが追加した列を巻き添えで落とす。
 
 注意点:
 

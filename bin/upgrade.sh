@@ -15,6 +15,8 @@
 #   ただし作り直した直後は var/.eccube_installed が消えるため、entrypoint が
 #   「未インストール」と誤判定して既存 DB に eccube:install を撃ってしまう。
 #   これを避けるため、起動前にマーカーだけ先に置いて migration 経路へ寄せる。
+#   さらに、本体は migration ファイルを同梱しないので doctrine:schema:update で
+#   本体スキーマを追従させる（詳細は下の 7) のコメント）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -109,11 +111,44 @@ echo "[upgrade] インストール済みマーカーを設定します..."
 docker compose run --rm --no-deps --entrypoint sh ec-cube \
     -c 'mkdir -p /var/www/html/var && touch /var/www/html/var/.eccube_installed'
 
-# 6) 起動。entrypoint が未適用 migration を適用する。
+# 6) 起動。entrypoint が独自 migration（app/DoctrineMigrations）を適用する。
 echo "[upgrade] 起動します..."
 docker compose up -d
 
-# 7) 応答するまで待つ（entrypoint の migrate + cache:clear を見込む）
+# 7) 本体スキーマを更新する。
+#    EC-CUBE 4.x は本体の migration ファイルを同梱していない
+#    （src/Eccube/Resource/doctrine/migration は空で、doctrine_migrations.yaml が
+#    見るのは app/DoctrineMigrations だけ）。つまり doctrine:migrations:migrate では
+#    本体スキーマが一切追従せず、バージョンを跨ぐと新しいエンティティが期待する
+#    カラムが無くて全ページ 500 になる（4.2 -> 4.3 なら dtb_base_info.ga_id）。
+#    エンティティ定義に DB を合わせる schema:update で追従させる。
+#    --complete は付けない。付けると「定義に無い列」を削除するため、プラグインが
+#    追加した列を巻き添えで落とす。
+echo "[upgrade] コンテナの準備を待っています..."
+for i in $(seq 1 60); do
+    docker compose exec -T ec-cube php -v >/dev/null 2>&1 && break
+    sleep 5
+done
+
+echo "[upgrade] 本体スキーマの差分:"
+docker compose exec -T ec-cube runuser -u www-data -- \
+    php bin/console doctrine:schema:update --dump-sql 2>&1 | sed 's/^/    /' || true
+
+echo "[upgrade] スキーマを更新します..."
+if ! docker compose exec -T ec-cube runuser -u www-data -- \
+        php bin/console doctrine:schema:update --force; then
+    cat <<EOS >&2
+[upgrade] エラー: スキーマ更新に失敗しました。
+  ログ: docker compose logs ec-cube
+  切り戻し: bin/upgrade.sh ${current:-元の値} のあと bin/restore.sh ${backup_dir:-backups/<日時>}
+EOS
+    exit 1
+fi
+
+docker compose exec -T ec-cube runuser -u www-data -- \
+    php bin/console cache:clear --no-interaction >/dev/null 2>&1 || true
+
+# 8) 応答するまで待つ
 echo "[upgrade] 起動を待っています..."
 for i in $(seq 1 60); do
     if bin/healthcheck.sh >/dev/null 2>&1; then
