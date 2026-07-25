@@ -185,10 +185,21 @@ nginx が公開され、スキーマ更新が終わるまで全ページ 500 を
 無くて全ページ 500 になる（4.2 → 4.3 なら `dtb_base_info.ga_id`）。逆に `schema:update`
 だけではマスタデータが入らない。両方要る。
 
-> `--complete` は付けていない。付けると「エンティティ定義に無い列」を削除するため、
-> プラグインが追加した列を巻き添えで落とす。
->
 > 本体の migration は個々に存在チェックが入っているので、再実行しても二重適用にならない。
+
+**`schema:update` は「エンティティ定義に無い列」を削除する。** `--complete` の有無は
+関係ない（`--complete` 無しで削除を免れるのはテーブルだけで、既存テーブルに追加された
+列は消える）。プラグインが `EntityExtension` で足した列（例: `dtb_customer.sort_no`）は、
+その時点でプラグインが有効かつメタデータに載っていないと削除対象になる。
+
+そのため `bin/upgrade.sh` は次の順で守っている。
+
+1. `eccube:generate:proxies` — `eccube_app` を作り直すと `app/proxy/entity` が消えるので、
+   有効なプラグインのエンティティ拡張をメタデータへ載せ直す
+2. 差分 SQL に列・テーブルの削除が混じっていないか検査し、あれば**中止する**
+   （`DROP INDEX` / `DROP FOREIGN KEY` / `DROP PRIMARY KEY` は索引の貼り直しなので除外）
+
+意図的に削除を適用したいときだけ `UPGRADE_ALLOW_DROP=1 bin/upgrade.sh <version>`。
 
 注意点:
 

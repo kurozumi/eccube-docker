@@ -39,6 +39,15 @@ fi
 app_vol="${proj}_eccube_app"
 db_vol="${proj}_db_data"
 
+# ec-cube サービスのイメージ名（事前確認で compose を介さず直接起動するのに使う）。
+# `config --images ec-cube` はサービス指定を無視して全イメージを返すので使わない。
+image="$(docker compose config 2>/dev/null |
+    awk '/^  ec-cube:$/{b=1;next} b&&/^  [a-zA-Z_-]+:$/{b=0} b&&/^    image:/{sub(/^    image: */,"");print;exit}')"
+if [ -z "$image" ]; then
+    echo "エラー: ec-cube のイメージ名を取得できませんでした。" >&2
+    exit 1
+fi
+
 # DB ボリュームが無い＝まだ 1 度も構築していない。upgrade ではなく init の出番。
 if ! docker volume inspect "$db_vol" >/dev/null 2>&1; then
     echo "エラー: DB ボリューム（${db_vol}）がありません。まだ構築されていない環境です。" >&2
@@ -96,6 +105,32 @@ if ! docker compose build; then
     exit 1
 fi
 
+# 3b) 新バージョンでプラグインと独自コードが読めるか、稼働中の環境に触る前に確かめる。
+#     プラグインが新バージョン非対応だとクラス宣言の互換性チェックで Fatal error に
+#     なり、あらゆる console コマンドが死ぬ。例（4.2 世代のプラグインを 4.3 に載せた場合）:
+#
+#       Fatal error: Declaration of Plugin\Foo\PluginManager::install(...
+#       must be compatible with Eccube\Plugin\AbstractPluginManager::install(...
+#
+#     down してから気づくと切り戻しに時間がかかるので、ここで落として稼働中の環境を守る。
+#     eccube_app ボリュームを渡さないので、新イメージの本体コードがそのまま使われる。
+echo "[upgrade] 新バージョンでプラグインが読めるか確認します..."
+preflight="$(docker run --rm \
+    -v "$PWD/app/Plugin:/var/www/html/app/Plugin:ro" \
+    -v "$PWD/app/Customize:/var/www/html/app/Customize:ro" \
+    --entrypoint sh "$image" -c 'php bin/console list 2>&1' 2>&1 || true)"
+if printf '%s' "$preflight" | grep -q 'Fatal error'; then
+    echo "[upgrade] エラー: 新バージョンでコードを読み込めません。中止します。" >&2
+    echo "[upgrade] 稼働中の環境・DB・画像には一切触れていません。" >&2
+    echo >&2
+    printf '%s\n' "$preflight" | grep -v '^Deprecated:' | grep 'Fatal error' | head -3 >&2
+    echo >&2
+    echo "[upgrade] 該当プラグインを新バージョン対応版へ更新するか、無効化・削除してから" >&2
+    echo "          再実行してください（app/Plugin から外すだけでも確認できます）。" >&2
+    restore_env
+    exit 1
+fi
+
 # 4) 停止（-v は付けない = DB と画像は残る）→ 本体ボリュームだけ破棄
 echo "[upgrade] コンテナを停止します（ボリュームは残します）..."
 docker compose down
@@ -127,8 +162,10 @@ docker compose run --rm --no-deps --entrypoint sh ec-cube \
 #           エンティティ定義。よって doctrine:schema:update で DB を定義へ合わせる。
 #           これを飛ばすと新しいエンティティが期待するカラムが無くて全ページ 500 に
 #           なる（4.2 -> 4.3 なら dtb_base_info.ga_id）。
-#           --complete は付けない。付けると「定義に無い列」を削除するため、
-#           プラグインが追加した列を巻き添えで落とす。
+#           注意: schema:update は --complete の有無にかかわらず「エンティティ定義に
+#           無い列」を削除する（--complete 無しで残るのはテーブルだけ）。よって
+#           proxy を先に生成してプラグインの拡張をメタデータに載せ、そのうえで
+#           差分に削除が混じっていないか確認してから --force する。
 #    データ: 本体の migration（app/DoctrineMigrations の 18 件）はすべてデータ移行
 #           （マスタ追加・不整合の是正など）。doctrine:migrations:migrate で流す。
 #           カラムが揃ってから流したいので schema:update の後に実行する。
@@ -147,10 +184,45 @@ EOS
     fi
 }
 
+# エンティティ proxy を先に作り直す。eccube_app を作り直すと app/proxy/entity が
+# 消えるため、これを飛ばすと「有効なプラグインのエンティティ拡張」がメタデータに
+# 載らない。schema:update は *エンティティ定義に無い列を削除する* ので、そのまま
+# 流すとプラグインが追加した列（例: EntityExtension の dtb_customer.sort_no）を
+# データごと落とす。
+echo "[upgrade] エンティティ proxy を生成します..."
+offline "proxy の生成" eccube:generate:proxies
+
 echo "[upgrade] 本体スキーマの差分:"
-docker compose run --rm -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
-    ec-cube runuser -u www-data -- php bin/console doctrine:schema:update --dump-sql \
-    2>&1 | sed 's/^/    /' || true
+diff_sql="$(docker compose run --rm -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
+    ec-cube runuser -u www-data -- php bin/console doctrine:schema:update --dump-sql 2>&1 || true)"
+printf '%s\n' "$diff_sql" | sed 's/^/    /'
+
+# 列やテーブルの削除が混じっていないか確かめる。
+# DROP INDEX / DROP FOREIGN KEY / DROP PRIMARY KEY は索引の貼り直しで普通に出るので
+# 除外し、それ以外の DROP（＝列・テーブルの削除）だけを危険と見なす。
+risky="$(printf '%s' "$diff_sql" |
+    sed -E 's/DROP (INDEX|FOREIGN KEY|PRIMARY KEY)[^,;]*//gi' |
+    grep -iE 'DROP ' || true)"
+if [ -n "$risky" ] && [ "${UPGRADE_ALLOW_DROP:-0}" != "1" ]; then
+    cat <<EOS >&2
+[upgrade] エラー: スキーマ差分に列・テーブルの削除が含まれています。中止します。
+
+$(printf '%s\n' "$risky" | sed 's/^/    /')
+
+  これを適用すると上記のデータが失われます。よくある原因:
+   - プラグインを無効化/アンインストールしたまま、その列が DB に残っている
+   - プラグインが新バージョン非対応で、エンティティ拡張が読み込めていない
+  該当プラグインを有効なまま新バージョン対応版へ更新するか、列が不要なら
+  手動で削除してから再実行してください。
+
+  内容を確認のうえ意図的に適用する場合のみ:
+    UPGRADE_ALLOW_DROP=1 bin/upgrade.sh ${ver}
+
+  サイトはまだ公開しておらず、DB にも書き込んでいません。
+  切り戻し: bin/upgrade.sh ${current:-元の値}
+EOS
+    exit 1
+fi
 
 echo "[upgrade] スキーマを更新します（未公開）..."
 offline "スキーマ更新" doctrine:schema:update --force
