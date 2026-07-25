@@ -70,6 +70,17 @@ RUN composer create-project "ec-cube/ec-cube:${ECCUBE_VERSION}" /var/www/html \
     && composer clear-cache \
     && chown -R www-data:www-data /var/www/html
 
+# ---- 同梱のサンプルプラグインを外す ----
+# 本体は app/Plugin に EC-CUBE のテスト用サンプルプラグイン（HogePlugin /
+# MigrationSample / EntityExtension など）を同梱している。本番向けイメージに
+# テスト用フィクスチャを載せる理由が無いうえ、ホストの app/Plugin を bind-mount
+# すると隠れてしまい、composer の classmap だけが存在しないファイルを参照して
+# 「Failed to open stream」の warning を出し続ける状態になる。
+# ここで消し、次段の composer require がオートローダを貼り直す。
+# （.gitkeep は * に含まれないので残る）
+RUN rm -rf /var/www/html/app/Plugin/* \
+    && chown -R www-data:www-data /var/www/html/app/Plugin
+
 # ---- メール非同期化用: Symfony Messenger（本体に未同梱）----
 # 注文完了などのメール送信をキュー経由にして SMTP 応答待ち/障害から切り離す。
 # 設定は app/config/eccube/packages/messenger.yaml、consumer は compose の worker。
