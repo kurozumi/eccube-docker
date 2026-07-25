@@ -125,11 +125,15 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
 ## バージョン切替
 
 ```bash
-bin/switch-version.sh ~4.2.0   # .env 書換 → down -v → build → up → 再install
+bin/switch-version.sh ~4.2.0   # .env 書換 → build → down -v → up → 再install
 ```
 
 スキーマが変わるため、切替はデータを破棄して作り直す。複数バージョンを並行運用したい
 場合は、別ディレクトリに clone するか `.env` の `COMPOSE_PROJECT_NAME` を分ける。
+
+**破棄はビルドが通ってから行う。** 先に `down -v` すると、新バージョンの取得や依存解決に
+失敗したときにデータだけ消えて環境が残らない。ビルドが失敗した場合は `.env` の
+`ECCUBE_VERSION` を元へ戻して終了し、稼働中の環境とデータには触れない。
 
 ## 本番デプロイ（どのサーバーでも）
 
