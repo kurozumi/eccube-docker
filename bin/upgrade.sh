@@ -39,6 +39,15 @@ fi
 app_vol="${proj}_eccube_app"
 db_vol="${proj}_db_data"
 
+# ec-cube サービスのイメージ名（事前確認で compose を介さず直接起動するのに使う）。
+# `config --images ec-cube` はサービス指定を無視して全イメージを返すので使わない。
+image="$(docker compose config 2>/dev/null |
+    awk '/^  ec-cube:$/{b=1;next} b&&/^  [a-zA-Z_-]+:$/{b=0} b&&/^    image:/{sub(/^    image: */,"");print;exit}')"
+if [ -z "$image" ]; then
+    echo "エラー: ec-cube のイメージ名を取得できませんでした。" >&2
+    exit 1
+fi
+
 # DB ボリュームが無い＝まだ 1 度も構築していない。upgrade ではなく init の出番。
 if ! docker volume inspect "$db_vol" >/dev/null 2>&1; then
     echo "エラー: DB ボリューム（${db_vol}）がありません。まだ構築されていない環境です。" >&2
@@ -92,6 +101,32 @@ fi
 echo "[upgrade] イメージをビルドします（EC-CUBE 取得で数分かかります）..."
 if ! docker compose build; then
     echo "[upgrade] エラー: ビルドに失敗しました。稼働中の環境はそのままです。" >&2
+    restore_env
+    exit 1
+fi
+
+# 3b) 新バージョンでプラグインと独自コードが読めるか、稼働中の環境に触る前に確かめる。
+#     プラグインが新バージョン非対応だとクラス宣言の互換性チェックで Fatal error に
+#     なり、あらゆる console コマンドが死ぬ。例（4.2 世代のプラグインを 4.3 に載せた場合）:
+#
+#       Fatal error: Declaration of Plugin\Foo\PluginManager::install(...
+#       must be compatible with Eccube\Plugin\AbstractPluginManager::install(...
+#
+#     down してから気づくと切り戻しに時間がかかるので、ここで落として稼働中の環境を守る。
+#     eccube_app ボリュームを渡さないので、新イメージの本体コードがそのまま使われる。
+echo "[upgrade] 新バージョンでプラグインが読めるか確認します..."
+preflight="$(docker run --rm \
+    -v "$PWD/app/Plugin:/var/www/html/app/Plugin:ro" \
+    -v "$PWD/app/Customize:/var/www/html/app/Customize:ro" \
+    --entrypoint sh "$image" -c 'php bin/console list 2>&1' 2>&1 || true)"
+if printf '%s' "$preflight" | grep -q 'Fatal error'; then
+    echo "[upgrade] エラー: 新バージョンでコードを読み込めません。中止します。" >&2
+    echo "[upgrade] 稼働中の環境・DB・画像には一切触れていません。" >&2
+    echo >&2
+    printf '%s\n' "$preflight" | grep -v '^Deprecated:' | grep 'Fatal error' | head -3 >&2
+    echo >&2
+    echo "[upgrade] 該当プラグインを新バージョン対応版へ更新するか、無効化・削除してから" >&2
+    echo "          再実行してください（app/Plugin から外すだけでも確認できます）。" >&2
     restore_env
     exit 1
 fi

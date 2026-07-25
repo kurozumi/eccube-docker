@@ -24,8 +24,11 @@ gunzip -c "${src}/db.sql.gz" | docker compose exec -T db sh -c \
 
 if [ -f "${src}/upload.tar.gz" ]; then
     echo "[restore] アップロード画像を復元しています..."
-    docker compose exec -T ec-cube tar -C /var/www/html/html -xzf - < "${src}/upload.tar.gz"
-    docker compose exec -T ec-cube chown -R www-data:www-data /var/www/html/html/upload
+    # exec ではなく run（ec-cube が停止していても復元できるように。bin/backup.sh と同じ理由）
+    docker compose run --rm --no-deps -T --entrypoint tar ec-cube \
+        -C /var/www/html/html -xzf - < "${src}/upload.tar.gz"
+    docker compose run --rm --no-deps -T --entrypoint chown ec-cube \
+        -R www-data:www-data /var/www/html/html/upload
 fi
 
 echo "[restore] キャッシュをクリアしています..."

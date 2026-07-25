@@ -23,8 +23,12 @@ docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump
     --single-transaction --routines --triggers --events \
     -u root "$MYSQL_DATABASE"' | gzip > "${dest}/db.sql.gz"
 
+# exec ではなく run を使う。exec は ec-cube が起動中でないと失敗するため、
+# 「アップグレードに失敗してサイトが落ちている状態から復旧したい」ときに
+# バックアップが取れなくなる。run なら使い捨てコンテナで画像ボリュームを読める。
 echo "[backup] アップロード画像を退避しています..."
-docker compose exec -T ec-cube tar -C /var/www/html/html -czf - upload > "${dest}/upload.tar.gz"
+docker compose run --rm --no-deps -T --entrypoint tar ec-cube \
+    -C /var/www/html/html -czf - upload > "${dest}/upload.tar.gz"
 
 # 中身の妥当性を軽く確認（空ダンプ・壊れた tar を検知）
 gzip -t "${dest}/db.sql.gz"
