@@ -14,7 +14,7 @@ EC-CUBE 4 を **どのサーバー（各社 VPS / AWS など）でも同じ手�
   |---|---|---|
   | `app/Customize/` | `app/Customize` | DI・独自ロジック（開発は rw） |
   | `app/template/` | `app/template` | テーマ・テンプレート上書き（開発は rw） |
-  | `app/DoctrineMigrations/` | `app/DoctrineMigrations` | 独自マイグレーション（開発は rw） |
+  | `app/DoctrineMigrations/` | `app/CustomizeMigrations` | 独自マイグレーション（開発は rw）。本体同梱の `app/DoctrineMigrations` を隠さないため別パスへ載せる |
   | `app/Plugin/` | `app/Plugin` | プラグイン（開発は rw、生成・導入可） |
   | `app/config/eccube/packages/` | 同左（entrypoint がマージ） | monolog / cache / trusted_proxies 等の framework 級設定 |
   | `html/user_data/` | `html/user_data` | 独自 CSS/JS（本体が自動読込。ec-cube/nginx/caddy へ） |
@@ -22,9 +22,12 @@ EC-CUBE 4 を **どのサーバー（各社 VPS / AWS など）でも同じ手�
   アップロード画像（`html/upload`）は bind ではなく**専用ボリューム `eccube_upload`**
   （NFS/EFS に差し替え可）。詳細は「アップロード画像の共有ストレージ」節。
 
-- **本体のマイグレーションは同期不要**（イメージにベイク済み。`eccube:install` /
-  `doctrine:migrations:migrate` が適用する）。同期が要るのは *自分で書く*
-  `app/DoctrineMigrations/` だけ。
+- **本体の migration はイメージの `app/DoctrineMigrations/` に同梱されている**（18 件・
+  すべてデータ移行）。ここへホストのディレクトリを直接 bind-mount すると本体分を
+  覆い隠してしまうので、*自分で書く* migration はコンテナ内の `app/CustomizeMigrations/`
+  へ載せ、両方を doctrine に登録している
+  （`app/config/eccube/packages/doctrine_migrations.yaml`）。
+  **ホスト側の置き場所は従来どおり `app/DoctrineMigrations/`** で変わらない。
 
 ## ディレクトリ
 
@@ -160,15 +163,22 @@ bin/switch-version.sh ~4.2.0   # データごと作り直す（開発で別バ�
 誤判定して**データの入った既存 DB に `eccube:install` を撃ってしまう**ため。先にマーカーを
 置くことで migration 経路へ寄せる。
 
-手順 6 が要る理由は、**EC-CUBE 4.x が本体の migration ファイルを同梱していない**ため。
-`src/Eccube/Resource/doctrine/migration/` は空で、`doctrine_migrations.yaml` が見るのは
-`app/DoctrineMigrations`（自分で書く分）だけ。つまり `doctrine:migrations:migrate` では
-本体スキーマが一切追従せず、バージョンを跨ぐと新しいエンティティが期待するカラムが無くて
-全ページ 500 になる（4.2 → 4.3 なら `dtb_base_info.ga_id`）。エンティティ定義に DB を
-合わせる `doctrine:schema:update` で追従させている。
+手順 6 が 2 つに分かれているのは、**EC-CUBE 4.x のバージョンアップが 2 段構え**だから。
+
+| 対象 | 正となるもの | 手段 |
+| ---- | ------------ | ---- |
+| DDL（カラム追加など） | エンティティ定義 | `doctrine:schema:update` |
+| データ（マスタ追加・不整合の是正） | `app/DoctrineMigrations` の migration | `doctrine:migrations:migrate` |
+
+本体の migration 18 件には `ALTER TABLE` / `CREATE TABLE` が **1 件も無い**（全てデータ
+移行）。だから `migrate` だけではカラムが増えず、新しいエンティティが期待するカラムが
+無くて全ページ 500 になる（4.2 → 4.3 なら `dtb_base_info.ga_id`）。逆に `schema:update`
+だけではマスタデータが入らない。両方要る。
 
 > `--complete` は付けていない。付けると「エンティティ定義に無い列」を削除するため、
 > プラグインが追加した列を巻き添えで落とす。
+>
+> 本体の migration は個々に存在チェックが入っているので、再実行しても二重適用にならない。
 
 注意点:
 

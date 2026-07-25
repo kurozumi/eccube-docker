@@ -1,0 +1,14 @@
+# migration の探索先。本体既定は app/DoctrineMigrations だけを見るが、そこには
+# EC-CUBE 本体の migration（18 件・すべてデータ移行）が入っている。独自 migration を
+# 同じディレクトリへ bind-mount すると本体分を覆い隠してしまうため、独自分は
+# app/CustomizeMigrations（= ホストの app/DoctrineMigrations）へ載せ、両方を登録する。
+#
+# 本体スキーマの DDL は migration ではなくエンティティ定義が持つ（本体 migration に
+# ALTER/CREATE TABLE は 1 件も無い）。バージョンアップ時は doctrine:schema:update で
+# DDL を合わせ、doctrine:migrations:migrate でデータ移行を流す。bin/upgrade.sh 参照。
+doctrine_migrations:
+    migrations_paths:
+        # 本体（イメージに同梱。触らない）
+        'DoctrineMigrations': '%kernel.project_dir%/app/DoctrineMigrations'
+        # 独自（ホストの app/DoctrineMigrations を mount）
+        'CustomizeMigrations': '%kernel.project_dir%/app/CustomizeMigrations'

@@ -60,7 +60,10 @@ x-eccube-volumes: &eccube-volumes
   # ── 本体を汚さず、Git 管理する「自分のコード」だけを重ねる ──
   - ./app/Customize:/var/www/html/app/Customize:ro
   - ./app/template:/var/www/html/app/template:ro
-  - ./app/DoctrineMigrations:/var/www/html/app/DoctrineMigrations:ro
+  # 独自 migration は app/CustomizeMigrations へ載せる。app/DoctrineMigrations に直接
+  # 被せると、そこに入っている本体の migration（18 件・データ移行）を覆い隠してしまう。
+  # 両方を doctrine に登録するのが app/config/eccube/packages/doctrine_migrations.yaml。
+  - ./app/DoctrineMigrations:/var/www/html/app/CustomizeMigrations:ro
   # プラグイン（開発・導入したものを Git 管理）。dev は override が rw で上書き
   - ./app/Plugin:/var/www/html/app/Plugin:ro
   # 独自の CSS/JS。本体が default_frame.twig で customize.css / customize.js を

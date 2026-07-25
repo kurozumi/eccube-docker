@@ -19,7 +19,7 @@ services:
       # base の :ro を rw で上書き（同じ target は override が勝つ）
       - ./app/Customize:/var/www/html/app/Customize
       - ./app/template:/var/www/html/app/template
-      - ./app/DoctrineMigrations:/var/www/html/app/DoctrineMigrations
+      - ./app/DoctrineMigrations:/var/www/html/app/CustomizeMigrations
       # プラグイン開発・導入は書き込みが要る（plugin:generate / composer install）
       - ./app/Plugin:/var/www/html/app/Plugin
 
