@@ -70,7 +70,7 @@ services:
       - eccube_app:/var/www/html
       - ./app/Customize:/var/www/html/app/Customize:ro
       - ./app/template:/var/www/html/app/template:ro
-      - ./app/DoctrineMigrations:/var/www/html/app/DoctrineMigrations:ro
+      - ./app/DoctrineMigrations:/var/www/html/app/CustomizeMigrations:ro
       - ./app/Plugin:/var/www/html/app/Plugin:ro
       - ./html/user_data:/var/www/html/html/user_data:ro
       - ./app/config/eccube/packages:/opt/eccube-config/packages:ro

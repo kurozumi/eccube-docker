@@ -15,8 +15,7 @@
 #   ただし作り直した直後は var/.eccube_installed が消えるため、entrypoint が
 #   「未インストール」と誤判定して既存 DB に eccube:install を撃ってしまう。
 #   これを避けるため、起動前にマーカーだけ先に置いて migration 経路へ寄せる。
-#   さらに、本体は migration ファイルを同梱しないので doctrine:schema:update で
-#   本体スキーマを追従させる（詳細は下の 7) のコメント）。
+#   さらに、スキーマ（DDL）とデータ移行は別経路なので両方を流す（詳細は下の 7)）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -115,15 +114,18 @@ docker compose run --rm --no-deps --entrypoint sh ec-cube \
 echo "[upgrade] 起動します..."
 docker compose up -d
 
-# 7) 本体スキーマを更新する。
-#    EC-CUBE 4.x は本体の migration ファイルを同梱していない
-#    （src/Eccube/Resource/doctrine/migration は空で、doctrine_migrations.yaml が
-#    見るのは app/DoctrineMigrations だけ）。つまり doctrine:migrations:migrate では
-#    本体スキーマが一切追従せず、バージョンを跨ぐと新しいエンティティが期待する
-#    カラムが無くて全ページ 500 になる（4.2 -> 4.3 なら dtb_base_info.ga_id）。
-#    エンティティ定義に DB を合わせる schema:update で追従させる。
-#    --complete は付けない。付けると「定義に無い列」を削除するため、プラグインが
-#    追加した列を巻き添えで落とす。
+# 7) スキーマとデータを追従させる。EC-CUBE 4.x のバージョンアップは 2 段構え。
+#
+#    DDL  : 本体の migration に ALTER/CREATE TABLE は 1 件も無く、スキーマの正は
+#           エンティティ定義。よって doctrine:schema:update で DB を定義へ合わせる。
+#           これを飛ばすと新しいエンティティが期待するカラムが無くて全ページ 500 に
+#           なる（4.2 -> 4.3 なら dtb_base_info.ga_id）。
+#           --complete は付けない。付けると「定義に無い列」を削除するため、
+#           プラグインが追加した列を巻き添えで落とす。
+#    データ: 本体の migration（app/DoctrineMigrations の 18 件）はすべてデータ移行
+#           （マスタ追加・不整合の是正など）。doctrine:migrations:migrate で流す。
+#           カラムが揃ってから流したいので schema:update の後に実行する。
+#           各 migration は存在チェックで保護されているので再実行は安全。
 echo "[upgrade] コンテナの準備を待っています..."
 for i in $(seq 1 60); do
     docker compose exec -T ec-cube php -v >/dev/null 2>&1 && break
@@ -139,6 +141,17 @@ if ! docker compose exec -T ec-cube runuser -u www-data -- \
         php bin/console doctrine:schema:update --force; then
     cat <<EOS >&2
 [upgrade] エラー: スキーマ更新に失敗しました。
+  ログ: docker compose logs ec-cube
+  切り戻し: bin/upgrade.sh ${current:-元の値} のあと bin/restore.sh ${backup_dir:-backups/<日時>}
+EOS
+    exit 1
+fi
+
+echo "[upgrade] データ移行（migration）を適用します..."
+if ! docker compose exec -T ec-cube runuser -u www-data -- \
+        php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration; then
+    cat <<EOS >&2
+[upgrade] エラー: migration の適用に失敗しました。
   ログ: docker compose logs ec-cube
   切り戻し: bin/upgrade.sh ${current:-元の値} のあと bin/restore.sh ${backup_dir:-backups/<日時>}
 EOS
