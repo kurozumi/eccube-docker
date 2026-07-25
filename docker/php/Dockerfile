@@ -70,12 +70,16 @@ RUN composer create-project "ec-cube/ec-cube:${ECCUBE_VERSION}" /var/www/html \
     && composer clear-cache \
     && chown -R www-data:www-data /var/www/html
 
-# ---- メール非同期化用: Symfony Messenger（本体 4.3 は未同梱）----
+# ---- メール非同期化用: Symfony Messenger（本体に未同梱）----
 # 注文完了などのメール送信をキュー経由にして SMTP 応答待ち/障害から切り離す。
 # 設定は app/config/eccube/packages/messenger.yaml、consumer は compose の worker。
 # 本体ソースは編集しない（composer.json への追加のみ。再ビルドで再現される）。
+#
+# バージョンは固定せず composer に解決させる。EC-CUBE の系列ごとに土台の Symfony が
+# 違う（4.2 系 = Symfony 5.4 / 4.3 系 = Symfony 6.4）ため、~6.4.0 のように決め打ちすると
+# 4.2 以前のビルドが依存解決に失敗する。
 RUN composer require --working-dir=/var/www/html --no-interaction --no-scripts \
-        "symfony/messenger:~6.4.0" "symfony/doctrine-messenger:~6.4.0" \
+        "symfony/messenger:*" "symfony/doctrine-messenger:*" \
     && composer clear-cache \
     && chown -R www-data:www-data /var/www/html/vendor /var/www/html/composer.json /var/www/html/composer.lock
 

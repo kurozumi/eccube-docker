@@ -67,8 +67,10 @@ if [ ! -d vendor/symfony/messenger ]; then
     log "symfony/messenger を追加インストール（既存 volume への初回のみ）"
     # --no-plugins: Flex レシピを止める。レシピは phpunit.xml（:ro mount）等を
     # 書き換えようとして失敗する。設定は自前の messenger.yaml を使うので不要。
+    # バージョンは固定せず composer に解決させる（Dockerfile 側と同じ理由。
+    # 4.2 系 = Symfony 5.4 / 4.3 系 = Symfony 6.4 で必要な messenger の系列が違う）。
     runuser -u www-data -- composer require --no-interaction --no-scripts --no-plugins \
-        "symfony/messenger:~6.4.0" "symfony/doctrine-messenger:~6.4.0" \
+        "symfony/messenger:*" "symfony/doctrine-messenger:*" \
         || log "警告: messenger の追加に失敗しました"
 fi
 # フェイルセーフ: それでも messenger が無ければ、マージ済みの messenger.yaml を
