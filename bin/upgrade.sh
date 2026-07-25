@@ -110,12 +110,19 @@ echo "[upgrade] インストール済みマーカーを設定します..."
 docker compose run --rm --no-deps --entrypoint sh ec-cube \
     -c 'mkdir -p /var/www/html/var && touch /var/www/html/var/.eccube_installed'
 
-# 6) 起動。entrypoint が独自 migration（app/DoctrineMigrations）を適用する。
-echo "[upgrade] 起動します..."
-docker compose up -d
-
-# 7) スキーマとデータを追従させる。EC-CUBE 4.x のバージョンアップは 2 段構え。
+# 6) 公開する前にスキーマとデータを合わせる。
 #
+#    ここで先に up -d してしまうと、新コード + 旧スキーマの状態で nginx が公開され、
+#    スキーマ更新が終わるまで全ページ 500 を返す。そこで nginx を上げずに、db だけを
+#    連れてくる使い捨てコンテナ（compose run）で先に整合させてから公開する。
+#    ec-cube の depends_on は db / redis / redis-session なので、compose run では
+#    nginx と worker は起動しない。
+#
+#    ECCUBE_SKIP_DB_INIT=1 / ECCUBE_SKIP_CACHE_CLEAR=1:
+#    entrypoint には環境準備（app/config のマージ等）だけさせ、install や migrate は
+#    撃たせない。適用順はこのスクリプトが制御する。
+#
+#    EC-CUBE 4.x のバージョンアップは 2 段構え:
 #    DDL  : 本体の migration に ALTER/CREATE TABLE は 1 件も無く、スキーマの正は
 #           エンティティ定義。よって doctrine:schema:update で DB を定義へ合わせる。
 #           これを飛ばすと新しいエンティティが期待するカラムが無くて全ページ 500 に
@@ -126,40 +133,34 @@ docker compose up -d
 #           （マスタ追加・不整合の是正など）。doctrine:migrations:migrate で流す。
 #           カラムが揃ってから流したいので schema:update の後に実行する。
 #           各 migration は存在チェックで保護されているので再実行は安全。
-echo "[upgrade] コンテナの準備を待っています..."
-for i in $(seq 1 60); do
-    docker compose exec -T ec-cube php -v >/dev/null 2>&1 && break
-    sleep 5
-done
+offline() { # offline <表示名> <console の引数...>
+    local label="$1"; shift
+    if ! docker compose run --rm \
+            -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
+            ec-cube runuser -u www-data -- php bin/console "$@"; then
+        cat <<EOS >&2
+[upgrade] エラー: ${label}に失敗しました。サイトはまだ公開していません。
+  ログ: docker compose logs ec-cube
+  切り戻し: bin/upgrade.sh ${current:-元の値} のあと bin/restore.sh ${backup_dir:-backups/<日時>}
+EOS
+        exit 1
+    fi
+}
 
 echo "[upgrade] 本体スキーマの差分:"
-docker compose exec -T ec-cube runuser -u www-data -- \
-    php bin/console doctrine:schema:update --dump-sql 2>&1 | sed 's/^/    /' || true
+docker compose run --rm -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
+    ec-cube runuser -u www-data -- php bin/console doctrine:schema:update --dump-sql \
+    2>&1 | sed 's/^/    /' || true
 
-echo "[upgrade] スキーマを更新します..."
-if ! docker compose exec -T ec-cube runuser -u www-data -- \
-        php bin/console doctrine:schema:update --force; then
-    cat <<EOS >&2
-[upgrade] エラー: スキーマ更新に失敗しました。
-  ログ: docker compose logs ec-cube
-  切り戻し: bin/upgrade.sh ${current:-元の値} のあと bin/restore.sh ${backup_dir:-backups/<日時>}
-EOS
-    exit 1
-fi
+echo "[upgrade] スキーマを更新します（未公開）..."
+offline "スキーマ更新" doctrine:schema:update --force
 
-echo "[upgrade] データ移行（migration）を適用します..."
-if ! docker compose exec -T ec-cube runuser -u www-data -- \
-        php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration; then
-    cat <<EOS >&2
-[upgrade] エラー: migration の適用に失敗しました。
-  ログ: docker compose logs ec-cube
-  切り戻し: bin/upgrade.sh ${current:-元の値} のあと bin/restore.sh ${backup_dir:-backups/<日時>}
-EOS
-    exit 1
-fi
+echo "[upgrade] データ移行（migration）を適用します（未公開）..."
+offline "migration の適用" doctrine:migrations:migrate --no-interaction --allow-no-migration
 
-docker compose exec -T ec-cube runuser -u www-data -- \
-    php bin/console cache:clear --no-interaction >/dev/null 2>&1 || true
+# 7) ここまで整合してから公開する。entrypoint が cache:clear を行う。
+echo "[upgrade] 公開します..."
+docker compose up -d
 
 # 8) 応答するまで待つ
 echo "[upgrade] 起動を待っています..."

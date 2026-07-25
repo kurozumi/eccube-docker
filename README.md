@@ -152,8 +152,10 @@ bin/switch-version.sh ~4.2.0   # データごと作り直す（開発で別バ�
 2. `.env` の `ECCUBE_VERSION` を更新してイメージをビルド（ビルド失敗時は `.env` を戻す）
 3. `docker compose down`（`-v` なし）→ **`eccube_app` ボリュームだけ** 削除
 4. 起動前に `var/.eccube_installed` を置く
-5. `up -d` → entrypoint が独自 migration（`app/DoctrineMigrations`）を適用
-6. `doctrine:schema:update` で本体スキーマを追従（差分 SQL を表示してから適用）
+5. **公開しないまま** DB を整合させる（`compose run` の使い捨てコンテナ。nginx は上げない）
+   1. `doctrine:schema:update` — 差分 SQL を表示してから適用（DDL）
+   2. `doctrine:migrations:migrate` — 本体 18 件のデータ移行
+6. `up -d` で公開
 
 手順 3 が要る理由は、`eccube_app` が `/var/www/html` 全体を覆っているため、イメージを
 作り直しても既存ボリュームがある限り新しい本体コードが反映されないから
@@ -163,7 +165,15 @@ bin/switch-version.sh ~4.2.0   # データごと作り直す（開発で別バ�
 誤判定して**データの入った既存 DB に `eccube:install` を撃ってしまう**ため。先にマーカーを
 置くことで migration 経路へ寄せる。
 
-手順 6 が 2 つに分かれているのは、**EC-CUBE 4.x のバージョンアップが 2 段構え**だから。
+手順 5 を**公開前**にやるのは、先に `up -d` すると新コードと旧スキーマが噛み合わない状態で
+nginx が公開され、スキーマ更新が終わるまで全ページ 500 を返すため。`compose run` の
+使い捨てコンテナは `ec-cube` の `depends_on`（db / redis / redis-session）しか連れて
+こないので、nginx と worker を上げずに DB だけ整合させられる。
+
+> それでも `down` から `up -d` までの**ダウンタイムそのものは無くならない**（接続断に
+> なる）。無停止にしたいなら別系統を立てて LB で切り替える構成が要る。
+
+手順 5 が 2 つに分かれているのは、**EC-CUBE 4.x のバージョンアップが 2 段構え**だから。
 
 | 対象 | 正となるもの | 手段 |
 | ---- | ------------ | ---- |
