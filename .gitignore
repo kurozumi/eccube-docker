@@ -14,6 +14,10 @@
 /frontend/node_modules/
 /html/user_data/assets/css/*.map
 
+# eccube:install が rw マウントへコピーする本体既定ファイル（自分の資産ではない）
+/html/user_data/assets/img/
+/html/user_data/assets/pdf/
+
 # 導入したプラグインは各自の repo で管理する（この repo では追跡しない）。
 # .gitkeep だけ残す。
 /app/Plugin/*
