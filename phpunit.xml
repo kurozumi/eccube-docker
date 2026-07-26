@@ -4,10 +4,14 @@
   EC-CUBE 本体のフルスイート（DB が要る・重い）は image の phpunit.xml.dist に残しており、
   必要なときだけ `vendor/bin/phpunit -c phpunit.xml.dist` で実行する。
 
-  ここでは app/Customize/Tests/ だけを対象にする。純粋なユニットテスト
-  （PHPUnit\Framework\TestCase 継承）は DB 不要で走る。DB を使う統合テスト
-  （Eccube\Tests\EccubeTestCase 等）を書くときは、テスト用 DB と DAMA リスナーを
-  足す（README 参照）。
+  testsuite は app/Customize/Tests/ だけを対象にするが、パスを直接渡せば
+  （例: bin/test.sh app/Plugin/Foo/Tests）任意のテストもこの設定で実行できる。
+
+  DAMA\DoctrineTestBundle のリスナーを入れているので、DB を使う統合テスト
+  （Eccube\Tests\EccubeTestCase 等）を書いても各テストがトランザクションで
+  包まれてロールバックされ、DB にデータが残らない。これが無いと実行のたびに
+  レコードが積み上がり、件数を前提にしたテストが後から壊れる。
+  バンドルは本体が test 環境向けに登録済み（app/config/eccube/bundles.php）。
 -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
@@ -24,6 +28,10 @@
         <server name="APP_ENV" value="test" force="true" />
         <server name="SHELL_VERBOSITY" value="-1" />
     </php>
+
+    <listeners>
+        <listener class="\DAMA\DoctrineTestBundle\PHPUnit\PHPUnitListener" />
+    </listeners>
 
     <testsuites>
         <testsuite name="Customize Test Suite">
