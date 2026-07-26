@@ -48,6 +48,7 @@ EC-CUBE 4 を **どのサーバー（各社 VPS / AWS など）でも同じ手�
 │   ├── DoctrineMigrations/
 │   ├── Plugin/             # プラグイン（開発・ストア導入）
 │   └── config/eccube/packages/   # logging / cache / trusted_proxies / messenger
+│       └── test/messenger.yaml   # テストだけメール同期送信（後述）
 ├── frontend/               # 独自テーマの Sass ソース
 │   ├── package.json        # Dart Sass ビルド定義
 │   └── scss/customize.scss
@@ -58,7 +59,7 @@ EC-CUBE 4 を **どのサーバー（各社 VPS / AWS など）でも同じ手�
 │   ├── nginx/{default.conf,lb.conf.example}
 │   ├── mariadb/conf.d/eccube.cnf
 │   └── caddy/Caddyfile
-└── bin/{init,switch-version,reset,publish,healthcheck,assets,test,backup,restore}.sh
+└── bin/{init,upgrade,switch-version,reset,publish,healthcheck,assets,plugin,test,backup,restore}.sh
 ```
 
 ## 必要環境
@@ -587,6 +588,18 @@ docker compose exec worker runuser -u www-data -- php bin/console messenger:fail
 > `worker` を止めるだけ。Messenger パッケージはイメージビルド時に追加している
 > （`docker/php/Dockerfile`。本体ソースは非編集・再ビルドで再現）。
 
+**テスト環境だけは同期送信に戻している**（`app/config/eccube/packages/test/messenger.yaml`）。
+`messenger.yaml` には env 指定が無く test にも効いてしまうため、そのままだとテスト中の
+メールがキューに積まれるだけで Symfony のテスト用 Transport に届かず、本体が持つ
+`assertEmailCount()` 系のテストが軒並み「0 sent」で落ちる。
+
+```yaml
+framework:
+    messenger:
+        transports:
+            async: 'sync://'   # ルーティング定義はそのまま、transport だけ同期に
+```
+
 ## バックアップ / 復元
 
 DB（受注・会員）とアップロード画像を 1 コマンドでバックアップできる。
@@ -660,6 +673,9 @@ bin/test.sh app/Plugin/Foo/Tests  # パス指定で任意のテストも実行�
   無いと実行のたびにレコードが積み上がり、件数を前提にしたテストが後から壊れる
   （実際に会員グループが数千件溜まって既存テストが落ちた）。バンドル自体は本体が
   test 環境向けに登録済み（`app/config/eccube/bundles.php`）。
+- **メールはテスト環境だけ同期送信に戻してある**（`app/config/eccube/packages/test/messenger.yaml`）。
+  本番の非同期送信設定が test にも効くと、`assertEmailCount()` を使うテストが
+  「0 sent」で落ちる。詳細は「メール送信の非同期化」節。
 - テスト用 DB は分けておらず、開発用の DB をそのまま使う。上のロールバックがあるので
   データは汚れないが、**本番の DB では絶対に実行しないこと**。
 

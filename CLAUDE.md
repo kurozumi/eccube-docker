@@ -18,6 +18,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **framework 級設定（monolog 等）は `app/config/eccube/packages/`**。entrypoint が起動時に
   本体の `app/config/eccube/packages/` へマージする（既定は消さない）。
 - 既定は本番モード。開発でデバッグするときだけ `.env` を `APP_ENV=dev` にする。
+- **テストは `bin/test.sh` から実行する**。素の `vendor/bin/phpunit` だとコンテナの
+  `APP_ENV=prod` が勝って prod カーネルが起動し、`WebTestCase` 系が
+  「framework.test config is not set to true」で全部落ちる（`bin/test.sh` が
+  `-e APP_ENV=test` を渡している）。`phpunit.xml` の DAMA リスナーが各テストを
+  ロールバックするので DB は汚れない。メールは `packages/test/messenger.yaml` で
+  テストだけ同期送信。詳細は README「ユニットテスト」。
 - **性能/スケール（Tier 1）**: php-fpm は `.env` の `PHP_FPM_*`、OPcache は entrypoint が
   `APP_ENV` で切替、Redis 共有キャッシュは `app/config/eccube/packages/cache.yaml`、DB は
   `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は README「大規模アクセス」。
@@ -46,7 +52,13 @@ bin/assets.sh build            # 独自 scss → html/user_data/assets/css/custo
 bin/assets.sh watch            # 上記を監視ビルド（dev の node サービス）
 bin/assets.sh core-build       # 本体テーマ丸ごとの純正ビルド（Gulp/Webpack・Git 管理外）
 
-# プラグイン例（dev で app/Plugin が rw のとき）
+bin/test.sh                    # テスト（app/Customize/Tests）
+bin/test.sh app/Plugin/Foo/Tests  # パス指定でプラグインのテストも同じ設定で走る
+
+# プラグイン（dev で app/Plugin が rw のとき）
+bin/plugin.sh add git@github.com:you/MyPlugin.git   # clone→install→enable
+bin/plugin.sh list                                  # 導入状況（enabled/version）
+bin/plugin.sh reload                                # PHP/config 変更後の cache:clear
 docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate <Name>
 ```
 
