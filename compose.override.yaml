@@ -22,6 +22,8 @@ services:
       - ./app/DoctrineMigrations:/var/www/html/app/CustomizeMigrations
       # プラグイン開発・導入は書き込みが要る（plugin:generate / composer install）
       - ./app/Plugin:/var/www/html/app/Plugin
+      # eccube:install（fixtures:load）が img/common 等を書き込むため rw が要る
+      - ./html/user_data:/var/www/html/html/user_data
 
   # worker（メール consumer）も開発では Mailpit へ送る
   worker:
