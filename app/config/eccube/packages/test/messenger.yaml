@@ -1,0 +1,15 @@
+# テスト環境だけメール送信を同期に戻す。
+#
+# なぜ: 親ディレクトリの messenger.yaml は SendEmailMessage を async transport へ
+# ルーティングしている（本番で SMTP 障害が購入処理を止めないようにするため）。
+# これは env 指定が無いので test にも効いてしまい、テスト中のメールがキューに
+# 積まれるだけで Symfony のテスト用 Transport に届かなくなる。結果、本体が持つ
+# assertEmailCount() 系のテストが軒並み「0 sent」で落ちる
+# （例: ShoppingControllerTest::testCompleteWithLogin）。
+#
+# transport を sync:// に差し替えると、メッセージはその場で処理されて
+# テスト用 Transport に届く。ルーティング定義はそのままでよい。
+framework:
+    messenger:
+        transports:
+            async: 'sync://'

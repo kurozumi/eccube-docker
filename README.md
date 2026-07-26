@@ -637,28 +637,35 @@ autoload されるので、対象クラスをそのまま `use` できる。本�
 bin/test.sh                       # 全テスト（app/Customize/Tests/）
 bin/test.sh --filter testAddition # 絞り込み
 bin/test.sh --testdox             # 読みやすい出力
+bin/test.sh app/Plugin/Foo/Tests  # パス指定で任意のテストも実行できる
 ```
 
-- 対象は `phpunit.xml`（プロジェクトルート）で `app/Customize/Tests` に限定している。
-  純粋なユニットテスト（`PHPUnit\Framework\TestCase` 継承）は **DB 不要**で走る。
+- `phpunit.xml`（プロジェクトルート）の testsuite は `app/Customize/Tests` に限定して
+  いるが、**パスを引数で渡せばプラグインのテストもこの設定で走る**。
 - EC-CUBE 本体のフルスイート（重い・DB 必須）は image の `phpunit.xml.dist` に残してある。
   必要なときだけ `docker compose exec ec-cube runuser -u www-data -- vendor/bin/phpunit -c phpunit.xml.dist`。
 
 ### DB を使う統合テストを書くとき
 
-`Eccube\Tests\EccubeTestCase` などを継承する統合テストは、テスト用 DB とスキーマが要る。
+`Eccube\Tests\EccubeTestCase` などを継承する統合テスト（`WebTestCase` 系を含む）は、
+既定の設定でそのまま走る。
 
-```bash
-# テスト用 DB を作成してスキーマを構築（例）
-docker compose exec ec-cube runuser -u www-data -- \
-  php bin/console doctrine:database:create --env=test --if-not-exists
-docker compose exec ec-cube runuser -u www-data -- \
-  php bin/console doctrine:schema:create --env=test
-```
+- **`APP_ENV=test` はコンテナのプロセス環境として渡す必要がある**（`bin/test.sh` が
+  やっている）。コンテナは既定で `APP_ENV=prod` を持っており、Symfony の
+  `KernelTestCase` は `$_ENV`/`$_SERVER` の `APP_ENV` を先に見るため、`phpunit.xml` の
+  `<server>` 指定だけでは prod カーネルが起動し、
+  `framework.test config is not set to true` で全部落ちる。
+- **DAMA\DoctrineTestBundle のリスナーを `phpunit.xml` に入れてある**。各テストが
+  トランザクションで包まれてロールバックされるので、DB にデータが残らない。これが
+  無いと実行のたびにレコードが積み上がり、件数を前提にしたテストが後から壊れる
+  （実際に会員グループが数千件溜まって既存テストが落ちた）。バンドル自体は本体が
+  test 環境向けに登録済み（`app/config/eccube/bundles.php`）。
+- テスト用 DB は分けておらず、開発用の DB をそのまま使う。上のロールバックがあるので
+  データは汚れないが、**本番の DB では絶対に実行しないこと**。
 
-さらに `phpunit.xml` に DAMA\DoctrineTestBundle リスナー（各テストをトランザクションで
-包んでロールバックする）を足すと、テストがデータを汚さない。設定例は本体の
-`phpunit.xml.dist` を参照。
+> `phpunit.xml` は単一ファイルとして bind-mount している。ホスト側で編集すると
+> inode が変わってコンテナ側が古い内容を見続けるので、
+> `docker compose up -d --force-recreate ec-cube` でマウントを張り直す。
 
 ## framework 級設定（monolog 等）の置き場所について
 
