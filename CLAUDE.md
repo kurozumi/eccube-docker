@@ -18,6 +18,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **framework 級設定（monolog 等）は `app/config/eccube/packages/`**。entrypoint が起動時に
   本体の `app/config/eccube/packages/` へマージする（既定は消さない）。
 - 既定は本番モード。開発でデバッグするときだけ `.env` を `APP_ENV=dev` にする。
+- **本番モードでキャッシュを消すときは `cache:clear` だけでは足りない。** Redis 上の
+  Doctrine メタデータ（`cache:pool:clear --all`）と OPcache（php-fpm へ USR2）も
+  消す。`opcache.validate_timestamps=Off` のためファイルを更新しても php-fpm は
+  古いコンパイル結果を返し続ける。**OPcache は CLI では無効**なので `bin/console`
+  からは正常に見え、ブラウザだけ壊れる。`bin/plugin.sh` の各コマンドは両方消す。
+
 - **テストは `bin/test.sh` から実行する**。素の `vendor/bin/phpunit` だとコンテナの
   `APP_ENV=prod` が勝って prod カーネルが起動し、`WebTestCase` 系が
   「framework.test config is not set to true」で全部落ちる（`bin/test.sh` が
@@ -58,7 +64,7 @@ bin/test.sh app/Plugin/Foo/Tests  # パス指定でプラグインのテスト�
 # プラグイン（dev で app/Plugin が rw のとき）
 bin/plugin.sh add git@github.com:you/MyPlugin.git   # clone→install→enable
 bin/plugin.sh list                                  # 導入状況（enabled/version）
-bin/plugin.sh reload                                # PHP/config 変更後の cache:clear
+bin/plugin.sh reload                                # PHP/config 変更後のキャッシュ一掃
 docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate <Name>
 ```
 
