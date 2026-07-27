@@ -95,8 +95,8 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
   ```bash
   bin/plugin.sh add git@github.com:you/MyPlugin.git   # clone→install→enable
   bin/plugin.sh list                                  # 導入状況（enabled/version）
-  bin/plugin.sh update MyPlugin                        # git pull→update→cache:clear
-  bin/plugin.sh reload                                 # PHP/config 変更後の cache:clear
+  bin/plugin.sh update MyPlugin                        # git pull→update→キャッシュ一掃
+  bin/plugin.sh reload                                 # PHP/config 変更後のキャッシュ一掃
   bin/plugin.sh remove MyPlugin                        # uninstall＋ディレクトリ削除
   ```
   - private repo の認証は**ホスト側の git/SSH をそのまま使う**（コンテナに鍵を渡さない）。
@@ -111,7 +111,23 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
   - 導入したプラグインは各自の repo で管理する前提で、docker-eccube 側の git には追跡させない
     （`.gitignore` で `app/Plugin/*` 除外済み）。
   - **開発を速く回すコツ**: `.env` を `APP_ENV=dev` にすると Twig/テンプレート変更は即反映。
-    PHP・サービス・config を変えたら `bin/plugin.sh reload`（= `cache:clear`）。
+    PHP・サービス・config を変えたら `bin/plugin.sh reload`。
+  - **本番モードでは `cache:clear` だけでは変更が反映されない。** `var/cache` の外に
+    2 種類のキャッシュが残る。`bin/plugin.sh` の各コマンドはどちらも消す。
+
+    | 残るもの | 症状 |
+    |---|---|
+    | キャッシュプール（Redis 上の Doctrine メタデータ） | `Class Eccube\Entity\Product has no association named groups` で 500 |
+    | OPcache（`opcache.validate_timestamps=Off`） | 更新したはずのコードが読まれない。プラグインコードを変えた直後の `Trait Plugin\...\XxxTrait not found` など |
+
+    **OPcache は CLI では無効**なので、`bin/console` からは正常に見える。
+    「コマンドは通るのにブラウザだけ壊れる」という切り分けにくい状態になる。
+    手で消すなら:
+    ```bash
+    docker compose exec ec-cube runuser -u www-data -- php bin/console cache:clear --no-warmup
+    docker compose exec ec-cube runuser -u www-data -- php bin/console cache:pool:clear --all
+    docker compose exec ec-cube bash -c 'kill -USR2 1'   # php-fpm を graceful reload
+    ```
   - スケルトン生成は従来どおり:
     ```bash
     docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate "My Plugin" MyPlugin 1.0.0

@@ -8,15 +8,17 @@
 #   bin/plugin.sh add <git-url> [Code]  private repo を clone → install → enable
 #   bin/plugin.sh install <Code>        既に app/Plugin/<Code> にある物を install → enable
 #   bin/plugin.sh update <Code>         git pull → plugin:update/schema-update → cache:clear
-#   bin/plugin.sh reload                cache:clear（PHP/config/twig を編集したら実行）
+#   bin/plugin.sh reload                キャッシュ一掃（PHP/config/twig を編集したら実行）
 #   bin/plugin.sh enable  <Code>
 #   bin/plugin.sh disable <Code>
 #   bin/plugin.sh remove  <Code>        uninstall して app/Plugin/<Code> も削除
 #   bin/plugin.sh list                  導入状況（ファイル + dtb_plugin）を表示
 #
 # 開発を高速に回すコツ: .env を APP_ENV=dev にすると Twig/テンプレート変更は即反映。
-# PHP/サービス/config を変えたら bin/plugin.sh reload（= cache:clear）。
-# 各コマンドは prod と test の両方のキャッシュを消す（test は bin/test.sh が使う）。
+# PHP/サービス/config を変えたら bin/plugin.sh reload。
+# 各コマンドは prod と test の var/cache に加えて、キャッシュプール（Redis 上の
+# Doctrine メタデータ）と OPcache も消す。cache:clear だけでは本番モードで
+# 変更が反映されない。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -39,6 +41,27 @@ clear_test_cache() {
     docker compose exec -T -e APP_ENV=test -e APP_DEBUG=0 ec-cube \
         runuser -u www-data -- php bin/console cache:clear --no-warmup --no-interaction \
         >/dev/null 2>&1 || true
+}
+
+# var/cache の外に残るキャッシュを消す。cache:clear だけでは足りない。
+#
+# 1) キャッシュプール（Redis）
+#    Doctrine のメタデータは cache.system 経由で Redis に載る。プラグインが
+#    エンティティを拡張しても、ここが古いままだと
+#    「Class Eccube\Entity\Product has no association named groups」で 500 になる。
+#
+# 2) OPcache
+#    本番モードは opcache.validate_timestamps=Off なので、ファイルを更新しても
+#    php-fpm は古いコンパイル結果を返し続ける。プラグインコードを変えた直後に
+#    「Trait Plugin\...\DeliveryTrait not found」が出るのはこれ。
+#    php-fpm の master（PID 1）へ USR2 を送ると graceful reload され破棄される。
+#
+#    **CLI では OPcache が無効**なので bin/console からは正常に見える。
+#    「コマンドは通るのにブラウザだけ壊れる」という切り分けにくい状態になるため、
+#    キャッシュを消すときは必ずセットで行う。
+clear_runtime_cache() {
+    ec cache:pool:clear --all --no-interaction >/dev/null 2>&1 || true
+    docker compose exec -T ec-cube bash -c 'kill -USR2 1' >/dev/null 2>&1 || true
 }
 
 # composer.json の extra.code を取り出す（php 非依存・grep/sed）
@@ -70,6 +93,7 @@ case "$cmd" in
     ec eccube:plugin:install --code="$code" --if-not-exists
     ec eccube:plugin:enable  --code="$code"
     clear_test_cache
+    clear_runtime_cache
     echo "[plugin] 完了: $code を有効化しました"
     ;;
 
@@ -78,6 +102,8 @@ case "$cmd" in
     [ -d "app/Plugin/$code" ] || die "app/Plugin/$code がありません"
     ec eccube:plugin:install --code="$code" --if-not-exists
     ec eccube:plugin:enable  --code="$code"
+    clear_test_cache
+    clear_runtime_cache
     echo "[plugin] 完了: $code"
     ;;
 
@@ -94,17 +120,19 @@ case "$cmd" in
     ec eccube:plugin:schema-update --code="$code" || true
     ec cache:clear --no-interaction
     clear_test_cache
+    clear_runtime_cache
     echo "[plugin] 更新完了: $code"
     ;;
 
   reload)
     ec cache:clear --no-interaction
     clear_test_cache
-    echo "[plugin] cache:clear 完了"
+    clear_runtime_cache
+    echo "[plugin] キャッシュを消しました（var/cache・キャッシュプール・OPcache）"
     ;;
 
-  enable)   ec eccube:plugin:enable  --code="${1:?Code}"; clear_test_cache;;
-  disable)  ec eccube:plugin:disable --code="${1:?Code}"; clear_test_cache;;
+  enable)   ec eccube:plugin:enable  --code="${1:?Code}"; clear_test_cache; clear_runtime_cache;;
+  disable)  ec eccube:plugin:disable --code="${1:?Code}"; clear_test_cache; clear_runtime_cache;;
 
   remove)
     code="${1:?Code を指定してください}"
@@ -112,6 +140,7 @@ case "$cmd" in
     ec eccube:plugin:uninstall --code="$code" || true
     rm -rf "app/Plugin/$code"
     clear_test_cache
+    clear_runtime_cache
     echo "[plugin] 削除完了: $code"
     ;;
 
