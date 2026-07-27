@@ -24,6 +24,23 @@ read -r -p "続行しますか? [y/N] " ans
 [ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
 
 current="$(grep -E '^ECCUBE_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
+current_redis="$(grep -E '^PHPREDIS_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
+
+# phpredis は EC-CUBE 側の Symfony Cache に合わせる必要があり、両立しない。
+#   4.2 / 4.3（Symfony Cache 6.4） … 6.0.x（6.1+ は hSet のシグネチャ変更で衝突）
+#   4.4（Symfony Cache 7.4）       … 6.1 以上（symfony/cache が ext-redis <6.1 を conflict）
+case "$ver" in
+    4.4*|~4.4*|^4.4*) redis_ver="6.3.0" ;;
+    *)                redis_ver="6.0.2" ;;
+esac
+echo "[switch] phpredis は ${redis_ver} を使用します（EC-CUBE ${ver} 向け）。"
+
+if grep -qE '^PHPREDIS_VERSION=' .env 2>/dev/null; then
+    tmp="$(mktemp)"
+    sed "s|^PHPREDIS_VERSION=.*|PHPREDIS_VERSION=${redis_ver}|" .env > "$tmp" && mv "$tmp" .env
+else
+    echo "PHPREDIS_VERSION=${redis_ver}" >> .env
+fi
 
 if grep -qE '^ECCUBE_VERSION=' .env 2>/dev/null; then
     tmp="$(mktemp)"
@@ -40,6 +57,10 @@ if ! docker compose build; then
         tmp="$(mktemp)"
         sed "s|^ECCUBE_VERSION=.*|ECCUBE_VERSION=${current}|" .env > "$tmp" && mv "$tmp" .env
         echo "[switch] .env の ECCUBE_VERSION を ${current} へ戻しました。" >&2
+    fi
+    if [ -n "$current_redis" ]; then
+        tmp="$(mktemp)"
+        sed "s|^PHPREDIS_VERSION=.*|PHPREDIS_VERSION=${current_redis}|" .env > "$tmp" && mv "$tmp" .env
     fi
     exit 1
 fi

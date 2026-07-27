@@ -39,8 +39,16 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
         opcache
 
 # ---- phpredis（セッション/キャッシュの Redis 共有用）----
-# バージョンを 6.0.x に固定する。phpredis 6.1+ は hSet が可変長シグネチャに変わり、
-# EC-CUBE 4.3 同梱の Symfony Cache 6.4 の Redis6Proxy（3固定引数）と衝突するため。
+# バージョンは EC-CUBE 側の Symfony Cache に合わせる必要があり、両立しない。
+#
+#   EC-CUBE 4.2 / 4.3（Symfony Cache 6.4） … 6.0.x
+#       phpredis 6.1+ は hSet が可変長シグネチャに変わり、Redis6Proxy（3固定引数）
+#       と衝突する。
+#   EC-CUBE 4.4（Symfony Cache 7.4）        … 6.1 以上
+#       symfony/cache 7.4 が ext-redis <6.1 を conflict に指定している。
+#
+# 既定は 4.3 向け。切り替えは compose の build arg（.env の PHPREDIS_VERSION）で行う。
+# bin/switch-version.sh は ECCUBE_VERSION に応じてこれを自動で設定する。
 # pecl のビルドに必要な依存は一時的に入れて、ビルド後に取り除く。
 ARG PHPREDIS_VERSION=6.0.2
 RUN set -eux; \
