@@ -91,6 +91,7 @@ services:
       args:
         ECCUBE_VERSION: ${ECCUBE_VERSION:-~4.3.0}
         PHP_VERSION: ${PHP_VERSION:-8.2}
+        PHPREDIS_VERSION: ${PHPREDIS_VERSION:-6.0.2}
     env_file: .env
     environment: *eccube-environment
     volumes: *eccube-volumes
@@ -124,6 +125,7 @@ services:
       args:
         ECCUBE_VERSION: ${ECCUBE_VERSION:-~4.3.0}
         PHP_VERSION: ${PHP_VERSION:-8.2}
+        PHPREDIS_VERSION: ${PHPREDIS_VERSION:-6.0.2}
     env_file: .env
     environment:
       <<: *eccube-environment

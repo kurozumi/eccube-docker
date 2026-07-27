@@ -1,0 +1,21 @@
+# セッション Cookie の SameSite を lax にする（HTTP のローカル開発向け）。
+#
+# なぜ: EC-CUBE 4.4 の framework.yaml は cookie_samesite: none を既定にしている。
+# SameSite=None は Secure 属性が必須で、Secure の無い Cookie はブラウザに破棄される。
+# 本体は cookie_secure: auto なので HTTPS なら Secure が付いて成立するが、この環境は
+# http://localhost:8080 で動くため付かない。
+#
+# その結果ブラウザはセッション Cookie を保存できず、ログインフォームの CSRF トークンが
+# 毎回一致せずに認証が失敗する。curl は SameSite を解釈しないので通ってしまい、
+# 「サーバは正常なのにブラウザからだけ入れない」という切り分けにくい状態になる。
+#
+# ▸ ファイル名を framework.yaml にしないこと。
+#   entrypoint のマージはファイル単位のコピーなので、同名だと本体の framework.yaml を
+#   丸ごと置き換えてしまい、セッションハンドラ等の既定がまとめて消える。
+#   Symfony は packages/ 配下の yaml をすべて読み込んでマージするため、別名で置けば
+#   必要なキーだけを上書きできる。
+#
+# ▸ HTTPS で運用する場合はこのファイルを削除してよい（本体既定の none で成立する）。
+framework:
+    session:
+        cookie_samesite: lax
