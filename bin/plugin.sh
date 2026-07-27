@@ -16,11 +16,30 @@
 #
 # 開発を高速に回すコツ: .env を APP_ENV=dev にすると Twig/テンプレート変更は即反映。
 # PHP/サービス/config を変えたら bin/plugin.sh reload（= cache:clear）。
+# 各コマンドは prod と test の両方のキャッシュを消す（test は bin/test.sh が使う）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ec()  { docker compose exec -T ec-cube runuser -u www-data -- php bin/console "$@"; }
 die() { echo "[plugin] エラー: $*" >&2; exit 1; }
+
+# テスト環境のキャッシュも明示的に消す。
+#
+# なぜ: ここでの bin/console はコンテナの APP_ENV（既定は prod）で動く。本体の
+# CacheUtil::clearCache() も指定が無ければ実行中の env だけが対象で、しかも
+# Web の TerminateEvent で動く仕組みなので CLI では働かない。つまり
+# prod 側は上の `ec cache:clear` で明示的に消しているのと同じ理由で、
+# bin/test.sh が使う test 側も明示的に消しておく。
+#
+# 補足: プラグインの有効化・無効化については、消さなくても test 環境が
+# 追随することを確認できた（コンテナが作り直されるため）。ただし本セッションで
+# プラグイン追加直後に test 環境だけ古い定義が残る事象に遭遇しており、
+# その再現条件は特定できていない。1 秒程度のコストなので保険として入れておく。
+clear_test_cache() {
+    docker compose exec -T -e APP_ENV=test -e APP_DEBUG=0 ec-cube \
+        runuser -u www-data -- php bin/console cache:clear --no-warmup --no-interaction \
+        >/dev/null 2>&1 || true
+}
 
 # composer.json の extra.code を取り出す（php 非依存・grep/sed）
 read_code() { # read_code <dir>
@@ -50,6 +69,7 @@ case "$cmd" in
     echo "[plugin] 配置: ${dest} （code=${code}）"
     ec eccube:plugin:install --code="$code" --if-not-exists
     ec eccube:plugin:enable  --code="$code"
+    clear_test_cache
     echo "[plugin] 完了: $code を有効化しました"
     ;;
 
@@ -73,22 +93,25 @@ case "$cmd" in
     ec eccube:plugin:update --code="$code" || true
     ec eccube:plugin:schema-update --code="$code" || true
     ec cache:clear --no-interaction
+    clear_test_cache
     echo "[plugin] 更新完了: $code"
     ;;
 
   reload)
     ec cache:clear --no-interaction
+    clear_test_cache
     echo "[plugin] cache:clear 完了"
     ;;
 
-  enable)   ec eccube:plugin:enable  --code="${1:?Code}";;
-  disable)  ec eccube:plugin:disable --code="${1:?Code}";;
+  enable)   ec eccube:plugin:enable  --code="${1:?Code}"; clear_test_cache;;
+  disable)  ec eccube:plugin:disable --code="${1:?Code}"; clear_test_cache;;
 
   remove)
     code="${1:?Code を指定してください}"
     ec eccube:plugin:disable   --code="$code" || true
     ec eccube:plugin:uninstall --code="$code" || true
     rm -rf "app/Plugin/$code"
+    clear_test_cache
     echo "[plugin] 削除完了: $code"
     ;;
 
