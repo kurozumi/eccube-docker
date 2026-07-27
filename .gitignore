@@ -22,4 +22,9 @@
 # .gitkeep だけ残す。
 /app/Plugin/*
 !/app/Plugin/.gitkeep
+
+# プラグイン有効化時に本体が Resource/template/ からコピーしてくる生成物。
+# 中身はプラグイン側と同一で、そちらの repo が持つべきもの。
+# 自分で書いた上書きテンプレートは app/template/default/ 直下に置くので影響しない。
+/app/template/default/CustomerGroup*/
 /backups/
