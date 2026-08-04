@@ -20,6 +20,10 @@
          bootstrap="tests/bootstrap.php"
 >
     <php>
+        <!-- 本体の phpunit.xml.dist に合わせる。コンテナの CLI は memory_limit=256M で、
+             商品を作る統合テストが数十件並ぶと足りなくなり、テスト本体とは無関係な
+             OutOfMemoryError で落ちる。 -->
+        <ini name="memory_limit" value="-1" />
         <ini name="display_errors" value="1" />
         <ini name="error_reporting" value="-1" />
         <server name="KERNEL_CLASS" value="Eccube\Kernel" />
