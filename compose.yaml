@@ -181,12 +181,21 @@ services:
       # チューニング（innodb_buffer_pool_size 等）。サーバー RAM に合わせて調整する。
       - ./docker/mariadb/conf.d:/etc/mysql/conf.d:ro
     healthcheck:
+      # 認証まで確かめる。mysqladmin ping はサーバープロセスが生きてさえいれば
+      # 認証に失敗しても成功を返すため、DB ボリュームに焼かれたパスワードと .env が
+      # 食い違っていても healthy になり、アプリだけが接続できない状態を見逃す
+      # （down -v せずに .env の DB_PASSWORD を変えると起こる）。
+      # アプリと同じ経路（TCP + DB_USER + DB_NAME）で 1 クエリ流して判定する。
       # パスワードは MYSQL_PWD 環境変数で渡す（-p<pass> だとプロセスリストに露出する）。
       # $$ は compose のエスケープで、コンテナ内の環境変数として実行時に展開される。
-      test: ["CMD", "sh", "-c", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h localhost -u root"]
+      test: ["CMD", "sh", "-c", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" exec mysql -h 127.0.0.1 -u \"$$MYSQL_USER\" -D \"$$MYSQL_DATABASE\" -e 'SELECT 1' >/dev/null 2>&1"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      # 初回はデータディレクトリ作成とユーザー作成が終わるまで TCP で入れない。
+      # その間の失敗を retries に数えないための猶予（成功した時点で即抜ける）。
+      # 起動待ちは start_period に任せ、retries は定常運転時の一時的な失敗に備える分だけ。
+      retries: 5
+      start_period: 90s
     restart: unless-stopped
 
   # 共有キャッシュ（Symfony アプリキャッシュ）。将来のセッション共有・複数ホスト化の土台。

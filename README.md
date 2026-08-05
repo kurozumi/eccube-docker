@@ -641,6 +641,22 @@ bin/restore.sh backups/20260721-040000   # 復元（確認プロンプトあり�
 - **コンテナ死活**: `ec-cube`（php-fpm を FastCGI ping）を含む全サービスに healthcheck が
   あり、`docker compose ps` で healthy/unhealthy が分かる。nginx は ec-cube が healthy に
   なってから起動する。
+- **db は認証まで確認する**。アプリと同じ経路（TCP + `DB_USER` + `DB_NAME`）で
+  `SELECT 1` を流す。`mysqladmin ping` はサーバーが生きていれば**認証に失敗しても
+  成功を返す**ので、DB ボリュームに焼かれたパスワードと `.env` が食い違っても healthy に
+  なってしまう。`down -v` せずに `.env` の `DB_PASSWORD` を変えると起こり、
+  「healthy なのにアプリだけ 500」という切り分けにくい状態になる。
+  **パスワードを変えるときは DB 側も変える**:
+  ```bash
+  docker compose exec -T db sh -s <<'EOF'
+  mysql -uroot -p"$MYSQL_ROOT_PASSWORD" <<SQL
+  ALTER USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
+  FLUSH PRIVILEGES;
+  SQL
+  EOF
+  ```
+  root のパスワードまで見失った場合は、`--skip-grant-tables` で一時起動して
+  `ALTER USER` すれば**データを保ったまま**復旧できる（`down -v` は不要）。
 - **php-fpm の飽和**（`max_children` 到達＝リクエスト滞留）は status page で確認:
   ```bash
   docker compose exec ec-cube sh -c \
