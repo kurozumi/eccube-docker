@@ -1,0 +1,101 @@
+{% extends 'default_frame.twig' %}
+
+{% set mypageno = 'company_member' %}
+
+{% set body_class = 'mypage' %}
+
+{% block main %}
+    <div class="ec-layoutRole__main">
+        <div class="ec-mypageRole">
+            <div class="ec-pageHeader">
+                <h1>マイページ/担当者アカウントの追加</h1>
+            </div>
+            {{ include('Mypage/navi.twig') }}
+        </div>
+        <div class="ec-mypageRole">
+            <div class="ec-off1Grid">
+                <div class="ec-off1Grid__cell">
+                    <form method="post" action="{{ url('mypage_company_member_new') }}" novalidate>
+                        {{ form_widget(form._token) }}
+                        <div class="ec-borderedDefs">
+                            <dl>
+                                <dt>
+                                    <label class="ec-label required">{{ 'common.name'|trans }}</label>
+                                </dt>
+                                <dd>
+                                    <div class="ec-halfInput{{ has_errors(form.name) ? ' error' }}">
+                                        {{ form_widget(form.name.name01) }}
+                                        {{ form_widget(form.name.name02) }}
+                                        {{ form_errors(form.name.name01) }}
+                                        {{ form_errors(form.name.name02) }}
+                                    </div>
+                                </dd>
+                            </dl>
+                            <dl>
+                                <dt>
+                                    <label class="ec-label required">{{ 'common.kana'|trans }}</label>
+                                </dt>
+                                <dd>
+                                    <div class="ec-halfInput{{ has_errors(form.kana) ? ' error' }}">
+                                        {{ form_widget(form.kana.kana01) }}
+                                        {{ form_widget(form.kana.kana02) }}
+                                        {{ form_errors(form.kana.kana01) }}
+                                        {{ form_errors(form.kana.kana02) }}
+                                    </div>
+                                </dd>
+                            </dl>
+                            <dl>
+                                <dt>
+                                    <label class="ec-label required">{{ 'common.phone_number'|trans }}</label>
+                                </dt>
+                                <dd>
+                                    <div class="ec-telInput{{ has_errors(form.phone_number) ? ' error' }}">
+                                        {{ form_widget(form.phone_number) }}
+                                        {{ form_errors(form.phone_number) }}
+                                    </div>
+                                </dd>
+                            </dl>
+                            <dl>
+                                <dt>
+                                    <label class="ec-label required">{{ 'common.mail_address'|trans }}</label>
+                                </dt>
+                                <dd>
+                                    <div class="ec-input{{ has_errors(form.email) ? ' error' }}">
+                                        {{ form_widget(form.email.first) }}
+                                        {{ form_widget(form.email.second) }}
+                                        {{ form_errors(form.email.first) }}
+                                        {{ form_errors(form.email.second) }}
+                                    </div>
+                                </dd>
+                            </dl>
+                            <dl>
+                                <dt>
+                                    <label class="ec-label required">{{ 'common.password'|trans }}</label>
+                                </dt>
+                                <dd>
+                                    <div class="ec-input{{ has_errors(form.plain_password) ? ' error' }}">
+                                        {{ form_widget(form.plain_password.first) }}
+                                        {{ form_widget(form.plain_password.second) }}
+                                        {{ form_errors(form.plain_password.first) }}
+                                        {{ form_errors(form.plain_password.second) }}
+                                    </div>
+                                </dd>
+                            </dl>
+                        </div>
+                        <p class="ec-para-normal">
+                            住所と会社名、会員グループは {{ Owner.company_name|default('管理者') }} のものを引き継ぎます。
+                        </p>
+                        <div class="ec-RegisterRole__actions">
+                            <div class="ec-off4Grid">
+                                <div class="ec-off4Grid__cell">
+                                    <button type="submit" class="ec-blockBtn--action">登録する</button>
+                                    <a class="ec-blockBtn--cancel" href="{{ url('mypage_company_member') }}">{{ 'common.back'|trans }}</a>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

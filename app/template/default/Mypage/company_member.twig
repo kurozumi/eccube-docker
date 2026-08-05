@@ -1,0 +1,56 @@
+{% extends 'default_frame.twig' %}
+
+{% set mypageno = 'company_member' %}
+
+{% set body_class = 'mypage' %}
+
+{% block main %}
+    <div class="ec-layoutRole__main">
+        <div class="ec-mypageRole">
+            <div class="ec-pageHeader">
+                <h1>マイページ/担当者アカウント</h1>
+            </div>
+            {{ include('Mypage/navi.twig') }}
+        </div>
+        <div class="ec-mypageRole">
+            <p class="ec-para-normal">
+                {{ Owner.company_name|default('自社') }} の担当者アカウントです。
+                担当者は自分のログイン情報で発注でき、価格は管理者と同じ会員グループのものが適用されます。
+            </p>
+        </div>
+        <div class="ec-mypageRole">
+            <div class="ec-off1Grid">
+                <div class="ec-off1Grid__cell">
+                    <div class="ec-addressRole">
+                        <div class="ec-addressRole__actions">
+                            <a class="ec-inlineBtn" href="{{ url('mypage_company_member_new') }}">担当者を追加する</a>
+                        </div>
+                    </div>
+                    {% if Members|length > 0 %}
+                        <div class="ec-addressList">
+                            {% for Member in Members %}
+                                <div class="ec-addressList__item">
+                                    <a class="ec-addressList__remove"
+                                       href="{{ url('mypage_company_member_withdraw', { id: Member.id }) }}"
+                                       {{ csrf_token_for_anchor() }} data-method="delete"
+                                       data-message="{{ Member.name01 }} {{ Member.name02 }} さんのアカウントを削除します。よろしいですか？">
+                                        <div class="ec-icon">
+                                            <img src="{{ asset('assets/icon/cross.svg') }}" alt="remove">
+                                        </div>
+                                    </a>
+                                    <div class="ec-addressList__address">
+                                        <div>{{ Member.name01 }}&nbsp;{{ Member.name02 }}</div>
+                                        <div>{{ Member.email }}</div>
+                                        <div>{{ Member.phone_number }}</div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="ec-para-normal">担当者アカウントはまだ登録されていません。</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

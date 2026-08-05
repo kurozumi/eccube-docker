@@ -11,10 +11,10 @@ services:
     autoconfigure: true
 
   # クラス（Controller / Service など）を app/Customize 配下に追加したら、
-  # 以下のコメントを外して PSR-4 で一括登録する:
-  # Customize\:
-  #   resource: '../../*'
-  #   exclude: '../../{Entity,Resource,Tests}'
+  # PSR-4 で一括登録する:
+  Customize\:
+    resource: '../../*'
+    exclude: '../../{Entity,Resource,Tests}'
 
   # メール疎通確認コマンド（bin/console customize:mail-test <宛先>）
   Customize\Command\MailTestCommand: ~
