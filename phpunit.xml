@@ -7,6 +7,10 @@
   testsuite は app/Customize/Tests/ だけを対象にするが、パスを直接渡せば
   （例: bin/test.sh app/Plugin/Foo/Tests）任意のテストもこの設定で実行できる。
 
+  これは PHPUnit 9 以前（EC-CUBE 4.2 / 4.3）用。PHPUnit 10 以降（4.4 系）は書式が
+  非互換なので phpunit.11.xml に別に置いてある。どちらを使うかは bin/test.sh が
+  コンテナの PHPUnit のバージョンを見て選ぶ。内容を変えるときは両方を揃えること。
+
   DAMA\DoctrineTestBundle のリスナーを入れているので、DB を使う統合テスト
   （Eccube\Tests\EccubeTestCase 等）を書いても各テストがトランザクションで
   包まれてロールバックされ、DB にデータが残らない。これが無いと実行のたびに

@@ -78,8 +78,11 @@ x-eccube-volumes: &eccube-volumes
   - eccube_upload:/var/www/html/html/upload
   # framework 級設定（monolog 等）はステージングへ置き、entrypoint が本体へマージ
   - ./app/config/eccube/packages:/opt/eccube-config/packages:ro
-  # ユニットテスト設定（app/Customize/Tests を対象。本体の phpunit.xml.dist は残す）
+  # ユニットテスト設定（app/Customize/Tests を対象。本体の phpunit.xml.dist は残す）。
+  # PHPUnit 9 系（4.2/4.3）と 10 以降（4.4〜）で書式が非互換なので両方置き、
+  # bin/test.sh がコンテナの PHPUnit のバージョンを見て使う方を選ぶ。
   - ./phpunit.xml:/var/www/html/phpunit.xml:ro
+  - ./phpunit.11.xml:/var/www/html/phpunit.11.xml:ro
 
 services:
   ec-cube:

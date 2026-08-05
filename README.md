@@ -669,10 +669,36 @@ bin/test.sh --testdox             # 読みやすい出力
 bin/test.sh app/Plugin/Foo/Tests  # パス指定で任意のテストも実行できる
 ```
 
-- `phpunit.xml`（プロジェクトルート）の testsuite は `app/Customize/Tests` に限定して
+- 設定（プロジェクトルート）の testsuite は `app/Customize/Tests` に限定して
   いるが、**パスを引数で渡せばプラグインのテストもこの設定で走る**。
 - EC-CUBE 本体のフルスイート（重い・DB 必須）は image の `phpunit.xml.dist` に残してある。
   必要なときだけ `docker compose exec ec-cube runuser -u www-data -- vendor/bin/phpunit -c phpunit.xml.dist`。
+
+### 設定ファイルはバージョン別に 2 本
+
+EC-CUBE のバージョンで PHPUnit の系列が変わり、設定の書式が相互に非互換になる。
+
+| EC-CUBE | PHPUnit | DAMA | 設定ファイル | DAMA の登録 | カバレッジ対象 |
+| --- | --- | --- | --- | --- | --- |
+| 4.2 / 4.3 | 9.6 | 6.x | `phpunit.xml` | `<listeners><listener>` | `<coverage>` |
+| 4.4〜 | 11 | 8.x | `phpunit.11.xml` | `<extensions><bootstrap>` | `<source>` |
+
+**どちらを使うかは `bin/test.sh` が自動で選ぶ。** `.env` の `ECCUBE_VERSION` ではなく
+コンテナの `vendor/bin/phpunit` の実バージョンを見るので、再ビルドや依存解決の結果が
+ズレていても正しい方が選ばれる。バージョンを切り替えたあと、テスト側で何かする必要は無い。
+
+書式が合わない設定を渡しても **PHPUnit は警告を出して読み飛ばすだけで止まらない**。
+その結果 DAMA のロールバックが黙って無効化され、テストが本番と同じ DB に書き込み続ける
+（実際に商品が 12,000 件残ってフロントが落ちた）。静かに壊れるのが最悪なので、
+`bin/test.sh` は実行の前後で次を検査し、引っかかったら **テストが緑でも終了コード 1** を返す。
+
+1. コンテナの PHPUnit のメジャーバージョンを取得し、対応する設定ファイルを選ぶ
+2. ホストとコンテナで設定ファイルのバイト数が一致するか（bind mount の取り違え検出）
+3. コンテナ側の設定を DOM で読み、DAMA の登録方法がそのバージョンと噛み合っているか
+4. 実行ログに `The configuration file did not pass validation!` が出ていないか
+
+設定を編集するときは **両方のファイルを同じ内容に保つこと**（片方だけ直すと、
+バージョンを切り替えた瞬間に差分が出る）。
 
 ### DB を使う統合テストを書くとき
 
@@ -684,7 +710,7 @@ bin/test.sh app/Plugin/Foo/Tests  # パス指定で任意のテストも実行�
   `KernelTestCase` は `$_ENV`/`$_SERVER` の `APP_ENV` を先に見るため、`phpunit.xml` の
   `<server>` 指定だけでは prod カーネルが起動し、
   `framework.test config is not set to true` で全部落ちる。
-- **DAMA\DoctrineTestBundle のリスナーを `phpunit.xml` に入れてある**。各テストが
+- **DAMA\DoctrineTestBundle をテスト設定に入れてある**。各テストが
   トランザクションで包まれてロールバックされるので、DB にデータが残らない。これが
   無いと実行のたびにレコードが積み上がり、件数を前提にしたテストが後から壊れる
   （実際に会員グループが数千件溜まって既存テストが落ちた）。バンドル自体は本体が
@@ -695,9 +721,10 @@ bin/test.sh app/Plugin/Foo/Tests  # パス指定で任意のテストも実行�
 - テスト用 DB は分けておらず、開発用の DB をそのまま使う。上のロールバックがあるので
   データは汚れないが、**本番の DB では絶対に実行しないこと**。
 
-> `phpunit.xml` は単一ファイルとして bind-mount している。ホスト側で編集すると
-> inode が変わってコンテナ側が古い内容を見続けるので、
-> `docker compose up -d --force-recreate ec-cube` でマウントを張り直す。
+> `phpunit.xml` / `phpunit.11.xml` は単一ファイルとして bind-mount している。ホスト側で
+> 編集すると inode が変わってコンテナ側が古い内容を見続けるので、
+> `docker compose up -d --force-recreate ec-cube` でマウントを張り直す
+> （`bin/test.sh` がバイト数の食い違いで検出して止める）。
 
 ## framework 級設定（monolog 等）の置き場所について
 
