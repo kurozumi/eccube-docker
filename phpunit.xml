@@ -33,10 +33,15 @@
     </php>
 
     <!-- 各テストをトランザクションでロールバックし、DB を汚さないようにする。
-         PHPUnit 10 以降は <listeners> が廃止されたため <extensions> で登録する。 -->
-    <extensions>
-        <bootstrap class="DAMA\DoctrineTestBundle\PHPUnit\PHPUnitExtension" />
-    </extensions>
+         本体が入れている PHPUnit は 9.6 系なので <listeners> で登録すること。
+         PHPUnit 10 以降の <extensions><bootstrap> 形式で書くと 9.6 は
+         「Element 'bootstrap': This element is not expected」と警告するだけで
+         読み飛ばし、ロールバックが効かないまま全テストが本番と同じ DB に
+         書き込む（数千件を投入するテストがあるため、気付いた時には
+         フロントが壊れる）。 -->
+    <listeners>
+        <listener class="DAMA\DoctrineTestBundle\PHPUnit\PHPUnitListener" />
+    </listeners>
 
     <testsuites>
         <testsuite name="Customize Test Suite">
@@ -44,8 +49,8 @@
         </testsuite>
     </testsuites>
 
-    <!-- PHPUnit 10 以降、対象の指定は <source> へ移った。 -->
-    <source>
+    <!-- カバレッジ対象。<source> は PHPUnit 10 以降の書き方で 9.6 では無視される。 -->
+    <coverage>
         <include>
             <directory suffix=".php">app/Customize</directory>
         </include>
@@ -53,5 +58,5 @@
             <directory suffix=".php">app/Customize/Tests</directory>
             <directory suffix=".php">app/Customize/Resource</directory>
         </exclude>
-    </source>
+    </coverage>
 </phpunit>

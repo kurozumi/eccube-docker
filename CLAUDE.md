@@ -30,6 +30,17 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `-e APP_ENV=test` を渡している）。`phpunit.xml` の DAMA リスナーが各テストを
   ロールバックするので DB は汚れない。メールは `packages/test/messenger.yaml` で
   テストだけ同期送信。詳細は README「ユニットテスト」。
+- **`phpunit.xml` は PHPUnit 9.6 の書式で書く。** 本体が入れている PHPUnit は 9.6 系。
+  10 以降の `<extensions><bootstrap>` や `<source>` で書くと、警告を出すだけで
+  読み飛ばされ **DAMA のロールバックが効かなくなる**。テストが本番と同じ DB へ
+  書き込み続け、数千件を投入するテスト（プラグインの大規模カタログ検証など）で
+  フロントが商品一覧のシステムエラーで落ちる。実行時に
+  「The configuration file did not pass validation!」が出たら、まずこれを疑う。
+- **`phpunit.xml` を編集したら `docker compose restart ec-cube`。** 単一ファイルの
+  bind mount（`./phpunit.xml:/var/www/html/phpunit.xml:ro`）はホスト側で書き換えても
+  コンテナ側へ反映されないことがある。中途半端な内容を掴んだまま
+  「Premature end of data」等で落ちる。`stat -c %s` をホストとコンテナで
+  見比べれば分かる。
 - **性能/スケール（Tier 1）**: php-fpm は `.env` の `PHP_FPM_*`、OPcache は entrypoint が
   `APP_ENV` で切替、Redis 共有キャッシュは `app/config/eccube/packages/cache.yaml`、DB は
   `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は README「大規模アクセス」。
