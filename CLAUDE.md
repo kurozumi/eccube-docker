@@ -27,20 +27,29 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **テストは `bin/test.sh` から実行する**。素の `vendor/bin/phpunit` だとコンテナの
   `APP_ENV=prod` が勝って prod カーネルが起動し、`WebTestCase` 系が
   「framework.test config is not set to true」で全部落ちる（`bin/test.sh` が
-  `-e APP_ENV=test` を渡している）。`phpunit.xml` の DAMA リスナーが各テストを
+  `-e APP_ENV=test` を渡している）。テスト設定の DAMA が各テストを
   ロールバックするので DB は汚れない。メールは `packages/test/messenger.yaml` で
   テストだけ同期送信。詳細は README「ユニットテスト」。
-- **`phpunit.xml` は PHPUnit 9.6 の書式で書く。** 本体が入れている PHPUnit は 9.6 系。
-  10 以降の `<extensions><bootstrap>` や `<source>` で書くと、警告を出すだけで
-  読み飛ばされ **DAMA のロールバックが効かなくなる**。テストが本番と同じ DB へ
-  書き込み続け、数千件を投入するテスト（プラグインの大規模カタログ検証など）で
-  フロントが商品一覧のシステムエラーで落ちる。実行時に
-  「The configuration file did not pass validation!」が出たら、まずこれを疑う。
-- **`phpunit.xml` を編集したら `docker compose restart ec-cube`。** 単一ファイルの
-  bind mount（`./phpunit.xml:/var/www/html/phpunit.xml:ro`）はホスト側で書き換えても
-  コンテナ側へ反映されないことがある。中途半端な内容を掴んだまま
-  「Premature end of data」等で落ちる。`stat -c %s` をホストとコンテナで
-  見比べれば分かる。
+- **テスト設定は PHPUnit のバージョン別に 2 本ある。** EC-CUBE 4.2/4.3 は PHPUnit 9.6 +
+  DAMA 6.x、4.4 は PHPUnit 11 + DAMA 8.x で、設定の書式が相互に非互換
+  （DAMA の登録が `<listeners><listener>` ↔ `<extensions><bootstrap>`、カバレッジ対象が
+  `<coverage>` ↔ `<source>`。DAMA 8.x には `PHPUnitListener` クラス自体が無い）。
+  - `phpunit.xml` … PHPUnit 9 以前（4.2 / 4.3）
+  - `phpunit.11.xml` … PHPUnit 10 以降（4.4〜）
+  - **どちらを使うかは `bin/test.sh` がコンテナの `vendor/bin/phpunit` の実バージョンを
+    見て選ぶ**（`.env` の `ECCUBE_VERSION` からは推測しない）。片方だけ直して
+    もう片方を放置しない。
+- **書式が合わないと PHPUnit は警告を出して読み飛ばすだけ**で、**DAMA のロールバックが
+  黙って無効化される**。テストが本番と同じ DB へ書き込み続け、数千件を投入するテスト
+  （プラグインの大規模カタログ検証など）でフロントが商品一覧のシステムエラーで落ちる。
+  `bin/test.sh` は実行前に DAMA の登録方法を DOM で検証し、実行後に
+  「The configuration file did not pass validation!」が出ていたらテストが緑でも
+  失敗扱いにする。このエラーが出たら設定の書式を疑う。
+- **設定ファイルを編集したら `docker compose up -d --force-recreate ec-cube`。** 単一
+  ファイルの bind mount（`./phpunit.xml:/var/www/html/phpunit.xml:ro`）はホスト側で
+  書き換えても inode が変わってコンテナ側へ反映されないことがある。中途半端な内容を
+  掴んだまま「Premature end of data」等で落ちる。`bin/test.sh` がホストとコンテナの
+  バイト数を突き合わせて検出する。
 - **性能/スケール（Tier 1）**: php-fpm は `.env` の `PHP_FPM_*`、OPcache は entrypoint が
   `APP_ENV` で切替、Redis 共有キャッシュは `app/config/eccube/packages/cache.yaml`、DB は
   `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は README「大規模アクセス」。

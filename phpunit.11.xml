@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PHPUnit 10 以降（EC-CUBE 4.4 系）用のテスト設定。内容は phpunit.xml と同じで、
+  書式だけ新しい PHPUnit に合わせてある。どちらを使うかは bin/test.sh が
+  コンテナに入っている PHPUnit のメジャーバージョンを見て自動で選ぶ。
+
+  4.3 以前（PHPUnit 9.6 / DAMA 6.x）と 4.4（PHPUnit 11 / DAMA 8.x）では書式が
+  相互に非互換で、1 ファイルでは両対応できない:
+    - DAMA の登録   … 9.6 は <listeners><listener>、10 以降は <extensions><bootstrap>
+                        （DAMA 8.x には PHPUnitListener クラス自体が無い）
+    - カバレッジ対象 … 9.6 は <coverage>、10 以降は <source>
+  合わない書式で書いても PHPUnit は警告を出して読み飛ばすだけなので、
+  DAMA のロールバックが黙って無効化され、テストが DB を汚し続ける。
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         backupGlobals="false"
+         colors="true"
+         bootstrap="tests/bootstrap.php"
+         cacheDirectory="var/cache/phpunit"
+>
+    <php>
+        <!-- 本体の phpunit.xml.dist に合わせる。コンテナの CLI は memory_limit=256M で、
+             商品を作る統合テストが数十件並ぶと足りなくなり、テスト本体とは無関係な
+             OutOfMemoryError で落ちる。 -->
+        <ini name="memory_limit" value="-1" />
+        <ini name="display_errors" value="1" />
+        <ini name="error_reporting" value="-1" />
+        <server name="KERNEL_CLASS" value="Eccube\Kernel" />
+        <server name="SYMFONY_DEPRECATIONS_HELPER" value="weak" />
+        <server name="APP_ENV" value="test" force="true" />
+        <server name="SHELL_VERBOSITY" value="-1" />
+    </php>
+
+    <!-- 各テストをトランザクションでロールバックし、DB を汚さないようにする。
+         PHPUnit 10 以降は <listeners> が廃止されたので <extensions> で登録する
+         （EC-CUBE 4.4 本体の phpunit.xml.dist と同じ書き方）。 -->
+    <extensions>
+        <bootstrap class="DAMA\DoctrineTestBundle\PHPUnit\PHPUnitExtension" />
+    </extensions>
+
+    <testsuites>
+        <testsuite name="Customize Test Suite">
+            <directory>app/Customize/Tests</directory>
+        </testsuite>
+    </testsuites>
+
+    <!-- カバレッジ対象。PHPUnit 10 以降は <coverage> ではなく <source> で指定する。 -->
+    <source>
+        <include>
+            <directory suffix=".php">app/Customize</directory>
+        </include>
+        <exclude>
+            <directory suffix=".php">app/Customize/Tests</directory>
+            <directory suffix=".php">app/Customize/Resource</directory>
+        </exclude>
+    </source>
+</phpunit>
