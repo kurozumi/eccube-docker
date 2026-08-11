@@ -128,6 +128,23 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
     docker compose exec ec-cube runuser -u www-data -- php bin/console cache:pool:clear --all
     docker compose exec ec-cube bash -c 'kill -USR2 1'   # php-fpm を graceful reload
     ```
+  - **`eccube:plugin:install` / `enable` / `disable` を手で叩くときは、前後のキャッシュ操作を
+    忘れないこと。** `doctrine.yaml` の `auto_generate_proxy_classes` は `%kernel.debug%`
+    （prod では false）で、Doctrine のプロキシはキャッシュウォーマーでしか作られない。
+    本体のプラグインコマンドは内部で `cache:clear --no-warmup` までしかやらない。
+
+    | 抜けたもの | 症状 |
+    |---|---|
+    | **前**の `cache:pool:clear --all` | `Property Eccube\Entity\Product::$BundleItems does not exist` でコマンドが異常終了。`var/cache` を消しても直らない（実体は Redis 側） |
+    | **後**の warmup 込み `cache:clear` | トレイトで足した getter が例外も出さずに空のコレクションを返す。`findBy()` は件数を返すのに `$Product->getBundleItems()` は 0 件になり、Processor が黙って何もしない |
+
+    ```bash
+    docker compose exec ec-cube runuser -u www-data -- php bin/console cache:pool:clear --all
+    docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:enable --code=MyPlugin
+    docker compose exec ec-cube runuser -u www-data -- php bin/console cache:clear   # --no-warmup を付けない
+    ```
+
+    `bin/plugin.sh` の各コマンドはこれを両方やるので、基本はそちらを使えばよい。
   - スケルトン生成は従来どおり:
     ```bash
     docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate "My Plugin" MyPlugin 1.0.0

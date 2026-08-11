@@ -23,6 +23,18 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   消す。`opcache.validate_timestamps=Off` のためファイルを更新しても php-fpm は
   古いコンパイル結果を返し続ける。**OPcache は CLI では無効**なので `bin/console`
   からは正常に見え、ブラウザだけ壊れる。`bin/plugin.sh` の各コマンドは両方消す。
+- **プラグインの install/enable/disable は前後でキャッシュ操作が要る。**
+  `doctrine.yaml` の `auto_generate_proxy_classes` は `%kernel.debug%`（prod では
+  false）なので、Doctrine のプロキシはウォーマーでしか作られない。EC-CUBE 本体の
+  プラグインコマンドは内部で `cache:clear --no-warmup` までしかやらないため、
+  **前**に `cache:pool:clear --all`、**後**に warmup 込みの `cache:clear` が必要。
+  怠るとこうなる:
+  - 前を怠る → `Property Eccube\Entity\Product::$BundleItems does not exist` で
+    コマンドが異常終了する（`var/cache` を消しても直らない。実体は Redis 側）。
+  - 後を怠る → トレイトで足した getter が**例外も出さずに空のコレクション**を返す。
+    `findBy()` は件数を返すのに `$Product->getBundleItems()` は 0 件、という
+    食い違いになり、プラグインの Processor が黙って何も記録しない。
+  `bin/plugin.sh` の各コマンドは両方やる（`prepare_plugin_command` / `warm_cache`）。
 
 - **テストは `bin/test.sh` から実行する**。素の `vendor/bin/phpunit` だとコンテナの
   `APP_ENV=prod` が勝って prod カーネルが起動し、`WebTestCase` 系が
