@@ -43,12 +43,18 @@ clear_test_cache() {
         >/dev/null 2>&1 || true
 }
 
+# キャッシュプール（Redis）を消す。
+#
+# Doctrine のメタデータは cache.system 経由で Redis に載る。プラグインが
+# エンティティを拡張しても、ここが古いままだと
+# 「Class Eccube\Entity\Product has no association named groups」で 500 になる。
+clear_metadata_cache() {
+    ec cache:pool:clear --all --no-interaction >/dev/null 2>&1 || true
+}
+
 # var/cache の外に残るキャッシュを消す。cache:clear だけでは足りない。
 #
-# 1) キャッシュプール（Redis）
-#    Doctrine のメタデータは cache.system 経由で Redis に載る。プラグインが
-#    エンティティを拡張しても、ここが古いままだと
-#    「Class Eccube\Entity\Product has no association named groups」で 500 になる。
+# 1) キャッシュプール（Redis）… 上の clear_metadata_cache を参照。
 #
 # 2) OPcache
 #    本番モードは opcache.validate_timestamps=Off なので、ファイルを更新しても
@@ -60,8 +66,49 @@ clear_test_cache() {
 #    「コマンドは通るのにブラウザだけ壊れる」という切り分けにくい状態になるため、
 #    キャッシュを消すときは必ずセットで行う。
 clear_runtime_cache() {
-    ec cache:pool:clear --all --no-interaction >/dev/null 2>&1 || true
+    clear_metadata_cache
     docker compose exec -T ec-cube bash -c 'kill -USR2 1' >/dev/null 2>&1 || true
+}
+
+# プラグイン操作の「前」に Doctrine のメタデータキャッシュを落とす。
+#
+# eccube:plugin:install / enable / disable は app/proxy/entity を作り直してから
+# 同じプロセスでスキーマ更新まで進む。このとき Redis に残った古いメタデータを
+# 拾うと、メタデータ側には有る関連がクラス側には無い（あるいはその逆）状態になり
+#   Property Eccube\Entity\Product::$BundleItems does not exist
+# で異常終了する。var/cache を消すだけでは直らない（メタデータは Redis 側）。
+#
+# 実測（EC-CUBE 4.3.1-p1）: warm 済みの状態から
+#   cache:clear --no-warmup のみ → install は上記エラーで失敗
+#   cache:pool:clear --all      → install 成功
+prepare_plugin_command() {
+    clear_metadata_cache
+}
+
+# warmup 込みで cache:clear し、Doctrine のプロキシを作り直す。
+#
+# なぜ --no-warmup ではだめか:
+#   doctrine.yaml の auto_generate_proxy_classes は '%kernel.debug%' なので
+#   prod では false。つまり var/cache/<env>/doctrine/orm/Proxies/ の
+#   __CG__EccubeEntity*.php は「キャッシュウォーマーが動いたときだけ」作られる。
+#   ところが eccube:plugin:install / enable / disable の内部は
+#   cache:clear --no-warmup までしか行わないため、EntityExtension トレイトを
+#   適用し直した app/proxy/entity と Doctrine のプロキシがずれたまま残る。
+#
+# ずれると何が起きるか:
+#   未初期化のプロキシに対して、トレイトで足した getter（例: Product の
+#   getBundleItems()）を呼んでも override が無いので __load() が走らない。
+#   getter 内の「null なら空の ArrayCollection を返す」実装がそのまま効いて、
+#   **例外も出さずに空のコレクション**が返る。
+#   $em->getRepository(...)->findBy(['Product' => $id]) は件数を返すのに
+#   $Product->getBundleItems() は 0 件、という食い違いになり、
+#   プラグインの Processor が黙って何も記録しない。
+#
+# 実測（EC-CUBE 4.3.1-p1）:
+#   enable 直後                        … grep -c getBundleItems → 0
+#   その後 warmup 込みの cache:clear   … grep -c getBundleItems → 3
+warm_cache() {
+    ec cache:clear --no-interaction >/dev/null 2>&1 || true
 }
 
 # composer.json の extra.code を取り出す（php 非依存・grep/sed）
@@ -90,8 +137,10 @@ case "$cmd" in
     [ -e "$dest" ] && die "$dest は既に存在します（更新は bin/plugin.sh update ${code}）"
     mv "$tmp" "$dest"
     echo "[plugin] 配置: ${dest} （code=${code}）"
+    prepare_plugin_command
     ec eccube:plugin:install --code="$code" --if-not-exists
     ec eccube:plugin:enable  --code="$code"
+    warm_cache
     clear_test_cache
     clear_runtime_cache
     echo "[plugin] 完了: $code を有効化しました"
@@ -100,8 +149,10 @@ case "$cmd" in
   install)
     code="${1:?Code を指定してください}"
     [ -d "app/Plugin/$code" ] || die "app/Plugin/$code がありません"
+    prepare_plugin_command
     ec eccube:plugin:install --code="$code" --if-not-exists
     ec eccube:plugin:enable  --code="$code"
+    warm_cache
     clear_test_cache
     clear_runtime_cache
     echo "[plugin] 完了: $code"
@@ -116,6 +167,7 @@ case "$cmd" in
     else
         echo "[plugin] 注意: $dir は git 管理外（手動で最新化してください）"
     fi
+    prepare_plugin_command
     ec eccube:plugin:update --code="$code" || true
     ec eccube:plugin:schema-update --code="$code" || true
     ec cache:clear --no-interaction
@@ -131,14 +183,16 @@ case "$cmd" in
     echo "[plugin] キャッシュを消しました（var/cache・キャッシュプール・OPcache）"
     ;;
 
-  enable)   ec eccube:plugin:enable  --code="${1:?Code}"; clear_test_cache; clear_runtime_cache;;
-  disable)  ec eccube:plugin:disable --code="${1:?Code}"; clear_test_cache; clear_runtime_cache;;
+  enable)   prepare_plugin_command; ec eccube:plugin:enable  --code="${1:?Code}"; warm_cache; clear_test_cache; clear_runtime_cache;;
+  disable)  prepare_plugin_command; ec eccube:plugin:disable --code="${1:?Code}"; warm_cache; clear_test_cache; clear_runtime_cache;;
 
   remove)
     code="${1:?Code を指定してください}"
+    prepare_plugin_command
     ec eccube:plugin:disable   --code="$code" || true
     ec eccube:plugin:uninstall --code="$code" || true
     rm -rf "app/Plugin/$code"
+    warm_cache
     clear_test_cache
     clear_runtime_cache
     echo "[plugin] 削除完了: $code"
