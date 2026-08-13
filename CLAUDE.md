@@ -57,6 +57,13 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `bin/test.sh` は実行前に DAMA の登録方法を DOM で検証し、実行後に
   「The configuration file did not pass validation!」が出ていたらテストが緑でも
   失敗扱いにする。このエラーが出たら設定の書式を疑う。
+- **管理画面の Web テストは `dtb_member` を溜め、放置するとテストが固まる。**
+  `Generator::createMember()` は faker の `word` から未使用の `login_id` を探すが、
+  **ja_JP の単語は 182 語しか無い**。Web テストの Member はロールバックされないため、
+  溜まった数が単語数に達すると `do/while` を永久に抜けられない。エラーも出ず
+  PHP が CPU を回し続けるだけで、原因が分かりにくい（実際に 2 回踏んだ）。
+  `bin/test.sh` が実行前に検出して `login_id` を `leaked-<id>` へ退避する。
+  手で直すなら `UPDATE dtb_member SET login_id = CONCAT('leaked-', id) WHERE id > 2;`。
 - **設定ファイルを編集したら `docker compose up -d --force-recreate ec-cube`。** 単一
   ファイルの bind mount（`./phpunit.xml:/var/www/html/phpunit.xml:ro`）はホスト側で
   書き換えても inode が変わってコンテナ側へ反映されないことがある。中途半端な内容を
