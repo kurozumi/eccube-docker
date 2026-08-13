@@ -753,6 +753,15 @@ EC-CUBE のバージョンで PHPUnit の系列が変わり、設定の書式が
   「0 sent」で落ちる。詳細は「メール送信の非同期化」節。
 - テスト用 DB は分けておらず、開発用の DB をそのまま使う。上のロールバックがあるので
   データは汚れないが、**本番の DB では絶対に実行しないこと**。
+- **管理画面の Web テストだけは Member が残る。** `AbstractAdminWebTestCase` は
+  メソッドごとに Member を作るが、Web テストは購入フローなどが明示的に commit するため
+  ロールバックされない。`Generator::createMember()` は
+  `do { $loginId = $faker->word; } while (既存)` で未使用の login_id を探すので、
+  **残った Member が faker の単語の総数（ja_JP で 182 語）に達すると永久に抜けられない**。
+  エラーもタイムアウトも出ず、PHP が CPU を回し続けるだけなので原因を追いにくい。
+  `bin/test.sh` は実行前に件数を数え、単語が尽きそうなら `login_id` を
+  `leaked-<id>` へ退避して空ける（行は消さないので `creator_id` などの参照は壊れない）。
+  退避が失敗するときは `bin/reset.sh` で DB を初期化する。
 
 > `phpunit.xml` / `phpunit.11.xml` は単一ファイルとして bind-mount している。ホスト側で
 > 編集すると inode が変わってコンテナ側が古い内容を見続けるので、

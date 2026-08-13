@@ -75,6 +75,38 @@ case "$found" in
        噛み合わないと読み飛ばされ、ロールバックが効かないまま DB を汚します。" ;;
 esac
 
+# 4.5) faker の単語プールが尽きていないか。
+#    管理画面の Web テスト（AbstractAdminWebTestCase）はメソッドごとに Member を作るが、
+#    Web テストは DAMA でロールバックされず dtb_member に残る。
+#    Generator::createMember() は
+#      do { $loginId = $faker->word; } while ($memberRepository->findBy(['login_id' => $loginId]));
+#    で未使用の login_id を探すため、**残った Member が単語の総数に達すると永久に抜けられない**。
+#    エラーもタイムアウトも出ず PHP が CPU を回し続けるだけなので、原因を追うのが非常に難しい
+#    （ja_JP の word は 182 語しかなく、実際に 2 回踏んだ）。
+#    行は消さずに login_id だけ退避して単語を空ける。creator_id などの参照は壊れない。
+pool="$(docker compose exec -T ec-cube php -r '
+    require "/var/www/html/vendor/autoload.php";
+    $locale = getenv("ECCUBE_LOCALE") ?: "ja_JP";
+    $faker = Faker\Factory::create($locale);
+    $words = [];
+    for ($i = 0; $i < 3000; $i++) { $words[$faker->word] = true; }
+    echo count($words);
+' 2>/dev/null | tr -cd '0-9' || true)"
+
+leaked_sql="SELECT COUNT(*) AS c FROM dtb_member WHERE id > 2 AND login_id NOT LIKE 'leaked-%'"
+leaked="$(docker compose exec -T ec-cube runuser -u www-data -- \
+    php bin/console dbal:run-sql "$leaked_sql" 2>/dev/null | grep -Eo '[0-9]+' | tail -1 || true)"
+
+if [ -n "$pool" ] && [ -n "$leaked" ] && [ "$leaked" -ge "$((pool - 20))" ]; then
+    echo "[test] テストが残した Member が ${leaked} 件あります（faker の単語は ${pool} 語）。"
+    echo "[test] このままだと Generator::createMember() が未使用の login_id を見つけられず、"
+    echo "[test] テストがエラーも出さずに固まります。login_id を退避して単語を空けます。"
+    docker compose exec -T ec-cube runuser -u www-data -- \
+        php bin/console dbal:run-sql \
+        "UPDATE dtb_member SET login_id = CONCAT('leaked-', id) WHERE id > 2 AND login_id NOT LIKE 'leaked-%'" \
+        >/dev/null 2>&1 || echo "[test] 退避に失敗しました。bin/reset.sh で DB を初期化してください。" >&2
+fi
+
 # 5) 実行。設定ファイルの validation 警告が出たら、テストが緑でも失敗扱いにする
 #    （警告だけ出して読み飛ばされた要素があると、DAMA が登録されていない可能性がある）。
 out="$(mktemp)"
