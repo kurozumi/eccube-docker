@@ -112,9 +112,15 @@ warm_cache() {
 }
 
 # composer.json の extra.code を取り出す（php 非依存・grep/sed）
+#
+# 読めなければ空文字を返す。末尾の `|| true` が要る理由:
+# grep は一致が無いと 1 を返し、`set -euo pipefail` の pipefail でパイプライン全体が
+# 非ゼロになる。`c="$(read_code "$d")"` は代入の終了ステータスがそのまま置換の
+# ステータスなので、set -e で**その場でスクリプトが終了する**。しかも表示済みの
+# 行までしか出ないので、失敗したことに気づけない。
 read_code() { # read_code <dir>
     grep -oE '"code"[[:space:]]*:[[:space:]]*"[^"]+"' "$1/composer.json" 2>/dev/null \
-        | head -1 | sed -E 's/.*"([^"]+)"[[:space:]]*$/\1/'
+        | head -1 | sed -E 's/.*"([^"]+)"[[:space:]]*$/\1/' || true
 }
 
 cmd="${1:-help}"; shift || true
@@ -125,6 +131,9 @@ case "$cmd" in
     [ -n "$url" ] || die "git URL を指定してください: bin/plugin.sh add <git-url> [Code]"
     tmp="app/Plugin/.tmp_add_$$"
     rm -rf "$tmp"
+    # 途中で落ちても作業ディレクトリを app/Plugin/ に残さない。
+    # die は exit するので EXIT で拾う（成功時は mv 済みで、この rm は空振りする）。
+    trap 'rm -rf "$tmp"' EXIT
     echo "[plugin] clone: $url"
     git clone --depth 1 "$url" "$tmp" || die "clone に失敗（private なら SSH URL / gh auth を確認）"
     rm -rf "$tmp/.git"   # docker-eccube 側に .git を持ち込まない
