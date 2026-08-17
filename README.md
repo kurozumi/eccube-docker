@@ -109,7 +109,7 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
     ```bash
     git clone git@github.com:you/my-awesome-plugin.git app/Plugin/MyAwesomePlugin
     ```
-  - 導入したプラグインは各自の repo で管理する前提で、docker-eccube 側の git には追跡させない
+  - 導入したプラグインは各自の repo で管理する前提で、eccube-docker 側の git には追跡させない
     （`.gitignore` で `app/Plugin/*` 除外済み）。
   - **開発を速く回すコツ**: `.env` を `APP_ENV=dev` にすると Twig/テンプレート変更は即反映。
     PHP・サービス・config を変えたら `bin/plugin.sh reload`。

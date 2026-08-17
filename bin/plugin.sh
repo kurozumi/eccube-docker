@@ -180,7 +180,7 @@ case "$cmd" in
     trap 'rm -rf "$tmp"' EXIT
     echo "[plugin] clone: $url"
     git clone --depth 1 "$url" "$tmp" || die "clone に失敗（private なら SSH URL / gh auth を確認）"
-    rm -rf "$tmp/.git"   # docker-eccube 側に .git を持ち込まない
+    rm -rf "$tmp/.git"   # eccube-docker 側に .git を持ち込まない
     code="$(read_code "$tmp")"
     [ -n "$code" ] || die "composer.json の extra.code が読めません（EC-CUBE プラグインですか？）"
     if [ -n "$want" ] && [ "$want" != "$code" ]; then
