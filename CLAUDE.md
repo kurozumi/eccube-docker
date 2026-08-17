@@ -34,7 +34,17 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   - 後を怠る → トレイトで足した getter が**例外も出さずに空のコレクション**を返す。
     `findBy()` は件数を返すのに `$Product->getBundleItems()` は 0 件、という
     食い違いになり、プラグインの Processor が黙って何も記録しない。
-  `bin/plugin.sh` の各コマンドは両方やる（`prepare_plugin_command` / `warm_cache`）。
+  `bin/plugin.sh` の各コマンドは両方やる（前が `prepare_plugin_command`、後が
+  `settle` = 後始末 → test/プール/OPcache 削除 → warmup 込みの `cache:clear`）。
+  組み立てを次のリクエスト任せにすると、そこへ別のリクエストやコンソールコマンドが
+  重なってコンパイル済みコンテナが書きかけのまま残り、全ページ 500 になる。
+  **素の `bin/console eccube:plugin:enable` を直接叩かない。**
+- **`.maintenance` が残ることがある。** 管理画面からプラグインを操作すると本体が
+  `auto_maintenance` を自動で立てる。処理が途中で落ちると消されず、フロントだけ
+  503「ただいまメンテナンス中です」になる。**管理画面は素通りできるので気づきにくい。**
+  `bin/plugin.sh doctor` が自動で解除する（手動で入れたメンテナンスは残す）。
+- **システムエラーが出たら `bin/plugin.sh doctor`。** 残骸の掃除・キャッシュの
+  組み立て直し・主要ページの疎通確認までやる。直らなければ直近の CRITICAL を出す。
 
 - **テストは `bin/test.sh` から実行する**。素の `vendor/bin/phpunit` だとコンテナの
   `APP_ENV=prod` が勝って prod カーネルが起動し、`WebTestCase` 系が
