@@ -39,6 +39,19 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   組み立てを次のリクエスト任せにすると、そこへ別のリクエストやコンソールコマンドが
   重なってコンパイル済みコンテナが書きかけのまま残り、全ページ 500 になる。
   **素の `bin/console eccube:plugin:enable` を直接叩かない。**
+- **管理画面（オーナーズストア → プラグイン一覧）から有効化・無効化したら、その直後に
+  `bin/plugin.sh reload` を実行する。** 本体の `PluginController` は `cacheUtil->clearCache()`
+  しか呼ばず、これは `kernel.terminate` で `cache:clear --no-warmup` を走らせるだけ。
+  php-fpm は `opcache.validate_timestamps=0` なので、`opcache_reset()` の届き方と
+  メンテナンス解除（`SystemService::disableMaintenanceEvent`）の順序次第で、
+  古いエンティティクラスを掴んだままメタデータが作られることがある。結果:
+
+      Unrecognized field: Plugin\CustomerGroup44\Entity\Group::$optionCompanyEntry
+
+  実体（生成された `Group`）にはトレイトで項目があるのに、メタデータ側が知らない、
+  という食い違い。プラグインを有効化した直後に、その画面ではなく**フロントの
+  別ページ**が落ちるので原因にたどり着きにくい。`reload`（または `doctor`）で直る。
+  なお、この2つは `kernel.terminate` の同じ優先度に登録されていて実行順が保証されない。
 - **`.maintenance` が残ることがある。** 管理画面からプラグインを操作すると本体が
   `auto_maintenance` を自動で立てる。処理が途中で落ちると消されず、フロントだけ
   503「ただいまメンテナンス中です」になる。**管理画面は素通りできるので気づきにくい。**
