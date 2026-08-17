@@ -746,6 +746,30 @@ EC-CUBE のバージョンで PHPUnit の系列が変わり、設定の書式が
 3. コンテナ側の設定を DOM で読み、DAMA の登録方法がそのバージョンと噛み合っているか
 4. 実行ログに `The configuration file did not pass validation!` が出ていないか
 
+### コンパイル済みコンテナが古いと、足したクラスが見えない
+
+テストは `APP_DEBUG=0` で走る。`bin/console cache:clear` が作り直すのはデバッグ版
+（`Eccube_KernelTestDebugContainer`）で、テストが使うのは別のファイル
+（`Eccube_KernelTestContainer`）。**debug=false のコンパイル済みコンテナはファイルの
+更新を一切見ない**ため、クラスを足しても登録されないまま残る。
+
+症状は「サービスがコンテナに無い」形で出る。フォームの型なら次のようになる。
+
+```
+Too few arguments to function ...::__construct(), 0 passed in FormRegistry.php
+```
+
+Symfony が DI を通さず `new` している合図で、原因はコードではなくキャッシュ。
+`cache:clear` を何度打っても直らない。
+
+`bin/test.sh` が `app/Plugin` と `app/Customize` の php / yaml / xml をコンパイル済み
+コンテナの更新時刻と比べ、新しいものがあれば `var/cache/test` を消してから実行する
+（`Tests/` 配下はコンテナに入らないので数えない）。手で直すなら次のとおり。
+
+```bash
+docker compose exec ec-cube rm -rf var/cache/test
+```
+
 設定を編集するときは **両方のファイルを同じ内容に保つこと**（片方だけ直すと、
 バージョンを切り替えた瞬間に差分が出る）。
 
