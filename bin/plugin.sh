@@ -239,9 +239,15 @@ case "$cmd" in
     warn=0   # 異常とは限らないが、伝えておくこと
     clean_leftovers
 
+    # 数え損ねても doctor 自体は続ける（set -e + pipefail で黙って止まらないように）
     proxies="$(docker compose exec -T ec-cube bash -c \
-        'ls /var/www/html/var/cache/prod/doctrine/orm/Proxies/ 2>/dev/null | wc -l' | tr -d ' \r')"
-    echo "[doctor] Doctrine プロキシ: ${proxies} 件（0 でも prod は必要時に生成する設定）"
+        'ls /var/www/html/var/cache/prod/doctrine/orm/Proxies/ 2>/dev/null | wc -l' 2>/dev/null \
+        | tr -d ' \r' || true)"
+    echo "[doctor] Doctrine プロキシ: ${proxies:-?} 件（0 でも prod は必要時に生成する設定）"
+    if [ -z "$proxies" ]; then
+        echo "[doctor] 注意: ec-cube コンテナに届きませんでした（docker compose ps を確認）"
+        warn=1
+    fi
 
     if docker compose exec -T ec-cube test -f /var/www/html/.maintenance 2>/dev/null; then
         echo "[doctor] メンテナンス表示が有効です（手動で入れたものは解除しません）"
@@ -255,7 +261,7 @@ case "$cmd" in
     disabled="$(docker compose exec -T db sh -c \
         'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N -B -u root "$MYSQL_DATABASE" \
          -e "SELECT code FROM dtb_plugin WHERE initialized = 1 AND enabled = 0 ORDER BY code;"' \
-        2>/dev/null | tr -d '\r')"
+        2>/dev/null | tr -d '\r' || true)"
     if [ -n "$disabled" ]; then
         echo "[doctor] インストール済みだが無効なプラグイン:"
         echo "$disabled" | sed 's/^/           /'

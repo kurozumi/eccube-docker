@@ -121,6 +121,7 @@ bin/test.sh app/Plugin/Foo/Tests  # パス指定でプラグインのテスト�
 bin/plugin.sh add git@github.com:you/MyPlugin.git   # clone→install→enable
 bin/plugin.sh list                                  # 導入状況（enabled/version）
 bin/plugin.sh reload                                # PHP/config 変更後のキャッシュ一掃
+bin/plugin.sh doctor                                # システムエラー時の点検と修復
 docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate <Name>
 ```
 
