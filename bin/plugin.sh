@@ -235,7 +235,8 @@ case "$cmd" in
   doctor)
     # 中断した操作の痕跡を探して直し、実際に画面が開くかまで見る。
     # 「システムエラーが出る」と言われたら、まずこれを実行する。
-    ng=0
+    ng=0     # 直っていない異常
+    warn=0   # 異常とは限らないが、伝えておくこと
     clean_leftovers
 
     proxies="$(docker compose exec -T ec-cube bash -c \
@@ -246,27 +247,132 @@ case "$cmd" in
         echo "[doctor] メンテナンス表示が有効です（手動で入れたものは解除しません）"
     fi
 
+    # インストール済みなのに無効なプラグインを挙げる。
+    #
+    # 中断した操作で勝手に無効へ落ちることがある。無効になっただけでは
+    # 「エラー」に見えないが、他のプラグインがそのエンティティ拡張を前提に
+    # していると、Doctrine のメタデータと実体がずれて画面が落ちる。
+    disabled="$(docker compose exec -T db sh -c \
+        'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N -B -u root "$MYSQL_DATABASE" \
+         -e "SELECT code FROM dtb_plugin WHERE initialized = 1 AND enabled = 0 ORDER BY code;"' \
+        2>/dev/null | tr -d '\r')"
+    if [ -n "$disabled" ]; then
+        echo "[doctor] インストール済みだが無効なプラグイン:"
+        echo "$disabled" | sed 's/^/           /'
+        echo "           意図的でなければ bin/plugin.sh enable <Code> で戻してください"
+        warn=1
+    fi
+
+    # エンティティ拡張が、生成されたクラスに入っているかを見る。
+    #
+    # 有効なプラグインの #[EntityExtension] が app/proxy/entity 側に反映されて
+    # いないと「Property Plugin\...\Group::$optionEntry does not exist」で落ちる。
+    # 拡張を持つプラグインが無効に落ちた直後に必ず起きる形。
+    trait_ng="$(docker compose exec -T ec-cube php <<'PHP' 2>/dev/null || true
+<?php
+$root = '/var/www/html';
+
+// 有効なプラグインだけを見る。app/Plugin/ には未導入のものも置いてある。
+$enabled = [];
+$dsn = getenv('DATABASE_URL');
+if ($dsn && ($u = parse_url($dsn))) {
+    try {
+        $pdo = new PDO(
+            sprintf('mysql:host=%s;port=%d;dbname=%s', $u['host'], $u['port'] ?? 3306, ltrim($u['path'] ?? '', '/')),
+            urldecode($u['user'] ?? ''),
+            urldecode($u['pass'] ?? '')
+        );
+        $enabled = $pdo->query('SELECT code FROM dtb_plugin WHERE enabled = 1')
+            ->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        // DB を読めないときは判定しない（誤検知よりは黙るほうがまし）
+        exit(0);
+    }
+}
+if (!$enabled) {
+    exit(0);
+}
+
+foreach ($enabled as $code) {
+    foreach (glob($root.'/app/Plugin/'.$code.'/Entity/*.php') ?: [] as $file) {
+        $src = file_get_contents($file);
+        if (!str_contains($src, 'EntityExtension')) {
+            continue;
+        }
+        if (!preg_match('/EntityExtension\(\s*\\\\?([A-Za-z0-9_\\\\]+)::class/', $src, $m)
+            || !preg_match('/^namespace\s+([^;]+);/m', $src, $ns)
+            || !preg_match('/^\s*trait\s+(\w+)/m', $src, $t)) {
+            continue;
+        }
+
+        $target = ltrim($m[1], '\\');
+        if (!str_contains($target, '\\')) {
+            // 短い名前で書いてあるものは use 文から補う
+            if (preg_match('/^use\s+([A-Za-z0-9_\\\\]*\\\\'.preg_quote($target, '/').');/m', $src, $imp)) {
+                $target = $imp[1];
+            } else {
+                continue;
+            }
+        }
+        $trait = trim($ns[1]).'\\'.$t[1];
+
+        // 生成先: Eccube\Entity\X -> src/Eccube/Entity/X.php / Plugin\Y\Entity\X -> app/Plugin/Y/Entity/X.php
+        $rel = str_starts_with($target, 'Eccube\\')
+            ? 'src/'.str_replace('\\', '/', $target).'.php'
+            : 'app/'.str_replace('\\', '/', $target).'.php';
+        $proxy = $root.'/app/proxy/entity/'.$rel;
+
+        if (!is_file($proxy)) {
+            echo "生成なし: {$target}（{$trait}）\n";
+            continue;
+        }
+        if (!str_contains(file_get_contents($proxy), $trait)) {
+            echo "未反映: {$target} に {$trait} が入っていません\n";
+        }
+    }
+}
+PHP
+)"
+    if [ -n "$trait_ng" ]; then
+        echo "[doctor] エンティティ拡張の反映漏れ:"
+        echo "$trait_ng" | sed 's/^/           /'
+        echo "           bin/plugin.sh reload で直らなければ、該当プラグインを enable し直してください"
+        ng=1
+    else
+        echo "[doctor] エンティティ拡張: 反映済み"
+    fi
+
     echo "[doctor] キャッシュを組み立て直します"
     clear_runtime_cache
     warm_cache
     sleep 2
 
     base="${ECCUBE_BASE_URL:-http://localhost:8080}"
+    page_ng=0
     for path in / /products/list /entry /admin/login; do
         code="$(curl -s -o /dev/null -w '%{http_code}' "${base}${path}" || echo 000)"
         case "$code" in
             200|302) echo "[doctor] ${code} ${path}" ;;
-            *)       echo "[doctor] ${code} ${path}  ← 異常"; ng=1 ;;
+            *)       echo "[doctor] ${code} ${path}  ← 異常"; page_ng=1; ng=1 ;;
         esac
     done
 
-    if [ "$ng" -eq 0 ]; then
-        echo "[doctor] 問題なし"
-    else
-        echo "[doctor] 直りませんでした。var/log/prod/ の直近の CRITICAL を確認してください:"
+    # ログを出すのはページが落ちたときだけにする。過去のエラーが残っていても
+    # いま壊れているとは限らず、混乱するだけなので。
+    if [ "$page_ng" -eq 1 ]; then
+        echo "[doctor] var/log/prod/ の直近の CRITICAL:"
         docker compose exec -T ec-cube bash -c \
-            'grep -ohE "(CRITICAL|システムエラー).{0,200}" /var/www/html/var/log/prod/*.log 2>/dev/null | tail -3' || true
+            'grep -ohE "(CRITICAL|システムエラー).{0,200}" /var/www/html/var/log/prod/*.log 2>/dev/null | tail -3' \
+            | sed 's/^/           /' || true
+    fi
+
+    if [ "$ng" -ne 0 ]; then
+        echo "[doctor] 上に挙げた点を直してください"
         exit 1
+    elif [ "$warn" -ne 0 ]; then
+        echo "[doctor] 画面は開いています。上の注意点だけ確認してください"
+    else
+        echo "[doctor] 問題なし"
     fi
     ;;
 

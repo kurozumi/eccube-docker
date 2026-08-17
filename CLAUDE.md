@@ -43,8 +43,15 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `auto_maintenance` を自動で立てる。処理が途中で落ちると消されず、フロントだけ
   503「ただいまメンテナンス中です」になる。**管理画面は素通りできるので気づきにくい。**
   `bin/plugin.sh doctor` が自動で解除する（手動で入れたメンテナンスは残す）。
-- **システムエラーが出たら `bin/plugin.sh doctor`。** 残骸の掃除・キャッシュの
-  組み立て直し・主要ページの疎通確認までやる。直らなければ直近の CRITICAL を出す。
+- **プラグインが勝手に無効へ落ちることがある。** 中断した操作の巻き添えで
+  `dtb_plugin.enabled` が 0 になる。無効になっただけでは表向き何も起きないが、
+  Doctrine のメタデータに拡張プロパティが残ったままだと
+  「Property Plugin\...\Group::$optionEntry does not exist」で画面が落ちる。
+  **落ちるのが管理画面の別ページ（レイアウト管理など）なので、原因にたどり着きにくい。**
+  `bin/plugin.sh doctor` が「インストール済みだが無効」として挙げる。
+- **システムエラーが出たら `bin/plugin.sh doctor`。** 残骸の掃除・無効プラグインの
+  検出・エンティティ拡張の反映確認・キャッシュの組み立て直し・主要ページの疎通確認まで
+  やる。ページが落ちているときだけ直近の CRITICAL を出す。
 
 - **テストは `bin/test.sh` から実行する**。素の `vendor/bin/phpunit` だとコンテナの
   `APP_ENV=prod` が勝って prod カーネルが起動し、`WebTestCase` 系が
