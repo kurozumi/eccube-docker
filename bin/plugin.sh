@@ -13,6 +13,7 @@
 #   bin/plugin.sh disable <Code>
 #   bin/plugin.sh remove  <Code>        uninstall して app/Plugin/<Code> も削除
 #   bin/plugin.sh list                  導入状況（ファイル + dtb_plugin）を表示
+#   bin/plugin.sh doctor                システムエラーが出たときの点検と修復
 #
 # 開発を高速に回すコツ: .env を APP_ENV=dev にすると Twig/テンプレート変更は即反映。
 # PHP/サービス/config を変えたら bin/plugin.sh reload。
@@ -107,8 +108,51 @@ prepare_plugin_command() {
 # 実測（EC-CUBE 4.3.1-p1）:
 #   enable 直後                        … grep -c getBundleItems → 0
 #   その後 warmup 込みの cache:clear   … grep -c getBundleItems → 3
+#
+# 組み立てまでこちらでやってしまう理由:
+#   本体は管理画面も CLI も cache:clear --no-warmup までしか行わない
+#   （CacheUtil::forceClearCache / PluginCommandTrait::clearCache）。空になった
+#   あとの組み立ては次のリクエスト任せで、そこへ別のリクエストやコンソール
+#   コマンドが重なると、コンパイル済みコンテナが書きかけのまま残る。実際に
+#     Failed opening required '.../var/cache/prod/ContainerXXXX/getDoctrineOrmExtensionService.php'
+#   で全ページがシステムエラーになった。先に温めておけば、ブラウザが来たときには
+#   完成済みのものを読むだけになる。
 warm_cache() {
     ec cache:clear --no-interaction >/dev/null 2>&1 || true
+}
+
+# 中断した操作の後始末。
+#
+# 1) .maintenance（auto_maintenance）
+#    管理画面からプラグインを操作すると本体が自動で立てる。処理が途中で落ちると
+#    消されずに残り、フロントだけ 503「ただいまメンテナンス中です」になる。
+#    管理画面は素通りできるので、管理者は気づきにくい。
+#    手動で入れたメンテナンス（mode が maintenance）は残す。
+#
+# 2) var/cache/.!!xxxx
+#    cache:clear が旧ディレクトリをこの名前に改名してから消す。消し損ねると
+#    たまり続ける。実際に14個・85MB 残っていた。
+clean_leftovers() {
+    docker compose exec -T ec-cube bash -c '
+        if [ -f /var/www/html/.maintenance ] && grep -q "^auto_maintenance" /var/www/html/.maintenance; then
+            rm -f /var/www/html/.maintenance
+            echo "[plugin] 中断した操作のメンテナンス表示を解除しました"
+        fi
+        rm -rf /var/www/html/var/cache/.!!* 2>/dev/null || true
+    ' 2>/dev/null || true
+}
+
+# 操作のあとに必ず通す一式。順番に意味がある。
+#
+#   後始末 → test/プール/OPcache を消す → warmup 込みで組み立て直す
+#
+# 組み立てを最後にするのは、先に温めても直後に OPcache を捨てると
+# php-fpm がもう一度コンパイルし直すことになるため。
+settle() {
+    clean_leftovers
+    clear_test_cache
+    clear_runtime_cache
+    warm_cache
 }
 
 # composer.json の extra.code を取り出す（php 非依存・grep/sed）
@@ -140,9 +184,7 @@ case "$cmd" in
     prepare_plugin_command
     ec eccube:plugin:install --code="$code" --if-not-exists
     ec eccube:plugin:enable  --code="$code"
-    warm_cache
-    clear_test_cache
-    clear_runtime_cache
+    settle
     echo "[plugin] 完了: $code を有効化しました"
     ;;
 
@@ -152,9 +194,7 @@ case "$cmd" in
     prepare_plugin_command
     ec eccube:plugin:install --code="$code" --if-not-exists
     ec eccube:plugin:enable  --code="$code"
-    warm_cache
-    clear_test_cache
-    clear_runtime_cache
+    settle
     echo "[plugin] 完了: $code"
     ;;
 
@@ -170,21 +210,17 @@ case "$cmd" in
     prepare_plugin_command
     ec eccube:plugin:update --code="$code" || true
     ec eccube:plugin:schema-update --code="$code" || true
-    ec cache:clear --no-interaction
-    clear_test_cache
-    clear_runtime_cache
+    settle
     echo "[plugin] 更新完了: $code"
     ;;
 
   reload)
-    ec cache:clear --no-interaction
-    clear_test_cache
-    clear_runtime_cache
-    echo "[plugin] キャッシュを消しました（var/cache・キャッシュプール・OPcache）"
+    settle
+    echo "[plugin] キャッシュを消して温め直しました（var/cache・キャッシュプール・OPcache）"
     ;;
 
-  enable)   prepare_plugin_command; ec eccube:plugin:enable  --code="${1:?Code}"; warm_cache; clear_test_cache; clear_runtime_cache;;
-  disable)  prepare_plugin_command; ec eccube:plugin:disable --code="${1:?Code}"; warm_cache; clear_test_cache; clear_runtime_cache;;
+  enable)   prepare_plugin_command; ec eccube:plugin:enable  --code="${1:?Code}"; settle;;
+  disable)  prepare_plugin_command; ec eccube:plugin:disable --code="${1:?Code}"; settle;;
 
   remove)
     code="${1:?Code を指定してください}"
@@ -192,10 +228,158 @@ case "$cmd" in
     ec eccube:plugin:disable   --code="$code" || true
     ec eccube:plugin:uninstall --code="$code" || true
     rm -rf "app/Plugin/$code"
-    warm_cache
-    clear_test_cache
-    clear_runtime_cache
+    settle
     echo "[plugin] 削除完了: $code"
+    ;;
+
+  doctor)
+    # 中断した操作の痕跡を探して直し、実際に画面が開くかまで見る。
+    # 「システムエラーが出る」と言われたら、まずこれを実行する。
+    ng=0     # 直っていない異常
+    warn=0   # 異常とは限らないが、伝えておくこと
+    clean_leftovers
+
+    # 数え損ねても doctor 自体は続ける（set -e + pipefail で黙って止まらないように）
+    proxies="$(docker compose exec -T ec-cube bash -c \
+        'ls /var/www/html/var/cache/prod/doctrine/orm/Proxies/ 2>/dev/null | wc -l' 2>/dev/null \
+        | tr -d ' \r' || true)"
+    echo "[doctor] Doctrine プロキシ: ${proxies:-?} 件（0 でも prod は必要時に生成する設定）"
+    if [ -z "$proxies" ]; then
+        echo "[doctor] 注意: ec-cube コンテナに届きませんでした（docker compose ps を確認）"
+        warn=1
+    fi
+
+    if docker compose exec -T ec-cube test -f /var/www/html/.maintenance 2>/dev/null; then
+        echo "[doctor] メンテナンス表示が有効です（手動で入れたものは解除しません）"
+    fi
+
+    # インストール済みなのに無効なプラグインを挙げる。
+    #
+    # 中断した操作で勝手に無効へ落ちることがある。無効になっただけでは
+    # 「エラー」に見えないが、他のプラグインがそのエンティティ拡張を前提に
+    # していると、Doctrine のメタデータと実体がずれて画面が落ちる。
+    disabled="$(docker compose exec -T db sh -c \
+        'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N -B -u root "$MYSQL_DATABASE" \
+         -e "SELECT code FROM dtb_plugin WHERE initialized = 1 AND enabled = 0 ORDER BY code;"' \
+        2>/dev/null | tr -d '\r' || true)"
+    if [ -n "$disabled" ]; then
+        echo "[doctor] インストール済みだが無効なプラグイン:"
+        echo "$disabled" | sed 's/^/           /'
+        echo "           意図的でなければ bin/plugin.sh enable <Code> で戻してください"
+        warn=1
+    fi
+
+    # エンティティ拡張が、生成されたクラスに入っているかを見る。
+    #
+    # 有効なプラグインの #[EntityExtension] が app/proxy/entity 側に反映されて
+    # いないと「Property Plugin\...\Group::$optionEntry does not exist」で落ちる。
+    # 拡張を持つプラグインが無効に落ちた直後に必ず起きる形。
+    trait_ng="$(docker compose exec -T ec-cube php <<'PHP' 2>/dev/null || true
+<?php
+$root = '/var/www/html';
+
+// 有効なプラグインだけを見る。app/Plugin/ には未導入のものも置いてある。
+$enabled = [];
+$dsn = getenv('DATABASE_URL');
+if ($dsn && ($u = parse_url($dsn))) {
+    try {
+        $pdo = new PDO(
+            sprintf('mysql:host=%s;port=%d;dbname=%s', $u['host'], $u['port'] ?? 3306, ltrim($u['path'] ?? '', '/')),
+            urldecode($u['user'] ?? ''),
+            urldecode($u['pass'] ?? '')
+        );
+        $enabled = $pdo->query('SELECT code FROM dtb_plugin WHERE enabled = 1')
+            ->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        // DB を読めないときは判定しない（誤検知よりは黙るほうがまし）
+        exit(0);
+    }
+}
+if (!$enabled) {
+    exit(0);
+}
+
+foreach ($enabled as $code) {
+    foreach (glob($root.'/app/Plugin/'.$code.'/Entity/*.php') ?: [] as $file) {
+        $src = file_get_contents($file);
+        if (!str_contains($src, 'EntityExtension')) {
+            continue;
+        }
+        if (!preg_match('/EntityExtension\(\s*\\\\?([A-Za-z0-9_\\\\]+)::class/', $src, $m)
+            || !preg_match('/^namespace\s+([^;]+);/m', $src, $ns)
+            || !preg_match('/^\s*trait\s+(\w+)/m', $src, $t)) {
+            continue;
+        }
+
+        $target = ltrim($m[1], '\\');
+        if (!str_contains($target, '\\')) {
+            // 短い名前で書いてあるものは use 文から補う
+            if (preg_match('/^use\s+([A-Za-z0-9_\\\\]*\\\\'.preg_quote($target, '/').');/m', $src, $imp)) {
+                $target = $imp[1];
+            } else {
+                continue;
+            }
+        }
+        $trait = trim($ns[1]).'\\'.$t[1];
+
+        // 生成先: Eccube\Entity\X -> src/Eccube/Entity/X.php / Plugin\Y\Entity\X -> app/Plugin/Y/Entity/X.php
+        $rel = str_starts_with($target, 'Eccube\\')
+            ? 'src/'.str_replace('\\', '/', $target).'.php'
+            : 'app/'.str_replace('\\', '/', $target).'.php';
+        $proxy = $root.'/app/proxy/entity/'.$rel;
+
+        if (!is_file($proxy)) {
+            echo "生成なし: {$target}（{$trait}）\n";
+            continue;
+        }
+        if (!str_contains(file_get_contents($proxy), $trait)) {
+            echo "未反映: {$target} に {$trait} が入っていません\n";
+        }
+    }
+}
+PHP
+)"
+    if [ -n "$trait_ng" ]; then
+        echo "[doctor] エンティティ拡張の反映漏れ:"
+        echo "$trait_ng" | sed 's/^/           /'
+        echo "           bin/plugin.sh reload で直らなければ、該当プラグインを enable し直してください"
+        ng=1
+    else
+        echo "[doctor] エンティティ拡張: 反映済み"
+    fi
+
+    echo "[doctor] キャッシュを組み立て直します"
+    clear_runtime_cache
+    warm_cache
+    sleep 2
+
+    base="${ECCUBE_BASE_URL:-http://localhost:8080}"
+    page_ng=0
+    for path in / /products/list /entry /admin/login; do
+        code="$(curl -s -o /dev/null -w '%{http_code}' "${base}${path}" || echo 000)"
+        case "$code" in
+            200|302) echo "[doctor] ${code} ${path}" ;;
+            *)       echo "[doctor] ${code} ${path}  ← 異常"; page_ng=1; ng=1 ;;
+        esac
+    done
+
+    # ログを出すのはページが落ちたときだけにする。過去のエラーが残っていても
+    # いま壊れているとは限らず、混乱するだけなので。
+    if [ "$page_ng" -eq 1 ]; then
+        echo "[doctor] var/log/prod/ の直近の CRITICAL:"
+        docker compose exec -T ec-cube bash -c \
+            'grep -ohE "(CRITICAL|システムエラー).{0,200}" /var/www/html/var/log/prod/*.log 2>/dev/null | tail -3' \
+            | sed 's/^/           /' || true
+    fi
+
+    if [ "$ng" -ne 0 ]; then
+        echo "[doctor] 上に挙げた点を直してください"
+        exit 1
+    elif [ "$warn" -ne 0 ]; then
+        echo "[doctor] 画面は開いています。上の注意点だけ確認してください"
+    else
+        echo "[doctor] 問題なし"
+    fi
     ;;
 
   list)

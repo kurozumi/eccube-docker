@@ -1,0 +1,18 @@
+# Doctrine のプロキシが欠けていたら、その場で作り直す。
+#
+# 本体の既定は auto_generate_proxy_classes: '%kernel.debug%' で、本番モードでは
+# 生成しない。プロキシは cache:clear のウォームアップでしか作られないが、
+# プラグインの有効化・無効化は本体・CLI とも `cache:clear --no-warmup` を実行する
+# （Eccube\Util\CacheUtil::forceClearCache / Eccube\Command\PluginCommandTrait::clearCache）。
+#
+# 消えたあとの組み立ては次のリクエストに任されるため、そこへ別のリクエストや
+# コンソールコマンドが重なるとプロキシが無いまま走り出し、
+# 「Failed opening required '.../doctrine/orm/Proxies/__CG__EccubeEntityMasterWork.php'」
+# で全ページがシステムエラーになる。
+#
+# 2 = Doctrine\ORM\Proxy\ProxyFactory::AUTOGENERATE_FILE_NOT_EXISTS。
+# 既にあるファイルは使い、無いものだけ書き出す。存在確認のぶんだけ遅くなるが、
+# 一度そろえば通常運転と変わらない。dev は本体の既定（毎回生成）のままにする。
+doctrine:
+    orm:
+        auto_generate_proxy_classes: 2

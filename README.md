@@ -98,6 +98,7 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
   bin/plugin.sh update MyPlugin                        # git pull→update→キャッシュ一掃
   bin/plugin.sh reload                                 # PHP/config 変更後のキャッシュ一掃
   bin/plugin.sh remove MyPlugin                        # uninstall＋ディレクトリ削除
+  bin/plugin.sh doctor                                 # システムエラーが出たときの点検と修復
   ```
   - private repo の認証は**ホスト側の git/SSH をそのまま使う**（コンテナに鍵を渡さない）。
   - **プラグインの置き場所は `app/Plugin/<Code>/` で、`<Code>` は `composer.json` の
@@ -145,6 +146,21 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
     ```
 
     `bin/plugin.sh` の各コマンドはこれを両方やるので、基本はそちらを使えばよい。
+  - **プラグイン操作のあとにシステムエラーが出たら `bin/plugin.sh doctor`。** 中断した
+    操作は痕跡を残す。よくあるのは次の 3 つで、どれも「操作したプラグインとは別の場所」が
+    壊れるので原因にたどり着きにくい。
+
+    | 残るもの | 症状 |
+    |---|---|
+    | `.maintenance`（管理画面からの操作が立てる `auto_maintenance`） | **フロントだけ 503**。管理画面は素通りできるので気づきにくい |
+    | 書きかけのコンパイル済みコンテナ | 全ページ 500（`Failed opening required '.../var/cache/prod/ContainerXXXX/...'`） |
+    | `dtb_plugin.enabled` が 0 に落ちたプラグイン | 拡張プロパティを前提にした**別の画面**が落ちる（`Property Plugin\...\Group::$optionEntry does not exist` など） |
+
+    `doctor` は残骸の掃除・無効プラグインの検出・エンティティ拡張の反映確認・キャッシュの
+    組み立て直し・主要ページの疎通確認までやる（手動で入れたメンテナンスは解除しない）。
+    なお prod では `app/config/eccube/packages/prod/doctrine_proxy.yaml` で
+    `auto_generate_proxy_classes: 2`（無いものだけ生成）にしてあり、プロキシが欠けた
+    状態でも致命エラーにならない。
   - スケルトン生成は従来どおり:
     ```bash
     docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate "My Plugin" MyPlugin 1.0.0

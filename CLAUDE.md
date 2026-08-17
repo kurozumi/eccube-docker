@@ -34,7 +34,24 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   - 後を怠る → トレイトで足した getter が**例外も出さずに空のコレクション**を返す。
     `findBy()` は件数を返すのに `$Product->getBundleItems()` は 0 件、という
     食い違いになり、プラグインの Processor が黙って何も記録しない。
-  `bin/plugin.sh` の各コマンドは両方やる（`prepare_plugin_command` / `warm_cache`）。
+  `bin/plugin.sh` の各コマンドは両方やる（前が `prepare_plugin_command`、後が
+  `settle` = 後始末 → test/プール/OPcache 削除 → warmup 込みの `cache:clear`）。
+  組み立てを次のリクエスト任せにすると、そこへ別のリクエストやコンソールコマンドが
+  重なってコンパイル済みコンテナが書きかけのまま残り、全ページ 500 になる。
+  **素の `bin/console eccube:plugin:enable` を直接叩かない。**
+- **`.maintenance` が残ることがある。** 管理画面からプラグインを操作すると本体が
+  `auto_maintenance` を自動で立てる。処理が途中で落ちると消されず、フロントだけ
+  503「ただいまメンテナンス中です」になる。**管理画面は素通りできるので気づきにくい。**
+  `bin/plugin.sh doctor` が自動で解除する（手動で入れたメンテナンスは残す）。
+- **プラグインが勝手に無効へ落ちることがある。** 中断した操作の巻き添えで
+  `dtb_plugin.enabled` が 0 になる。無効になっただけでは表向き何も起きないが、
+  Doctrine のメタデータに拡張プロパティが残ったままだと
+  「Property Plugin\...\Group::$optionEntry does not exist」で画面が落ちる。
+  **落ちるのが管理画面の別ページ（レイアウト管理など）なので、原因にたどり着きにくい。**
+  `bin/plugin.sh doctor` が「インストール済みだが無効」として挙げる。
+- **システムエラーが出たら `bin/plugin.sh doctor`。** 残骸の掃除・無効プラグインの
+  検出・エンティティ拡張の反映確認・キャッシュの組み立て直し・主要ページの疎通確認まで
+  やる。ページが落ちているときだけ直近の CRITICAL を出す。
 
 - **テストは `bin/test.sh` から実行する**。素の `vendor/bin/phpunit` だとコンテナの
   `APP_ENV=prod` が勝って prod カーネルが起動し、`WebTestCase` 系が
@@ -104,6 +121,7 @@ bin/test.sh app/Plugin/Foo/Tests  # パス指定でプラグインのテスト�
 bin/plugin.sh add git@github.com:you/MyPlugin.git   # clone→install→enable
 bin/plugin.sh list                                  # 導入状況（enabled/version）
 bin/plugin.sh reload                                # PHP/config 変更後のキャッシュ一掃
+bin/plugin.sh doctor                                # システムエラー時の点検と修復
 docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate <Name>
 ```
 
