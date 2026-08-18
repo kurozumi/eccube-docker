@@ -87,6 +87,17 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `bin/test.sh` は実行前に DAMA の登録方法を DOM で検証し、実行後に
   「The configuration file did not pass validation!」が出ていたらテストが緑でも
   失敗扱いにする。このエラーが出たら設定の書式を疑う。
+- **テスト用のコンパイル済みコンテナは `cache:clear` では作り直されない。** テストは
+  `APP_DEBUG=0` で走るので、`bin/console cache:clear` が作るデバッグ版
+  （`Eccube_KernelTestDebugContainer`）とは別のファイル（`Eccube_KernelTestContainer`）を
+  使う。**debug=false のコンテナはファイルの更新を一切見ない**ため、クラスを足しても
+  反映されない。症状は「サービスがコンテナに登録されていない」形で出る。フォームの型なら
+  `Too few arguments to function ...::__construct(), 0 passed in FormRegistry.php`。
+  Symfony が DI を通さず `new` している合図で、コードではなくキャッシュが原因
+  （`cache:clear` を何度打っても直らず、1時間溶かした）。`bin/test.sh` が
+  `app/Plugin` と `app/Customize` の php/yaml/xml とコンテナの更新時刻を比べ、
+  新しいものがあれば `var/cache/test` を消してから実行する。手で直すなら
+  `docker compose exec ec-cube rm -rf var/cache/test`。
 - **管理画面の Web テストは `dtb_member` を溜め、放置するとテストが固まる。**
   `Generator::createMember()` は faker の `word` から未使用の `login_id` を探すが、
   **ja_JP の単語は 182 語しか無い**。Web テストの Member はロールバックされないため、

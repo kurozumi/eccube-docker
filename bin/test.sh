@@ -107,6 +107,32 @@ if [ -n "$pool" ] && [ -n "$leaked" ] && [ "$leaked" -ge "$((pool - 20))" ]; the
         >/dev/null 2>&1 || echo "[test] 退避に失敗しました。bin/reset.sh で DB を初期化してください。" >&2
 fi
 
+# 4.6) コンパイル済みのテスト用コンテナが古くなっていないか。
+#    テストは APP_DEBUG=0 で走るので、bin/console cache:clear が作り直すデバッグ版
+#    （Eccube_KernelTestDebugContainer）とは別のファイルを使う。debug=false の
+#    コンテナは**ファイルの更新を一切見ない**ため、クラスを足しても反映されない。
+#    症状は「サービスがコンテナに登録されていない」形で出る。フォームの型なら
+#    Too few arguments to function ...::__construct(), 0 passed in FormRegistry.php。
+#    Symfony が DI を通さず new している合図で、コードではなくキャッシュが原因。
+#    cache:clear を何度打っても直らないので、ここで見つけて消す。
+#    Tests 配下はコンテナに入らないので、変更を見ても作り直さない（毎回20秒損する）。
+stale="$(docker compose exec -T ec-cube sh -c '
+    c=/var/www/html/var/cache/test/Eccube_KernelTestContainer.php
+    [ -f "$c" ] || exit 0
+    find /var/www/html/app/Plugin /var/www/html/app/Customize \
+        -type f \( -name "*.php" -o -name "*.yaml" -o -name "*.yml" -o -name "*.xml" \) \
+        -not -path "*/Tests/*" -not -path "*/vendor/*" \
+        -newer "$c" -print -quit 2>/dev/null
+' 2>/dev/null || true)"
+
+if [ -n "$stale" ]; then
+    echo "[test] コンパイル済みのテスト用コンテナより新しいファイルがあります:"
+    echo "[test]   ${stale#/var/www/html/}"
+    echo "[test] テストは APP_DEBUG=0 で動くため、このコンテナは更新を見ません。"
+    echo "[test] var/cache/test を消して作り直します。"
+    docker compose exec -T ec-cube rm -rf /var/www/html/var/cache/test
+fi
+
 # 5) 実行。設定ファイルの validation 警告が出たら、テストが緑でも失敗扱いにする
 #    （警告だけ出して読み飛ばされた要素があると、DAMA が登録されていない可能性がある）。
 out="$(mktemp)"
