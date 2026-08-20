@@ -9,6 +9,7 @@
 #   bin/plugin.sh install <Code>        既に app/Plugin/<Code> にある物を install → enable
 #   bin/plugin.sh update <Code>         git pull → plugin:update/schema-update → cache:clear
 #   bin/plugin.sh reload                キャッシュ一掃（PHP/config/twig を編集したら実行）
+#   bin/plugin.sh watch [秒]            変更を見張って自動で reload（既定 2 秒間隔）
 #   bin/plugin.sh enable  <Code>
 #   bin/plugin.sh disable <Code>
 #   bin/plugin.sh remove  <Code>        uninstall して app/Plugin/<Code> も削除
@@ -155,6 +156,32 @@ settle() {
     warm_cache
 }
 
+# コンパイル済みコンテナより新しいファイルを1つ返す（無ければ空文字）。
+#
+# 本番モードではコンパイル済みコンテナも OPcache も**こちらが消すまで作り直されない**。
+# ファイルを更新しただけの状態は、例外も 500 も出さずに「その変更だけが無かったこと
+# になる」という形で出る。実際に踏んだ例:
+#   承認対象を決めるクラス（タグ付きサービス）を1つ足したのに、コンテナには
+#   古い並びが焼かれたままで、取引先の会員登録が承認制にならなかった。
+#   コードもタグも正しいので、grep でもテストでも見つからない。
+#
+# 基準にするのはコンパイル済みコンテナの更新時刻。reload / settle が作り直すので、
+# 「最後にキャッシュを組み立てた時刻」として使える。
+#
+# dev では debug モードがファイルの更新を追うので、この比較は行わない
+# （コンテナのファイル名も別で、そもそも存在しない）。
+# Tests 配下はコンテナに入らないので無視する（bin/test.sh の 4.6 と同じ理由）。
+stale_file() {
+    docker compose exec -T ec-cube sh -c '
+        c=/var/www/html/var/cache/prod/Eccube_KernelProdContainer.php
+        [ -f "$c" ] || exit 0
+        find /var/www/html/app/Plugin /var/www/html/app/Customize \
+            -type f \( -name "*.php" -o -name "*.yaml" -o -name "*.yml" -o -name "*.xml" -o -name "*.twig" \) \
+            -not -path "*/Tests/*" -not -path "*/vendor/*" -not -path "*/node_modules/*" \
+            -newer "$c" -print -quit 2>/dev/null
+    ' 2>/dev/null || true
+}
+
 # composer.json の extra.code を取り出す（php 非依存・grep/sed）
 #
 # 読めなければ空文字を返す。末尾の `|| true` が要る理由:
@@ -228,6 +255,34 @@ case "$cmd" in
     echo "[plugin] キャッシュを消して温め直しました（var/cache・キャッシュプール・OPcache）"
     ;;
 
+  # 変更を見張って自動で reload する。
+  #
+  # 本番モードの取りこぼしは「reload を忘れた」ではなく「忘れても気づけない」ことが
+  # 問題なので、忘れる前提で動かしておく。git pull でプラグインを更新したときにも効く。
+  # bin/assets.sh watch と同じ感覚で、開発中は別のターミナルで放っておく。
+  #
+  # fswatch 等は使わない。見張るのはコンテナの中のファイルで、ホストに何も
+  # 入れさせないため。settle 自体に数秒かかるので、これがそのまま連打よけになる。
+  watch)
+    interval="${1:-2}"
+    if [ -z "$(docker compose exec -T ec-cube sh -c \
+        '[ -f /var/www/html/var/cache/prod/Eccube_KernelProdContainer.php ] && echo y' 2>/dev/null || true)" ]; then
+        echo "[plugin] 本番モードのコンパイル済みコンテナがありません。"
+        echo "[plugin] APP_ENV=dev なら debug モードが更新を追うので watch は要りません。"
+        exit 0
+    fi
+    echo "[plugin] app/Plugin と app/Customize を見張ります（${interval}秒ごと・Ctrl-C で終了）"
+    while :; do
+        changed="$(stale_file)"
+        if [ -n "$changed" ]; then
+            echo "[plugin] 変更を検出: ${changed#/var/www/html/}"
+            settle
+            echo "[plugin] 反映しました（$(date '+%H:%M:%S')）"
+        fi
+        sleep "$interval"
+    done
+    ;;
+
   enable)   prepare_plugin_command; ec eccube:plugin:enable  --code="${1:?Code}"; settle;;
   disable)  prepare_plugin_command; ec eccube:plugin:disable --code="${1:?Code}"; settle;;
 
@@ -260,6 +315,22 @@ case "$cmd" in
 
     if docker compose exec -T ec-cube test -f /var/www/html/.maintenance 2>/dev/null; then
         echo "[doctor] メンテナンス表示が有効です（手動で入れたものは解除しません）"
+    fi
+
+    # コンパイル済みコンテナが、いま置いてあるファイルより古くないか。
+    #
+    # **これは「エラーが出ない不具合」なので、doctor で挙げる価値がいちばん高い。**
+    # 足したサービスやタグが効かないだけなので、画面は 200 で開き、ログにも何も出ない。
+    # 下の疎通確認も通ってしまう。
+    stale="$(stale_file)"
+    if [ -n "$stale" ]; then
+        echo "[doctor] コンパイル済みコンテナより新しいファイルがあります:"
+        echo "           ${stale#/var/www/html/}"
+        echo "           本番モードは更新を見ないので、この変更はまだ効いていません"
+        echo "           （下でキャッシュを組み立て直すので、このあと反映されます）"
+        warn=1
+    else
+        echo "[doctor] コンパイル済みコンテナ: 最新"
     fi
 
     # インストール済みなのに無効なプラグインを挙げる。

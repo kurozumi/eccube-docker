@@ -97,6 +97,7 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
   bin/plugin.sh list                                  # 導入状況（enabled/version）
   bin/plugin.sh update MyPlugin                        # git pull→update→キャッシュ一掃
   bin/plugin.sh reload                                 # PHP/config 変更後のキャッシュ一掃
+  bin/plugin.sh watch                                  # 変更を見張って自動で reload
   bin/plugin.sh remove MyPlugin                        # uninstall＋ディレクトリ削除
   bin/plugin.sh doctor                                 # システムエラーが出たときの点検と修復
   ```
@@ -129,6 +130,25 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
     docker compose exec ec-cube runuser -u www-data -- php bin/console cache:pool:clear --all
     docker compose exec ec-cube bash -c 'kill -USR2 1'   # php-fpm を graceful reload
     ```
+  - **本番モードでは「キャッシュが古い」こと自体はエラーにならない。** 上の表はエラーが
+    出るぶんまだ気づけるほうで、いちばん厄介なのは**足したサービスやタグだけが、例外も
+    500 も出さずに効かない**形。画面は 200 で開き、ログにも何も出ず、ソースを読んでも
+    テストを流しても正しいままなので、キャッシュを疑うまで見つからない。
+    `git pull` でプラグインを更新した直後が特に危ない（ファイルだけ新しくなる）。
+
+    ```bash
+    bin/plugin.sh doctor   # コンパイル済みコンテナより新しいファイルがあれば挙げる
+    bin/plugin.sh watch    # 見張って自動で reload。開発中は別のターミナルで放っておく
+    ```
+
+    切り分けるときは `var/cache/prod/Container*/get<サービス名>Service.php` を読んで、
+    期待した定義が焼かれているかを見るのが速い。
+  - **`docker compose` のプロジェクト名がずれていると、直したつもりで直らない。**
+    `compose.yaml` の `name:` と別名でスタックを起動していると、`bin/*.sh` は `name:` の
+    ほうへ行く。**止まっているスタックにも `exec` は通る**ので、reload も doctor も
+    成功したように見えてブラウザは古いまま。`.env` に `COMPOSE_PROJECT_NAME=<稼働中の名前>`
+    を書いて固定し、使わないスタックは落としておく（同じ `app/` を bind-mount した
+    二重起動は `app/proxy/entity` を奪い合う）。
   - **`eccube:plugin:install` / `enable` / `disable` を手で叩くときは、前後のキャッシュ操作を
     忘れないこと。** `doctrine.yaml` の `auto_generate_proxy_classes` は `%kernel.debug%`
     （prod では false）で、Doctrine のプロキシはキャッシュウォーマーでしか作られない。

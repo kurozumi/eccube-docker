@@ -23,6 +23,24 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   消す。`opcache.validate_timestamps=Off` のためファイルを更新しても php-fpm は
   古いコンパイル結果を返し続ける。**OPcache は CLI では無効**なので `bin/console`
   からは正常に見え、ブラウザだけ壊れる。`bin/plugin.sh` の各コマンドは両方消す。
+- **本番モードでは「キャッシュが古い」こと自体はエラーにならない。** ファイルを足しても
+  コンパイル済みコンテナには入らないので、**足したサービスやタグだけが例外も 500 も
+  出さずに効かない**。実例: 承認対象を決めるタグ付きサービスを1つ足したのに古い並びが
+  焼かれたままで、取引先の会員登録が承認制にならなかった。コードもタグも正しいので、
+  ソースを読んでもテストを流しても見つからない。切り分けは
+  `var/cache/prod/Container*/get<サービス>Service.php` を読んで、期待した定義が
+  焼かれているかを見るのが速い。
+  **`git pull` でプラグインを更新した直後がいちばん危ない**（ファイルだけ新しくなる）。
+  - `bin/plugin.sh doctor` … コンパイル済みコンテナより新しいファイルがあれば挙げる
+  - `bin/plugin.sh watch` … 見張って自動で reload。開発中は別のターミナルで放っておく
+- **`docker compose` のプロジェクト名がずれると、直したつもりで直らない。**
+  `compose.yaml` の `name:` と別名でスタックを起動していると、`bin/*.sh` は
+  `name:` のほうへ行く。**止まっているスタックにも `exec` は通ってしまう**ので、
+  reload も doctor も成功したように見えてブラウザは古いままになる。上の
+  「効かないプラグイン」も、元をたどるとこれで reload が空振りしていた。
+  `.env` に `COMPOSE_PROJECT_NAME=<稼働中の名前>` を書いて固定する。
+  同じ `app/` を bind-mount した二重起動は `app/proxy/entity` を奪い合うので、
+  使わないスタックは落としておく。
 - **プラグインの install/enable/disable は前後でキャッシュ操作が要る。**
   `doctrine.yaml` の `auto_generate_proxy_classes` は `%kernel.debug%`（prod では
   false）なので、Doctrine のプロキシはウォーマーでしか作られない。EC-CUBE 本体の
@@ -145,6 +163,7 @@ bin/test.sh app/Plugin/Foo/Tests  # パス指定でプラグインのテスト�
 bin/plugin.sh add git@github.com:you/MyPlugin.git   # clone→install→enable
 bin/plugin.sh list                                  # 導入状況（enabled/version）
 bin/plugin.sh reload                                # PHP/config 変更後のキャッシュ一掃
+bin/plugin.sh watch                                 # 変更を見張って自動で reload
 bin/plugin.sh doctor                                # システムエラー時の点検と修復
 docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate <Name>
 ```
