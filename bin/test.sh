@@ -133,6 +133,43 @@ if [ -n "$stale" ]; then
     docker compose exec -T ec-cube rm -rf /var/www/html/var/cache/test
 fi
 
+# 4.7) 有効なプラグインの構成が変わっていないか。
+#    **ファイルの時刻では見つからない。** プラグインを有効化・無効化しても
+#    ファイルは1つも書き換わらないので 4.6 をすり抜ける。ところがコンテナには
+#    そのプラグインのサービス・ルート・フォーム型が焼き込まれているので、
+#    有効化した直後は「DB には有る（有効）のにコンテナには無い」という
+#    食い違いが残る。
+#
+#    症状は Unable to generate a URL for the named route "..." as such route
+#    does not exist。ルートが消えたように見えるが、消えたのはキャッシュのほう。
+#    逆（無効化した直後）は、無いはずのサービスが動いて別の形で落ちる。
+#
+#    有効なプラグインの一覧を控えておき、変わっていたら作り直す。
+#    dtb_plugin を読むので DB が要るが、ここまで来ていれば起動済み。
+#    GROUP_CONCAT で1行にまとめる。1件1行で受けると、罫線と見出しを剥がす処理が要る。
+codes="$(docker compose exec -T ec-cube php bin/console dbal:run-sql --force-fetch \
+    "SELECT GROUP_CONCAT(code ORDER BY code) AS codes FROM dtb_plugin WHERE enabled = 1" \
+    2>/dev/null | sed -n 4p | tr -d ' |' || true)"
+
+if [ -n "$codes" ]; then
+    marker=/var/www/html/var/cache/test/.enabled-plugins
+    prev="$(docker compose exec -T ec-cube sh -c "cat $marker 2>/dev/null" 2>/dev/null || true)"
+
+    if [ "$prev" != "$codes" ]; then
+        if [ -n "$prev" ]; then
+            echo "[test] 有効なプラグインの構成が変わりました。"
+            echo "[test]   前回: ${prev}"
+            echo "[test]   今回: ${codes}"
+            echo "[test] コンテナにはサービスとルートが焼き込まれています。作り直します。"
+            docker compose exec -T ec-cube rm -rf /var/www/html/var/cache/test
+        fi
+        # **www-data で作る。** root で mkdir すると、テスト実行時に
+        # 「Unable to write in the cache directory」でカーネルが起動できない。
+        docker compose exec -T -u www-data ec-cube sh -c \
+            "mkdir -p /var/www/html/var/cache/test && printf '%s' '$codes' > $marker" >/dev/null 2>&1 || true
+    fi
+fi
+
 # 5) 実行。設定ファイルの validation 警告が出たら、テストが緑でも失敗扱いにする
 #    （警告だけ出して読み飛ばされた要素があると、DAMA が登録されていない可能性がある）。
 out="$(mktemp)"
