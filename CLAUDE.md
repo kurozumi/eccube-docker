@@ -174,6 +174,13 @@ bin/plugin.sh doctor                                # システムエラー時�
 docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate <Name>
 ```
 
+## 資料
+
+- `docs/event-subscribers.md` — **各プラグインが本体のどこに割り込んでいるかの一覧。**
+  同じイベントに複数のプラグインがぶら下がっている箇所と、priority を明示している箇所、
+  過去に踏んだ罠をまとめてある。イベント購読を足す・動かす前にここを見る。
+  **中身を変えたらこの文書も直す。**
+
 ## 開発フロー（重要）
 
 - **`main` へ直接コミット・直接プッシュしない。** 変更は必ず作業ブランチを切り、
