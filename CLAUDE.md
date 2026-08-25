@@ -15,6 +15,10 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
     `customize.css` / `customize.js` を自動読込する（上書き Twig 不要）。scss ソースは
     `frontend/scss/`、ビルドは `bin/assets.sh`。
 - **バージョンは `.env` の `ECCUBE_VERSION`**（build-arg）。切替は `bin/switch-version.sh`。
+- **IDE がライブラリを未定義と言うのは正常。** 本体と `vendor` はボリュームの中だけにあり
+  ホストには1ファイルも無い。`bin/ide-sync.sh` で `.ide/` へ写し、PhpStorm の
+  **Include Path**（ソースルートではない）に足す。リモートインタプリタを設定しても
+  解決しない。バージョンを切り替えたら写し直す。
 - **framework 級設定（monolog 等）は `app/config/eccube/packages/`**。entrypoint が起動時に
   本体の `app/config/eccube/packages/` へマージする（既定は消さない）。
 - 既定は本番モード。開発でデバッグするときだけ `.env` を `APP_ENV=dev` にする。
@@ -151,6 +155,8 @@ bin/switch-version.sh ~4.2.0   # バージョン切替（データ破棄・開�
 bin/reset.sh                   # DB 初期化
 bin/publish.sh                 # 本番構成で起動
 docker compose exec ec-cube runuser -u www-data -- php bin/console <cmd>
+
+bin/ide-sync.sh                # IDE 用に本体・vendor を .ide/ へ写す（--proxy / --clean）
 
 bin/assets.sh build            # 独自 scss → html/user_data/assets/css/customize.css
 bin/assets.sh watch            # 上記を監視ビルド（dev の node サービス）
