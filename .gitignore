@@ -5,6 +5,10 @@
 # Claude Code の個人設定（共有しない。共有は .claude/settings.json）
 /.claude/settings.local.json
 
+# IDE の個人設定。Include Path も CLI インタプリタもホストのパスや Docker の
+# コンテキストに依存するので、共有しても他の環境では使えない。
+/.idea/
+
 # EC-CUBE 本体はイメージにベイクするので、このリポジトリには持たない。
 # app/ 配下（Customize / template / DoctrineMigrations / config）は
 # あなたの成果物なので Git 管理する。
