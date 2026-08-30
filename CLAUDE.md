@@ -14,6 +14,13 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   - 独自 CSS/JS → `html/user_data/assets/{css,js}`。本体 `default_frame.twig` が
     `customize.css` / `customize.js` を自動読込する（上書き Twig 不要）。scss ソースは
     `frontend/scss/`、ビルドは `bin/assets.sh`。
+- **`app/template/` に本体のテンプレートを丸ごと写さない。** 写した瞬間は同じでも、
+  本体を上げたときに**古いほうが勝ち続ける**。例外は出ず、直したはずの不具合が
+  戻る・新しい項目が出ない、という形で出る。上書きするのは**直すファイルだけ**に
+  すること。実際にこのリポジトリには本体と同一の写しが56件あった（末尾の改行しか
+  違わなかった）ので消した。
+- **プラグインがテーマへ写したテンプレートは追跡しない**（`.gitignore` 済み）。
+  無効化→有効化で作り直せる。**店が直したものだけ `git add -f` で追跡する。**
 - **バージョンは `.env` の `ECCUBE_VERSION`**（build-arg）。切替は `bin/switch-version.sh`。
 - **IDE がライブラリを未定義と言うのは正常。** 本体と `vendor` はボリュームの中だけにあり
   ホストには1ファイルも無い。`bin/ide-sync.sh` で `.ide/` へ写し、PhpStorm の

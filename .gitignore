@@ -36,3 +36,27 @@
 # 自分で書いた上書きテンプレートは app/template/default/ 直下に置くので影響しない。
 /app/template/default/CustomerGroup*/
 /backups/
+
+# プラグインが有効化のときにテーマへ写すテンプレート。
+# 本体はテーマを起点にファイルを解決するので、プラグインの中に置いたままでは
+# 引けない（メールは「Unable to find template」、ページ管理は 500）。
+#
+# 写しなので追跡しない。無効化→有効化で作り直せる。先頭の
+# `{# <プラグイン名>-template: <ハッシュ> #}` は、店が直したかどうかを
+# プラグインが見分けるための目印。
+#
+# **店が直したものは追跡すること。** `git add -f app/template/default/<コード>/...`
+/app/template/default/B2BCompany/
+/app/template/default/B2BOrderApproval/
+/app/template/default/CustomerApproval/
+/app/template/default/OrderDeliveryPlace/
+/app/template/default/OrderPad/
+/app/template/default/OrderQuote/
+/app/template/default/OrderRecurring/
+/app/template/default/ProductCompare/
+/app/template/default/ProductSample/
+
+# ページ管理（コンテンツ管理）から作ったページ。管理画面で作るものなので
+# 環境のデータであって、リポジトリの成果物ではない。
+/app/template/user_data/
+
