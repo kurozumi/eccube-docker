@@ -118,8 +118,31 @@ prepare_plugin_command() {
 #     Failed opening required '.../var/cache/prod/ContainerXXXX/getDoctrineOrmExtensionService.php'
 #   で全ページがシステムエラーになった。先に温めておけば、ブラウザが来たときには
 #   完成済みのものを読むだけになる。
+#
+# **失敗を握りつぶさない。** ここが黙って落ちると、[plugin] は成功と表示するのに
+# 古いコンパイル済みコンテナが残る。本番モードでは「足したサービスやタグだけが
+# 例外も 500 も出さずに効かない」という形になり、原因にたどり着けない。
+# **実際に踏んだ**（warmup が 256M のメモリ上限に当たって落ちていた）。
+#
+# メモリ上限は既定の 1G を使う。プラグインを何十個も入れると warmup は重く、
+# php.ini の memory_limit（既定 256M）では足りない。変えたいときは
+# PLUGIN_CACHE_MEMORY_LIMIT で上書きする。
 warm_cache() {
-    ec cache:clear --no-interaction >/dev/null 2>&1 || true
+    local limit="${PLUGIN_CACHE_MEMORY_LIMIT:-1G}"
+    local out
+
+    if out=$(docker compose exec -T ec-cube runuser -u www-data -- \
+            php -d memory_limit="$limit" bin/console cache:clear --no-interaction 2>&1); then
+        return 0
+    fi
+
+    echo "[plugin] キャッシュの組み立てに失敗しました（memory_limit=${limit}）。" >&2
+    echo "[plugin] **古いコンパイル済みコンテナが残っています。**" >&2
+    echo "[plugin] 本番モードでは、足したサービスやタグが例外も 500 も出さずに" >&2
+    echo "[plugin] 効かないという形で出ます。直してからもう一度実行してください。" >&2
+    echo "$out" | tail -n 15 | sed 's/^/[plugin]   /' >&2
+
+    return 1
 }
 
 # 中断した操作の後始末。
@@ -149,6 +172,8 @@ clean_leftovers() {
 #
 # 組み立てを最後にするのは、先に温めても直後に OPcache を捨てると
 # php-fpm がもう一度コンパイルし直すことになるため。
+# **warm_cache の失敗をそのまま返す。** 呼び出し側（set -e）が止まるので、
+# 「成功と表示されたのに古いキャッシュが残る」ことがなくなる。
 settle() {
     clean_leftovers
     clear_test_cache
@@ -430,7 +455,11 @@ PHP
 
     echo "[doctor] キャッシュを組み立て直します"
     clear_runtime_cache
-    warm_cache
+    # **ここでは止まらない。** 点検の途中なので、失敗も所見として拾って先へ進む
+    if ! warm_cache; then
+        echo "[doctor] キャッシュの組み立てに失敗しました。上の理由を直してください" >&2
+        ng=1
+    fi
     sleep 2
 
     base="${ECCUBE_BASE_URL:-http://localhost:8080}"

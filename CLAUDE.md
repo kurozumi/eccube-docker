@@ -42,6 +42,10 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `var/cache/prod/Container*/get<サービス>Service.php` を読んで、期待した定義が
   焼かれているかを見るのが速い。
   **`git pull` でプラグインを更新した直後がいちばん危ない**（ファイルだけ新しくなる）。
+  - `bin/plugin.sh reload` はキャッシュの組み立てに失敗したら**止まる**。
+    黙って続けると「成功と表示されたのに古いコンテナが残る」ことになり、
+    足したサービスやタグだけが効かない状態を自分で作る。warmup は重いので
+    `memory_limit` は 1G で回す（`PLUGIN_CACHE_MEMORY_LIMIT` で変えられる）。
   - `bin/plugin.sh doctor` … コンパイル済みコンテナより新しいファイルがあれば挙げる
   - `bin/plugin.sh watch` … 見張って自動で reload。開発中は別のターミナルで放っておく
 - **`docker compose` のプロジェクト名がずれると、直したつもりで直らない。**
