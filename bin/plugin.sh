@@ -127,14 +127,32 @@ prepare_plugin_command() {
 # メモリ上限は既定の 1G を使う。プラグインを何十個も入れると warmup は重く、
 # php.ini の memory_limit（既定 256M）では足りない。変えたいときは
 # PLUGIN_CACHE_MEMORY_LIMIT で上書きする。
+#
+# **進捗を出す。** 出力をコマンド置換で抱え込むと、終わるまで画面が沈黙する。
+# プラグインを何十個も入れた環境では数分かかるので、**固まったと勘違いして
+# 止めたくなる。** 途中で止めるとコンパイル済みコンテナが消えたまま残り、
+# 全ページが 500 になる。**実際にそれでサイトを落とした。**
+#
+# **出力はパイプに通さない。** `| tail` のように読み手を挟むと、その読み手を
+# 先に止めたときコンテナの中の php が書き込みでブロックし、いつまでも
+# 終わらなくなる。ファイルへ落として、失敗したときだけ読む。
 warm_cache() {
     local limit="${PLUGIN_CACHE_MEMORY_LIMIT:-1G}"
-    local out
+    local log
+    log=$(mktemp)
 
-    if out=$(docker compose exec -T ec-cube runuser -u www-data -- \
-            php -d memory_limit="$limit" bin/console cache:clear --no-interaction 2>&1); then
+    echo "[plugin] キャッシュを組み立てています（数分かかることがあります。止めないでください）"
+
+    if docker compose exec -T ec-cube runuser -u www-data -- \
+            php -d memory_limit="$limit" bin/console cache:clear --no-interaction >"$log" 2>&1; then
+        rm -f "$log"
+
         return 0
     fi
+
+    local out
+    out=$(cat "$log")
+    rm -f "$log"
 
     echo "[plugin] キャッシュの組み立てに失敗しました（memory_limit=${limit}）。" >&2
     echo "[plugin] **古いコンパイル済みコンテナが残っています。**" >&2
