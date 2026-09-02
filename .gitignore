@@ -53,9 +53,11 @@
 /app/template/default/OrderPad/
 /app/template/default/OrderQuote/
 /app/template/default/OrderRecurring/
+/app/template/default/OrderRoomAllocation/
 /app/template/default/ProductCompare/
 /app/template/default/ProductSample/
 /app/template/default/ProductVariableWeight/
+/app/template/default/PurchaseQualification/
 
 # ページ管理（コンテンツ管理）から作ったページ。管理画面で作るものなので
 # 環境のデータであって、リポジトリの成果物ではない。
