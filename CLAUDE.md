@@ -123,7 +123,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   「framework.test config is not set to true」で全部落ちる（`bin/test.sh` が
   `-e APP_ENV=test` を渡している）。テスト設定の DAMA が各テストを
   ロールバックするので DB は汚れない。メールは `packages/test/messenger.yaml` で
-  テストだけ同期送信。詳細は README「ユニットテスト」。
+  テストだけ同期送信。詳細は `docs/testing.md`。
 - **テスト設定は PHPUnit のバージョン別に 2 本ある。** EC-CUBE 4.2/4.3 は PHPUnit 9.6 +
   DAMA 6.x、4.4 は PHPUnit 11 + DAMA 8.x で、設定の書式が相互に非互換
   （DAMA の登録が `<listeners><listener>` ↔ `<extensions><bootstrap>`、カバレッジ対象が
@@ -164,17 +164,33 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   バイト数を突き合わせて検出する。
 - **性能/スケール（Tier 1）**: php-fpm は `.env` の `PHP_FPM_*`、OPcache は entrypoint が
   `APP_ENV` で切替、Redis 共有キャッシュは `app/config/eccube/packages/cache.yaml`、DB は
-  `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は README「大規模アクセス」。
+  `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は `docs/scale.md`。
 - **セッション Redis 共有（Tier 2）**: 専用 `redis-session` に保存し複数ホストで共有。
   本体の SameSite ハンドラは維持し内側だけ `Customize\Session\RawRedisSessionHandler` に
   差し替え（`app/Customize/Resource/config/services.yaml`、`SESSION_REDIS_URL`）。
 - **アップロード画像（Tier 2）**: `html/upload` は専用ボリューム `eccube_upload` に分離。
   複数ホストは NFS/EFS ドライバに差し替えて共有。`down -v`（reset/switch-version）で
-  ローカルデータは消えるので事前バックアップ。詳細は README「アップロード画像の共有ストレージ」。
+  ローカルデータは消えるので事前バックアップ。詳細は `docs/scale.md`。
 - **複数ホスト + LB（Tier 2）**: 各アプリホストは `compose.app.yaml`（db/redis を含まない
   app 層のみ、外部共有サービスを参照）。init ロール 1 台だけ `ECCUBE_SKIP_DB_INIT=0` で
   migrate、他は 1。HTTPS 終端 LB では `TRUSTED_PROXIES` 必須（本体未配線を
   `app/config/eccube/packages/trusted_proxies.yaml` で補う）。LB 例は `docker/nginx/lb.conf.example`。
+
+## ドキュメントの置き場所
+
+**README は入口だけ。** 設計方針・ディレクトリ・必要環境・クイックスタートまでで、
+以降は `docs/` に分けてある。**README に長文を足さないこと。**
+
+| 文書 | 中身 |
+|---|---|
+| `docs/customize.md` | 本体を汚さずに実装を足す場所、framework 級設定 |
+| `docs/upgrade.md` | バージョン切替とバージョンアップ、切り戻し |
+| `docs/deploy.md` | 本番デプロイ |
+| `docs/backup.md` | バックアップ / 復元 |
+| `docs/scale.md` | 大規模アクセス、セッション・画像の共有、LB、メールの非同期化 |
+| `docs/monitoring.md` | 監視 |
+| `docs/testing.md` | ユニットテスト |
+| `docs/ide.md` | PhpStorm の設定 |
 
 ## よく使う操作
 
