@@ -1,7 +1,7 @@
-# eccube-docker
+# EC-CUBE 4 を開発から本番まで同じ構成で動かす Docker 環境
 
-EC-CUBE 4 を **どのサーバー（各社 VPS / AWS など）でも同じ手順で** インストール〜公開
-できる、汎用の Docker 環境。`git clone && bin/init.sh` で開発環境が立ち上がる。
+各社 VPS でも AWS でも**同じ手順**でインストールから公開までできる。
+`git clone && bin/init.sh` で開発環境が立ち上がり、そのまま `bin/publish.sh` で公開できる。
 
 ## 設計方針
 
