@@ -29,6 +29,11 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   本体がそれでもテーマへ書いた写しは、あちらがその場で消す（本体は読むのを
   ローダーに任せるが、**書くのは必ずテーマ配下**）。
 - **バージョンは `.env` の `ECCUBE_VERSION`**（build-arg）。切替は `bin/switch-version.sh`。
+- **`bin/reset.sh` と `bin/switch-version.sh` は `down -v` する。** DB・画像・
+  セッションが消え、**その場では戻せない。** 稼働中が本番構成なら
+  `CONFIRM_DESTROY=<プロジェクト名>` が無いと止まる（`bin/lib/guard.sh`）。
+  **停止中は判定できない**ので、止まっている本番で打てば消える。
+  上げたいだけなら `upgrade.sh`。詳細は `docs/data-safety.md`。
 - **本番を上げるときは `bin/upgrade.sh <制約> --prod`。** `--prod` を落とすと
   `compose.override.yaml`（開発用のポートと bind mount）が効いた状態で公開される。
   **画面は出るので気づきにくい。** 稼働中なら自動でも寄せるが、停止中に打つと効かない。
@@ -187,6 +192,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 | `docs/upgrade.md` | バージョン切替とバージョンアップ、切り戻し |
 | `docs/deploy.md` | 本番デプロイ |
 | `docs/backup.md` | バックアップ / 復元 |
+| `docs/data-safety.md` | `down` と `down -v` の違い、消えるコマンド、復旧 |
 | `docs/scale.md` | 大規模アクセス、セッション・画像の共有、LB、メールの非同期化 |
 | `docs/monitoring.md` | 監視 |
 | `docs/testing.md` | ユニットテスト |

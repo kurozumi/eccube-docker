@@ -9,6 +9,8 @@
 # 環境が残らない（新バージョンの取得は composer 依存解決に失敗しうる）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=lib/guard.sh
+. "$(dirname "$0")/lib/guard.sh"
 
 ver="${1:-}"
 if [ -z "$ver" ]; then
@@ -20,8 +22,7 @@ echo "[switch] ECCUBE_VERSION=${ver} に切り替えます。既存の DB とア
 echo "[switch] 注意: アップロード画像（eccube_upload）も削除されます。残したい場合は先にバックアップを:"
 echo "         docker compose cp ec-cube:/var/www/html/html/upload/. ./upload-backup/"
 echo "         （NFS/EFS ドライバで運用していれば外部データは消えません）"
-read -r -p "続行しますか? [y/N] " ans
-[ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
+guard_destructive switch-version.sh "DB・アップロード画像・セッション"
 
 current="$(grep -E '^ECCUBE_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
 current_redis="$(grep -E '^PHPREDIS_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
