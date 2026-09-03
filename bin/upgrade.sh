@@ -19,9 +19,21 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# --prod は本番構成（compose.prod.yaml）で上げる指定。位置は問わない。
+want_prod=0
+args=()
+for a in "$@"; do
+    if [ "$a" = "--prod" ]; then
+        want_prod=1
+    else
+        args+=("$a")
+    fi
+done
+set -- ${args[@]+"${args[@]}"}
+
 ver="${1:-}"
 if [ -z "$ver" ]; then
-    echo "使い方: bin/upgrade.sh <制約>   例: ~4.3.2"
+    echo "使い方: bin/upgrade.sh <制約> [--prod]   例: ~4.3.2"
     echo "  データを保ったままバージョンを上げます。"
     echo "  データごと作り直したい場合は bin/switch-version.sh を使ってください。"
     exit 1
@@ -38,6 +50,38 @@ if [ -z "$proj" ]; then
 fi
 app_vol="${proj}_eccube_app"
 db_vol="${proj}_db_data"
+
+# 本番構成で起動するかどうか。**ここを外すと本番が開発構成で上がる。**
+# publish.sh は compose.prod.yaml を重ねて起動するが、このスクリプトが素の
+# `docker compose` を使うと compose.override.yaml（開発用のポートと bind mount）が
+# 効いた状態で公開されてしまう。**画面は出るので気づきにくい。**
+#
+# --prod が無くても、いま動いているスタックが本番構成なら本番構成のまま上げる。
+# 本番のサーバーで打つときに付け忘れても事故らないようにするため。
+dc=(docker compose)
+
+# **稼働中のコンテナのラベルを見る。** compose は起動に使ったファイルの一覧を
+# com.docker.compose.project.config_files に残す。`docker compose ls` の JSON は
+# 並び順に依存する読み方になるので使わない。
+if [ "$want_prod" = "0" ]; then
+    running_cid="$(docker compose ps -q ec-cube 2>/dev/null | head -1 || true)"
+
+    if [ -n "$running_cid" ]; then
+        cfg="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' \
+            "$running_cid" 2>/dev/null || true)"
+
+        case "$cfg" in
+            *compose.prod.yaml*)
+                want_prod=1
+                echo "[upgrade] 稼働中のスタックが本番構成なので、本番構成のまま上げます。"
+                ;;
+        esac
+    fi
+fi
+
+if [ "$want_prod" = "1" ]; then
+    dc=(docker compose -f compose.yaml -f compose.prod.yaml)
+fi
 
 # ec-cube サービスのイメージ名（事前確認で compose を介さず直接起動するのに使う）。
 # `config --images ec-cube` はサービス指定を無視して全イメージを返すので使わない。
@@ -99,7 +143,7 @@ fi
 
 # 3) 新バージョンのイメージを先に作る。ここで落ちても稼働中の環境は無傷。
 echo "[upgrade] イメージをビルドします（EC-CUBE 取得で数分かかります）..."
-if ! docker compose build; then
+if ! "${dc[@]}" build; then
     echo "[upgrade] エラー: ビルドに失敗しました。稼働中の環境はそのままです。" >&2
     restore_env
     exit 1
@@ -133,7 +177,7 @@ fi
 
 # 4) 停止（-v は付けない = DB と画像は残る）→ 本体ボリュームだけ破棄
 echo "[upgrade] コンテナを停止します（ボリュームは残します）..."
-docker compose down
+"${dc[@]}" down
 
 echo "[upgrade] 本体ボリューム ${app_vol} を作り直します..."
 docker volume rm "$app_vol" >/dev/null 2>&1 || true
@@ -142,7 +186,7 @@ docker volume rm "$app_vol" >/dev/null 2>&1 || true
 #    ここで eccube_app が新イメージの内容で作られ、同時に .eccube_installed を置くことで
 #    entrypoint の eccube:install 分岐（既存 DB を壊す）を回避して migration 経路に入る。
 echo "[upgrade] インストール済みマーカーを設定します..."
-docker compose run --rm --no-deps --entrypoint sh ec-cube \
+"${dc[@]}" run --rm --no-deps --entrypoint sh ec-cube \
     -c 'mkdir -p /var/www/html/var && touch /var/www/html/var/.eccube_installed'
 
 # 6) 公開する前にスキーマとデータを合わせる。
@@ -172,7 +216,7 @@ docker compose run --rm --no-deps --entrypoint sh ec-cube \
 #           各 migration は存在チェックで保護されているので再実行は安全。
 offline() { # offline <表示名> <console の引数...>
     local label="$1"; shift
-    if ! docker compose run --rm \
+    if ! "${dc[@]}" run --rm \
             -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
             ec-cube runuser -u www-data -- php bin/console "$@"; then
         cat <<EOS >&2
@@ -193,7 +237,7 @@ echo "[upgrade] エンティティ proxy を生成します..."
 offline "proxy の生成" eccube:generate:proxies
 
 echo "[upgrade] 本体スキーマの差分:"
-diff_sql="$(docker compose run --rm -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
+diff_sql="$("${dc[@]}" run --rm -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
     ec-cube runuser -u www-data -- php bin/console doctrine:schema:update --dump-sql 2>&1 || true)"
 printf '%s\n' "$diff_sql" | sed 's/^/    /'
 
@@ -232,7 +276,7 @@ offline "migration の適用" doctrine:migrations:migrate --no-interaction --all
 
 # 7) ここまで整合してから公開する。entrypoint が cache:clear を行う。
 echo "[upgrade] 公開します..."
-docker compose up -d
+"${dc[@]}" up -d
 
 # 8) 応答するまで待つ
 echo "[upgrade] 起動を待っています..."

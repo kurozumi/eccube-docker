@@ -29,6 +29,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   本体がそれでもテーマへ書いた写しは、あちらがその場で消す（本体は読むのを
   ローダーに任せるが、**書くのは必ずテーマ配下**）。
 - **バージョンは `.env` の `ECCUBE_VERSION`**（build-arg）。切替は `bin/switch-version.sh`。
+- **本番を上げるときは `bin/upgrade.sh <制約> --prod`。** `--prod` を落とすと
+  `compose.override.yaml`（開発用のポートと bind mount）が効いた状態で公開される。
+  **画面は出るので気づきにくい。** 稼働中なら自動でも寄せるが、停止中に打つと効かない。
 - **IDE がライブラリを未定義と言うのは正常。** 本体と `vendor` はボリュームの中だけにあり
   ホストには1ファイルも無い。`bin/ide-sync.sh` で `.ide/` へ写し、PhpStorm の
   **Include Path**（ソースルートではない）に足す。リモートインタプリタを設定しても
@@ -178,9 +181,10 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 ```bash
 bin/init.sh                    # 初回セットアップ
 bin/upgrade.sh ~4.3.2          # バージョンアップ（データ保持・運用環境向け）
+bin/upgrade.sh ~4.3.2 --prod   # 本番はこちら。付けないと開発構成のまま公開される
 bin/switch-version.sh ~4.2.0   # バージョン切替（データ破棄・開発用）
 bin/reset.sh                   # DB 初期化
-bin/publish.sh                 # 本番構成で起動
+bin/publish.sh                 # 本番構成で起動（起動するだけ。本体の入れ替えはしない）
 docker compose exec ec-cube runuser -u www-data -- php bin/console <cmd>
 
 bin/ide-sync.sh                # IDE 用に本体・vendor を .ide/ へ写す（--proxy / --clean）
