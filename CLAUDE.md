@@ -29,6 +29,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   本体がそれでもテーマへ書いた写しは、あちらがその場で消す（本体は読むのを
   ローダーに任せるが、**書くのは必ずテーマ配下**）。
 - **バージョンは `.env` の `ECCUBE_VERSION`**（build-arg）。切替は `bin/switch-version.sh`。
+- **マイナー（4.4 → 4.5）はプラグイン全数の移植を伴う。** パッチ（4.4.1 → 4.4.2）は
+  `upgrade.sh` だけで済む。マイナーでは対象版ごとの保守ブランチを切り、コード名・
+  パッケージ名・version を置換し、**CI の matrix にも新版を足す**（いまは全プラグインが
+  `4.4` 固定で、足さないと新版で一度も検証されない）。**黙って壊れる型が3つある**
+  （目印による差し込み・本体の処理への割り込み・本体の副作用への対処）。
+  詳細は `docs/upgrade.md`。
 - **`bin/reset.sh` と `bin/switch-version.sh` は `down -v` する。** DB・画像・
   セッションが消え、**その場では戻せない。** 稼働中が本番構成なら
   `CONFIRM_DESTROY=<プロジェクト名>` が無いと止まる（`bin/lib/guard.sh`）。
