@@ -37,22 +37,17 @@
 /app/template/default/CustomerGroup*/
 /backups/
 
-# プラグインが有効化のときにテーマへ写す**メールの文面**。
-# `dtb_mail_template.file_name` は本体のメール設定が**テーマ配下へ書く**ので、
-# 写しが要る。写しなので追跡しない。無効化→有効化で作り直せる。
+# **プラグインはもうテーマへ何も写さない**（2026-09、11プラグイン）。
+# `dtb_page.file_name` も `dtb_mail_template.file_name` もプラグインの中を指す。
+# Twig のローダーの探索先には `app/Plugin` も入っているので、写さなくても読める。
+# テーマを変えても写し直しが要らない。
 #
-# **画面のテンプレートはもう写らない。** `dtb_page.file_name` がプラグインの中を
-# 指すようになったため（2026-09、10プラグイン・25ページ）。テーマを変えても
-# 写し直しが要らない。店がテンプレートを直すのは**プラグインテンプレート編集
-# プラグイン**の役目で、直した内容はデータベースに残る。
+# 店がテンプレートを直すのは**プラグインテンプレート編集プラグイン**の役目で、
+# 直した内容はデータベースに残る。ページ管理とメール設定の本文欄は伏せてあり、
+# 本体がそれでもテーマへ書いた写しは、あちらがその場で消す。
 #
-# **店が直したものは追跡すること。** `git add -f app/template/default/<コード>/...`
-/app/template/default/B2BOrderApproval/
-/app/template/default/CustomerApproval/
-/app/template/default/OrderQuote/
-/app/template/default/OrderRecurring/
-/app/template/default/ProductSample/
-/app/template/default/ProductVariableWeight/
+# **`app/template/default/` は空**（`.gitkeep` だけ）。ここにファイルが増えて
+# いたら、店が自分で置いた上書きテンプレートなので追跡すること。
 
 # ページ管理（コンテンツ管理）から作ったページ。管理画面で作るものなので
 # 環境のデータであって、リポジトリの成果物ではない。
