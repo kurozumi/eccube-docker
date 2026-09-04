@@ -39,6 +39,12 @@ x-eccube-environment: &eccube-environment
   # --scale の追加レプリカ用: cache:clear もスキップ（共有 var/cache を触らない）。
   # 使い方は README「水平スケール」参照。
   ECCUBE_SKIP_CACHE_CLEAR: ${ECCUBE_SKIP_CACHE_CLEAR:-0}
+  # 任意機能のスイッチ。**COMPOSE_PROFILES をそのまま渡す。** entrypoint はここから
+  # redis / messenger を読み、対応する設定を app/config/eccube/packages へ入れる。
+  # サービスの起動（profiles）と設定の投入が同じ値で決まるので、片方だけ有効という
+  # 事故が起きない。`docker compose --profile redis up` の CLI 指定はここへ届かないので、
+  # **.env の COMPOSE_PROFILES に書くこと。**
+  ECCUBE_PROFILES: ${COMPOSE_PROFILES:-}
   # ECCUBE_AUTH_MAGIC はここ（environment）では渡さない。空文字を注入すると
   # Symfony Dotenv が「設定済み」とみなし、secret が空で bin/console が落ちるため。
   # 値は .env（env_file）で渡す。bin/init.sh が未設定なら自動生成する。
@@ -102,6 +108,8 @@ x-eccube-volumes: &eccube-volumes
   - eccube_upload:/var/www/html/html/upload
   # framework 級設定（monolog 等）はステージングへ置き、entrypoint が本体へマージ
   - ./app/config/eccube/packages:/opt/eccube-config/packages:ro
+  # 任意機能（redis / messenger）の設定。COMPOSE_PROFILES に応じて entrypoint が選ぶ
+  - ./app/config/eccube/optional:/opt/eccube-config/optional:ro
   # ユニットテスト設定（app/Customize/Tests を対象。本体の phpunit.xml.dist は残す）。
   # PHPUnit 9 系（4.2/4.3）と 10 以降（4.4〜）で書式が非互換なので両方置き、
   # bin/test.sh がコンテナの PHPUnit のバージョンを見て使う方を選ぶ。
@@ -133,10 +141,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      # redis はプロファイルで起動する任意サービス。required: false で、
+      # 起動していなければ待たずに進む（compose v2.20+）。
       redis:
         condition: service_healthy
+        required: false
       redis-session:
         condition: service_healthy
+        required: false
     # php-fpm の死活を FastCGI ping で確認（libfcgi-bin の cgi-fcgi）。
     # start_period は entrypoint（migrate + cache:clear）の所要時間を見込む。
     healthcheck:
@@ -153,6 +165,9 @@ services:
   # --time-limit で定期的に終了し restart で再起動（コードやキャッシュの鮮度維持）。
   worker:
     logging: *default-logging
+    # プロファイル messenger のときだけ起動（.env の COMPOSE_PROFILES）。
+    # 設定側（optional/messenger）も同じスイッチで入る。
+    profiles: ["messenger"]
     # ec-cube と同一イメージ（同じ本体コードで consume させる）
     image: ${ECCUBE_IMAGE:-eccube-ec-cube}
     build:
@@ -240,6 +255,8 @@ services:
   # cache 用途なので永続化は無効（--save "" / appendonly no）。maxmemory 到達時は LRU で破棄。
   redis:
     logging: *default-logging
+    # プロファイル redis のときだけ起動（.env の COMPOSE_PROFILES）。初回は無効。
+    profiles: ["redis"]
     image: redis:7-alpine
     command:
       - "redis-server"
@@ -265,6 +282,8 @@ services:
   # 「新規セッションの書込エラー」で済み、既存ユーザーのカート/ログインは守られる。
   redis-session:
     logging: *default-logging
+    # redis と同じプロファイルで起動する（セッション共有はキャッシュ共有とセット）
+    profiles: ["redis"]
     image: redis:7-alpine
     command:
       - "redis-server"

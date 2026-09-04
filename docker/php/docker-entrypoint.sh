@@ -57,6 +57,39 @@ if [ -d /opt/eccube-config/packages ] && [ -n "$(ls -A /opt/eccube-config/packag
     chown -R www-data:www-data app/config/eccube/packages || true
 fi
 
+# 1a) 任意機能の設定を、COMPOSE_PROFILES（ECCUBE_PROFILES として渡る）で選ぶ。
+#     入れるだけでなく**外すときは消す**。マージは足すだけなので、消さないと
+#     前回の設定が残り、Redis を止めたのに接続しに行って全ページ 500 になる。
+#     旧名（cache.yaml / messenger.yaml）はこの環境が以前マージしたもので、
+#     本体には無い（4.4 の素のイメージで確認済み）。中身の目印を見てから消す。
+profiles=",${ECCUBE_PROFILES:-},"
+optional_set() { # optional_set <名前> <旧ファイル名…>
+    local name="$1"; shift
+    local src="/opt/eccube-config/optional/${name}"
+    if [ "${profiles#*,${name},}" != "$profiles" ]; then
+        if [ -d "$src" ]; then
+            log "任意機能 ${name}: 有効（設定をマージ）"
+            cp -a "$src"/*.yaml app/config/eccube/packages/ 2>/dev/null || true
+        else
+            log "任意機能 ${name}: プロファイルは有効だが設定ディレクトリが無い（${src}）"
+        fi
+    else
+        for f in "$src"/*.yaml; do
+            [ -f "$f" ] && rm -f "app/config/eccube/packages/$(basename "$f")"
+        done
+        for legacy in "$@"; do
+            local lf="app/config/eccube/packages/${legacy}"
+            if [ -f "$lf" ] && grep -q "この環境\|Redis に載せる\|非同期化" "$lf" 2>/dev/null; then
+                log "任意機能 ${name}: 無効。旧設定 ${legacy} を外します"
+                rm -f "$lf"
+            fi
+        done
+    fi
+}
+optional_set redis cache.yaml
+optional_set messenger messenger.yaml
+chown -R www-data:www-data app/config/eccube/packages || true
+
 # var/ は www-data が書けるように
 chown -R www-data:www-data var 2>/dev/null || true
 
@@ -76,9 +109,9 @@ fi
 # フェイルセーフ: それでも messenger が無ければ、マージ済みの messenger.yaml を
 # 取り除く（設定だけ残るとコンテナのコンパイルが失敗し全ページ 500 になるため）。
 # この場合メールは従来どおり同期送信で動く。
-if [ ! -d vendor/symfony/messenger ] && [ -f app/config/eccube/packages/messenger.yaml ]; then
-    log "messenger 不在のため messenger.yaml を外します（同期送信で継続）"
-    rm -f app/config/eccube/packages/messenger.yaml
+if [ ! -d vendor/symfony/messenger ] && [ -f app/config/eccube/packages/messenger_async.yaml ]; then
+    log "messenger 不在のため messenger_async.yaml を外します（同期送信で継続）"
+    rm -f app/config/eccube/packages/messenger_async.yaml
 fi
 
 # アップロード画像は専用ボリューム（初回や NFS 差し替え時は空）。必要な

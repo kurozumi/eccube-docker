@@ -85,6 +85,8 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   解決しない。バージョンを切り替えたら写し直す。
 - **framework 級設定（monolog 等）は `app/config/eccube/packages/`**。entrypoint が起動時に
   本体の `app/config/eccube/packages/` へマージする（既定は消さない）。
+  **切り替えたいものは `app/config/eccube/optional/<名前>/`** に置く。`packages/` は常に
+  入るので、Redis のように「無い環境では 500 になる」設定を置くと初回から壊れる。
 - 既定は本番モード。開発でデバッグするときだけ `.env` を `APP_ENV=dev` にする。
 - **本番モードでキャッシュを消すときは `cache:clear` だけでは足りない。** Redis 上の
   Doctrine メタデータ（`cache:pool:clear --all`）と OPcache（php-fpm へ USR2）も
@@ -209,12 +211,19 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   書き換えても inode が変わってコンテナ側へ反映されないことがある。中途半端な内容を
   掴んだまま「Premature end of data」等で落ちる。`bin/test.sh` がホストとコンテナの
   バイト数を突き合わせて検出する。
+- **Redis と Messenger は任意で、初回は無効。** スイッチは `.env` の `COMPOSE_PROFILES`
+  一本（`redis` / `messenger`）。サービスの起動（profiles）と設定の投入
+  （`app/config/eccube/optional/<名前>/` を entrypoint が `packages/` へ入れる／外す）が
+  同じ値で決まる。**別々にすると「設定だけ入って Redis が居ない → 500」「worker だけ
+  居なくてメールが DB に溜まる（エラーなし）」が黙って起きる。** `docker compose --profile`
+  の CLI 指定は entrypoint に届かないので、必ず `.env` に書く。`doctor` が食い違いを見る。
+  **redis を切り替えた瞬間、全員ログアウトになる。**
 - **性能/スケール（Tier 1）**: php-fpm は `.env` の `PHP_FPM_*`、OPcache は entrypoint が
-  `APP_ENV` で切替、Redis 共有キャッシュは `app/config/eccube/packages/cache.yaml`、DB は
+  `APP_ENV` で切替、Redis 共有キャッシュは `optional/redis/redis_cache.yaml`（任意）、DB は
   `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は `docs/scale.md`。
 - **セッション Redis 共有（Tier 2）**: 専用 `redis-session` に保存し複数ホストで共有。
   本体の SameSite ハンドラは維持し内側だけ `Customize\Session\RawRedisSessionHandler` に
-  差し替え（`app/Customize/Resource/config/services.yaml`、`SESSION_REDIS_URL`）。
+  差し替え（`optional/redis/redis_session.yaml`、`SESSION_REDIS_URL`）。
 - **アップロード画像（Tier 2）**: `html/upload` は専用ボリューム `eccube_upload` に分離。
   複数ホストは NFS/EFS ドライバに差し替えて共有。`down -v`（reset/switch-version）で
   ローカルデータは消えるので事前バックアップ。詳細は `docs/scale.md`。

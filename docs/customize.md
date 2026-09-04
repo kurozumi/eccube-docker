@@ -166,6 +166,10 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
 
 # framework 級設定（monolog 等）の置き場所について
 
+**常に入れるものは `packages/`、切り替えるものは `optional/<名前>/`。** `optional/` は
+`.env` の `COMPOSE_PROFILES` に名前があるときだけ entrypoint がマージし、無ければ外す。
+Redis（`redis`）と Messenger（`messenger`）がここにある。初回はどちらも無効。
+
 EC-CUBE 4.3 の `src/Eccube/Kernel.php::configureContainer()` は、
 `app/config/eccube/packages/*.yaml` と `app/Customize/Resource/config/services.yaml` を
 **同じ `$loader`・同じコンテナビルド（extension 処理）フェーズ**で読み込む。よって
