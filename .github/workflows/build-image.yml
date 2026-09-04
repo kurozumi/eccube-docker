@@ -55,10 +55,18 @@ jobs:
     steps:
       - id: build
         run: |
+          # **4.4 は `4.4.x-dev`。** Packagist に 4.4 のリリースはまだ 1 つも無く、
+          # 上流にあるのは `4.4` ブランチだけなので `~4.4.0` は解決できない
+          # （`Could not find package ec-cube/ec-cube with version ~4.4.0`）。
+          # `dev-4.4` も不可で、通るのは `4.4.x-dev` の形。
+          #
+          # **これは動く的なので、焼くたびに中身が変わる。** 4.4 が正式に出たら
+          # `~4.4.0` へ変えること。それまで 4.4 のイメージは「その時点の
+          # ブランチの写し」であって、再現しない。
           all='[
             {"series":"4.2","eccube":"~4.2.0","php":"8.2","phpredis":"6.0.2"},
             {"series":"4.3","eccube":"~4.3.0","php":"8.2","phpredis":"6.0.2"},
-            {"series":"4.4","eccube":"~4.4.0","php":"8.3","phpredis":"6.3.0"}
+            {"series":"4.4","eccube":"4.4.x-dev","php":"8.3","phpredis":"6.3.0"}
           ]'
           want='${{ github.event.inputs.series }}'
           if [ -n "$want" ]; then
