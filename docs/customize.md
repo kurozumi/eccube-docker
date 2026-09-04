@@ -27,6 +27,42 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
     git clone git@github.com:you/my-awesome-plugin.git app/Plugin/MyAwesomePlugin
     ```
   - 導入したプラグインは各自の repo で管理する前提で、eccube-docker 側の git には追跡させない
+  - **プラグインの画面やメール文面を直すときは `app/template/plugin/<Code>/` に置く。
+    プラグインは触らない。管理画面からも直さない（履歴が残らないため）。**
+
+    本体は有効なプラグインごとに、この順で twig のパス（`@<Code>`）を登録する
+    （`src/Eccube/DependencyInjection/EccubeExtension.php` の `configureTwigPaths`）:
+
+    ```
+    app/template/plugin/<Code>/            ← 先に登録 = 勝つ（店の上書き）
+    app/Plugin/<Code>/Resource/template/   ← プラグイン自身のもの
+    ```
+
+    直すファイルだけ同じ相対パスで置けばよく、無いファイルはプラグイン側に
+    フォールバックする。`app/template/<テーマ>/` は**本体テーマ**の上書き場所で役割が違う。
+
+    ```bash
+    bin/plugin.sh template add CustomerGroup44 admin/config.twig   # 原本を写す（reload 込み）
+    # app/template/plugin/CustomerGroup44/admin/config.twig を直す
+    bin/plugin.sh template diff                                     # プラグインを更新したあとに
+    ```
+
+    `add` は写した時点の原本の sha256 を `app/template/plugin/.base` に記録する。
+    **写しはプラグインを更新しても勝ち続ける**ので、`diff` が「自分が変えた／プラグイン側で
+    変わった／両方（衝突）」を分けて出す。`bin/deploy.sh` の最後に自動で出る。
+
+    落とし穴が 3 つ:
+    - **ディレクトリの有無はコンテナのコンパイル時に見ている**（`file_exists`）。手でファイルを
+      置いただけでは効かず、`bin/plugin.sh reload` が要る（`template add` は済ませる）
+    - **無効なプラグインは登録されない**
+    - **丸ごと写さない。** 直すファイルだけ。`add` は 1 ファイルずつしか写さない
+
+    **`PluginTemplateEditor` の編集画面は使わない。** DB に保存された上書きは
+    `twig.loader` の priority 100 で**ファイルより先に読まれる**ので、両方で直すと DB が
+    黙って勝つ。編集画面は次の版で外し、プラグインには「守り」だけを残す:
+    テーマ相対のメール名をプラグインの原本へ振り替えるローダー（両方の名前の形を
+    `@<Code>/...` に正規化する）、本体がテーマへ書く写しを消す処理、本文欄を伏せる処理。
+    `dtb_page` の行はレイアウト・ブロック配置・SEO のためのもので、置き場が変わっても要る。
     （`.gitignore` で `app/Plugin/*` 除外済み）。
   - **開発を速く回すコツ**: `.env` を `APP_ENV=dev` にすると Twig/テンプレート変更は即反映。
     PHP・サービス・config を変えたら `bin/plugin.sh reload`。

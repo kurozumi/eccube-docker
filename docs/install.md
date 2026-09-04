@@ -161,6 +161,7 @@ bin/plugin.sh list                                  # 導入状況
 | 本格的なスタイル（scss で組む） | `frontend/scss/customize.scss` → `bin/assets.sh build` | `customize-theme.css`（生成物） |
 | テンプレート（twig） | `app/template/original/` に**直すファイルだけ**置く | 無いファイルは本体にフォールバックする |
 | テーマの画像・本体 CSS を差し替える | `bin/theme.sh init` で本体から写してから編集 | `html/template/original/assets/` |
+| プラグインの画面・メール文面 | `bin/plugin.sh template add <Code> <相対パス>` で写してから編集。**管理画面からは直さない**（履歴が残らない） | `app/template/plugin/<Code>/` |
 
 `customize.css` の 1 行目は `@import url("customize-theme.css");` で、これが scss 側を
 読み込む。**この行を消さない／上に何も書かない。** CSS の仕様上、先頭以外の `@import` は
