@@ -65,6 +65,8 @@ services:
       - ./html/user_data:/var/www/html/html/user_data:ro
       # アップロード画像を配信
       - eccube_upload:/var/www/html/html/upload:ro
+      # オリジナルテーマの静的物（nginx と同様）
+      - ./html/template/original:/var/www/html/html/template/original:ro
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config

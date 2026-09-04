@@ -144,6 +144,26 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
   本体テーマを丸ごと作り替えたいときだけ、純正 Gulp/Webpack を回す
   `bin/assets.sh core-build`（＝本体直編集・Git 管理外・データ破棄で戻る）。
 
+- **オリジナルテーマ**はテーマコード `original` 固定。twig と静的物で扱いが**正反対**:
+
+  | | フォールバック | やること |
+  |---|---|---|
+  | twig（`app/template/original/`） | **ある**（無ければ本体の default） | **直すファイルだけ置く。丸ごと写さない** |
+  | 静的物（`html/template/original/assets/`） | **無い**（`asset()` の base_path は 1 本） | **丸ごと写す**（`bin/theme.sh init`） |
+
+  ```bash
+  bin/theme.sh init      # 本体の assets（6MB・110 ファイル）を写し、版と sha256 を .base に記録
+  # .env に ECCUBE_TEMPLATE_CODE=original を書いて docker compose up -d
+  bin/theme.sh diff      # 自分が変えた / 本体側で変わった / 両方（衝突）を分けて出す
+  ```
+
+  写しはフォールバック無しで**勝ち続ける**。本体を上げても古い CSS や画像が使われ、
+  例外は出ない。`bin/upgrade.sh` は最後に `theme.sh diff` を出すので、そこで本体側の
+  変更を取り込む。**テーマの選択は `.env` の `ECCUBE_TEMPLATE_CODE` が正。** 管理画面の
+  テンプレート管理はコンテナ内 `.env` に書くため `bin/upgrade.sh` で消える（本体は
+  環境変数で上書きされていると表示して、管理画面からの変更を拒否する）。
+  `dtb_template` に行は要らない（フロントは `eccube.theme` を直接使う）。
+
 # framework 級設定（monolog 等）の置き場所について
 
 EC-CUBE 4.3 の `src/Eccube/Kernel.php::configureContainer()` は、

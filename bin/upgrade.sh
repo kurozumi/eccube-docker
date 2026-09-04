@@ -229,6 +229,20 @@ fi
 echo "[upgrade] コンテナを停止します（ボリュームは残します）..."
 "${dc[@]}" down
 
+# 消す前に、管理画面がコンテナ内 .env に書いた値を控える。テーマ切替と
+# セキュリティ設定はここに書かれ、ボリュームと一緒に消える。ホストの .env に
+# 書いてあるものは環境変数で渡るので影響しない。それ以外だけ挙げる。
+kept="$(docker run --rm -v "${app_vol}:/app:ro" alpine:3 sh -c '
+    for k in ECCUBE_TEMPLATE_CODE ECCUBE_FRONT_ALLOW_HOSTS ECCUBE_FRONT_DENY_HOSTS \
+             ECCUBE_ADMIN_ALLOW_HOSTS ECCUBE_ADMIN_DENY_HOSTS ECCUBE_FORCE_SSL TRUSTED_HOSTS; do
+        grep -E "^${k}=" /app/.env 2>/dev/null
+    done' 2>/dev/null || true)"
+if [ -n "$kept" ]; then
+    echo "[upgrade] 注意: 管理画面がコンテナ内 .env に書いていた値があります。ボリュームと一緒に消えます:"
+    printf '%s\n' "$kept" | sed 's/^/           /'
+    echo "           残すなら .env（ホスト）に同じキーを書いてください（環境変数で渡ります）。"
+fi
+
 echo "[upgrade] 本体ボリューム ${app_vol} を作り直します..."
 docker volume rm "$app_vol" >/dev/null 2>&1 || true
 
@@ -334,6 +348,12 @@ for i in $(seq 1 60); do
     if bin/healthcheck.sh >/dev/null 2>&1; then
         echo "[upgrade] 完了。${current:-?} -> ${ver} へ更新しました。"
         bin/healthcheck.sh
+        # オリジナルテーマを写してあるなら、本体側で変わった静的物を挙げる。
+        # 写しはフォールバック無しで勝ち続けるので、**ここで見せないと誰も気づかない**。
+        if [ -f html/template/original/.base ]; then
+            echo "[upgrade] オリジナルテーマの写しと、新しい本体との差分:"
+            bin/theme.sh diff || true
+        fi
         echo "[upgrade] 管理画面とフロントの表示、受注データを必ず目視で確認してください。"
         exit 0
     fi
