@@ -14,8 +14,9 @@
 #
 # 触るもの・触らないもの:
 #   上書きする … bin/ docker/ docs/ .github/ compose*.yaml phpunit*.xml
-#                 .env.example .gitignore README.md CLAUDE.md VERSION
+#                 .env.example .gitignore LICENSE README.md CLAUDE.md VERSION
 #                 app/config/eccube/{packages,optional}（環境側の設定）
+#                 LICENSE も配る（利用条件が変わったときに手元へ届くように）。
 #                 ただし**その中で配布元が変えたファイルだけ**。あなたが
 #                 bin/ に置いた独自スクリプトなどは触らない。
 #   触らない   … .env / app/ / html/user_data / frontend/ / var/ / backups/ / .ide/
@@ -68,6 +69,7 @@ ENV_PATHS=(
     phpunit.11.xml
     .env.example
     .gitignore
+    LICENSE
     README.md
     CLAUDE.md
     VERSION
