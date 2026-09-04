@@ -16,7 +16,8 @@
   | `app/template/` | `app/template` | テーマ・テンプレート上書き（開発は rw） |
   | `app/DoctrineMigrations/` | `app/CustomizeMigrations` | 独自マイグレーション（開発は rw）。本体同梱の `app/DoctrineMigrations` を隠さないため別パスへ載せる |
   | `app/Plugin/` | `app/Plugin` | プラグイン（開発は rw、生成・導入可） |
-  | `app/config/eccube/packages/` | 同左（entrypoint がマージ） | monolog / cache / trusted_proxies 等の framework 級設定 |
+  | `app/config/eccube/packages/` | 同左（entrypoint がマージ） | monolog / trusted_proxies 等の framework 級設定（常に入る） |
+  | `app/config/eccube/optional/` | 同左（`COMPOSE_PROFILES` にあるものだけ） | redis / messenger など、無い環境で壊れる設定 |
   | `html/user_data/` | `html/user_data` | 独自 CSS/JS（本体が自動読込。ec-cube/nginx/caddy へ） |
 
   アップロード画像（`html/upload`）は bind ではなく**専用ボリューム `eccube_upload`**
@@ -96,6 +97,7 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
 ### よく使うコマンド
 
 ```bash
+bin/deploy.sh              # 自分のコードを反映（退避→メンテ ON→pull→migration→proxy→キャッシュ→確認→OFF）
 bin/console.sh <cmd>       # コンテナの中で bin/console を実行（www-data 固定）
 bin/shell.sh               # コンテナの中に入る（www-data 固定。--root で root）
 bin/plugin.sh reload       # PHP / 設定を触ったあとのキャッシュ一掃
@@ -115,6 +117,7 @@ root が要るのはパッケージの導入など限られた場面だけで、
 
 | 文書 | 中身 |
 | --- | --- |
+| [はじめての人のための手引き](docs/handbook.md) | **理由を書かない、手を動かすためだけの文書。** 毎日の 3 コマンドと、困ったときの 1 コマンド |
 | [導入手順](docs/install.md) | **使う人向けの入口。** 取得から公開まで、そのあとの更新の受け取り方 |
 | [カスタマイズ](docs/customize.md) | 本体を汚さずに実装を足す場所。Controller / Entity / テンプレート / 独自 CSS・JS / framework 級設定 / コンテナに入る / migration |
 | [バージョン切替 / バージョンアップ](docs/upgrade.md) | 運用中の店舗を上げる手順、切り戻し、プラグインの互換性 |

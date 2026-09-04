@@ -23,7 +23,7 @@
 |---|---|---|
 | php-fpm ワーカー数 | entrypoint が env から生成 | `.env` の `PHP_FPM_*` |
 | 本番 OPcache（`validate_timestamps=0`） | entrypoint（`APP_ENV=prod` で自動） | — |
-| Redis 共有キャッシュ（Symfony app cache） | `redis` サービス＋`app/config/eccube/packages/cache.yaml` | `REDIS_URL` |
+| Redis 共有キャッシュ（Symfony app cache・任意） | `COMPOSE_PROFILES` に `redis`（`app/config/eccube/optional/redis/`） | `REDIS_URL` |
 | MariaDB バッファプール等 | `docker/mariadb/conf.d/eccube.cnf` | `innodb_buffer_pool_size` を RAM に合わせる |
 | gzip / 静的長期キャッシュ | `docker/nginx/default.conf` | — |
 
@@ -147,7 +147,7 @@ DB=外部）になっているので、**アプリホストを N 台並べて前
    （セッション）、アップロード用 NFS/EFS。
 2. **各アプリホスト**で `compose.app.yaml`（db/redis を含まない app 層のみ）を起動:
    ```bash
-   docker compose -f compose.app.yaml up -d --build   # 本番は push 済み image 推奨
+   docker compose -f compose.app.yaml up -d   # .env の ECCUBE_IMAGE で配布イメージを指定して pull（build しない）
    ```
    `.env` に外部エンドポイント（`DB_HOST` / `REDIS_URL` / `SESSION_REDIS_URL`）と
    `TRUSTED_PROXIES=<LB の IP/サブネット>` を設定する。
@@ -230,12 +230,11 @@ docker compose exec worker runuser -u www-data -- php bin/console messenger:fail
 docker compose exec worker runuser -u www-data -- php bin/console messenger:failed:retry
 ```
 
-> 同期送信に戻すには `app/config/eccube/packages/messenger.yaml` を削除して
-> `worker` を止めるだけ。Messenger パッケージはイメージビルド時に追加している
-> （`docker/php/Dockerfile`。本体ソースは非編集・再ビルドで再現）。
+> 同期送信に戻すには `.env` の `COMPOSE_PROFILES` から `messenger` を外して `docker compose up -d`。
+> Messenger 本体はイメージに焼いてある（`docker/php/Dockerfile`。本体ソースは非編集・再ビルドで再現）。
 
 **テスト環境だけは同期送信に戻している**（`app/config/eccube/packages/test/messenger.yaml`）。
-`messenger.yaml` には env 指定が無く test にも効いてしまうため、そのままだとテスト中の
+`messenger_async.yaml` には env 指定が無く test にも効いてしまうため、そのままだとテスト中の
 メールがキューに積まれるだけで Symfony のテスト用 Transport に届かず、本体が持つ
 `assertEmailCount()` 系のテストが軒並み「0 sent」で落ちる。
 

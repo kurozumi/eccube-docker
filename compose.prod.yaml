@@ -5,7 +5,7 @@ x-logging: &default-logging
     max-file: "5"
 
 # 本番用オーバーレイ。開発ツールを外し、公開層をプロファイルで選ぶ。
-#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+#   bin/publish.sh   （= compose.prod.yaml を重ねて起動。配布イメージなら pull、なければ build）
 #   （.env で COMPOSE_FILE=compose.yaml:compose.prod.yaml を設定すれば -f 省略可）
 #
 # 公開方式は .env の COMPOSE_PROFILES で選択:

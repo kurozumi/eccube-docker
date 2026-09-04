@@ -49,9 +49,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   ただし **`.env` に `ECCUBE_IMAGE` があるときは build しないので、この値は使われない。**
   動くのはタグに焼かれたバージョンで、両者は簡単にずれる。`bin/upgrade.sh` は pull した
   イメージの実バージョンを表示して確認を求める。
-- **「更新」は 2 つあり、別物。** 環境（`bin/` や compose）は `bin/self-update.sh`、
-  EC-CUBE 本体は `bin/upgrade.sh`。順番は self-update → upgrade。逆にすると新しい本体を
-  古いスクリプトで扱うことになる。詳細は `docs/distribute.md`。
+- **「更新」は 3 つあり、別物。** 自分のコードは `bin/deploy.sh`（毎日）、環境（`bin/` や
+  compose）は `bin/self-update.sh`、EC-CUBE 本体は `bin/upgrade.sh`。順番は
+  self-update → upgrade。逆にすると新しい本体を古いスクリプトで扱うことになる。
+  `deploy.sh` はボリュームを作り直さず DB も画像も触らない。メンテナンス表示は
+  `deploy:<token>` で立て、失敗したら **OFF にしない**（`doctor` が後始末する）。
+  詳細は `docs/distribute.md`。
 - **起動系のスクリプトに `up -d --build` を直接書かない。** 配布イメージを使っている
   利用者の環境では、pull したイメージをローカル build で上書きしてしまう。
   build と pull の判定は `bin/lib/image.sh` の `image_provision` に寄せてある。
@@ -239,6 +242,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 
 | 文書 | 中身 |
 |---|---|
+| `docs/handbook.md` | 初心者向け。理由を書かず手順だけ。毎日の 3 コマンドと困ったときの 1 コマンド |
 | `docs/install.md` | 利用者向けの導入手順（取得 → 起動 → 更新の受け取り） |
 | `docs/customize.md` | 本体を汚さずに実装を足す場所、framework 級設定 |
 | `docs/upgrade.md` | バージョン切替とバージョンアップ、切り戻し |
@@ -255,6 +259,8 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 
 ```bash
 bin/init.sh                    # 初回セットアップ
+bin/deploy.sh                  # 自分のコードを反映。退避→メンテ ON→pull→migration→proxy→
+                               # キャッシュ→疎通→OFF。失敗したら ON のまま止まる（壊れた画面を出さない）
 bin/self-update.sh             # この環境自体を新しいリリースへ（--check で確認だけ）
 bin/upgrade.sh ~4.3.2          # バージョンアップ（データ保持・運用環境向け）
 bin/upgrade.sh ~4.3.2 --prod   # 本番はこちら。付けないと開発構成のまま公開される

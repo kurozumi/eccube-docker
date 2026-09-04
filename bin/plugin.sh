@@ -174,9 +174,17 @@ warm_cache() {
 # 2) var/cache/.!!xxxx
 #    cache:clear が旧ディレクトリをこの名前に改名してから消す。消し損ねると
 #    たまり続ける。実際に14個・85MB 残っていた。
+# clean_leftovers [--with-deploy]
+#   auto_maintenance … 本体がプラグイン操作で自動で立てたもの → いつでも解除する
+#   deploy:          … bin/deploy.sh が立てたもの → **doctor のときだけ**解除する
+#   maintenance      … 手で入れたもの → 触らない
+# deploy: を reload でも消すと、**bin/deploy.sh が途中で呼ぶ reload がメンテナンス表示を
+# 剥がしてしまい、キャッシュ組み立て中の壊れた画面が公開される**（実際にそうなった）。
 clean_leftovers() {
+    local pat="^auto_maintenance"
+    [ "${1:-}" = "--with-deploy" ] && pat="^(auto_maintenance|deploy:)"
     docker compose exec -T ec-cube bash -c '
-        if [ -f /var/www/html/.maintenance ] && grep -q "^auto_maintenance" /var/www/html/.maintenance; then
+        if [ -f /var/www/html/.maintenance ] && grep -qE "'"$pat"'" /var/www/html/.maintenance; then
             rm -f /var/www/html/.maintenance
             echo "[plugin] 中断した操作のメンテナンス表示を解除しました"
         fi
@@ -344,7 +352,7 @@ case "$cmd" in
     # 「システムエラーが出る」と言われたら、まずこれを実行する。
     ng=0     # 直っていない異常
     warn=0   # 異常とは限らないが、伝えておくこと
-    clean_leftovers
+    clean_leftovers --with-deploy
 
     # 数え損ねても doctor 自体は続ける（set -e + pipefail で黙って止まらないように）
     proxies="$(docker compose exec -T ec-cube bash -c \

@@ -19,7 +19,8 @@ docker compose down -v     # ★ボリュームごと消す
 | --- | --- | --- | --- | --- |
 | **受注・会員・商品**（DB） | ボリューム `db_data` | 残る | **消える** | **消える** |
 | **アップロード画像** | ボリューム `eccube_upload` | 残る | **消える** | **消える**（NFS/EFS に出していれば残る） |
-| セッション | ボリューム `redis_session_data` | 残る | 消える | 消える |
+| セッション（`redis` 有効時） | ボリューム `redis_session_data` | 残る | 消える | 消える |
+| セッション（既定） | `eccube_app` ボリュームの `var/sessions` | 残る | 消える | 消える |
 | EC-CUBE 本体・vendor | ボリューム `eccube_app` | 残る | 消える | 消える |
 | **独自コード**<br>`app/Customize` `app/template` `app/Plugin` `app/DoctrineMigrations` | **ホストのファイル**（bind mount） | 消えない | **消えない** | Git にあれば残る |
 | **独自 CSS/JS** `html/user_data` | **ホストのファイル**（bind mount） | 消えない | **消えない** | Git にあれば残る |

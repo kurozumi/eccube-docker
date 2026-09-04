@@ -6,7 +6,7 @@
 
 | 何を | 中身 | コマンド |
 |---|---|---|
-| 環境 | `bin/` `docker/` `docs/` `compose*.yaml` `.env.example` | `bin/self-update.sh` |
+| 環境 | `bin/` `docker/` `docs/` `compose*.yaml` `.env.example` `app/config/eccube/{packages,optional}` | `bin/self-update.sh` |
 | EC-CUBE 本体 | イメージに焼かれた本体・vendor・PHP 拡張 | `bin/upgrade.sh <制約>` |
 
 順番は **self-update → upgrade**。逆にすると、新しい本体を古いスクリプトで扱うことに
