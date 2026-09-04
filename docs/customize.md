@@ -103,16 +103,46 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
     ```
 - **デザイン（CSS/JS）** は `html/user_data/assets/{css,js}`。本体の `default_frame.twig` が
   `customize.css` / `customize.js` を（`style.css` の後に）自動読込するので、上書き Twig は不要。
-  **`customize.css` は生成物なので直接編集しない。** `build` と `watch` は同じ出力
-  （expanded）になるよう揃えてあるので、どちらで作っても Git に差分は出ない。
-  逆に片方だけ `--style` を変えると、**ビルドし直すたびに追跡ファイルが書き換わる。**
-  scss ソースは `frontend/scss/`、ビルドは:
+
+  **このディレクトリには書き手が 2 つある。混ぜると片方が黙って消える。**
+
+  | ファイル | 所有者 | 書く人 |
+  |---|---|---|
+  | `customize.css` | **管理画面** | 店（コンテンツ管理 → CSS 管理） |
+  | `customize-theme.css` | **ビルド** | 開発（`frontend/scss/`） |
+  | `customize.js` | **管理画面** | 店（コンテンツ管理 → JS 管理。ビルドは無い） |
+
+  本体の `CssController` / `JsController` は `html/user_data/assets/{css,js}/customize.*` を
+  `dumpFile` で直接書き換える。**scss を同じ場所へビルドすると、店が画面から入れた CSS が
+  ビルドのたびに消える**（エラーは出ない）。そこでビルド先を `customize-theme.css` に分け、
+  `customize.css` の先頭の `@import` から読ませている。
+
+  順序は「テーマ → 店の追記」なので、**管理画面の調整が勝つ。**
+
+  **`customize.css` の `@import` を消さない／その上に何も書かない。** CSS の仕様上、
+  先頭以外の `@import` は無効になり、**テーマが丸ごと読み込まれなくなる。**
+
   ```bash
-  bin/assets.sh build        # 一括ビルド → html/user_data/assets/css/customize.css
+  bin/assets.sh build        # 一括ビルド → html/user_data/assets/css/customize-theme.css
   bin/assets.sh watch        # 監視ビルド（dev の node サービス。保存で自動）
   ```
-  本体テーマ（`html/template/default` など）を丸ごと作り替えたいときだけ、純正
-  Gulp/Webpack を回す `bin/assets.sh core-build`（＝本体直編集・Git 管理外・データ破棄で戻る）。
+
+  `build` と `watch` は同じ出力（expanded）に揃えてある。片方だけ `--style` を変えると、
+  **ビルドし直すたびに追跡ファイルが書き換わる。**
+
+- **本体テーマ（twig / scss）はホストに無い。** ボリュームの中だけにあるので直接は編集できない。
+  `bin/ide-sync.sh` が参照用の写しを作る:
+
+  | | 写し（参照用） | 実際に直す場所 |
+  |---|---|---|
+  | twig | `.ide/src/Eccube/Resource/template/default/` | `app/template/<テーマ>/` に**直すファイルだけ**置く |
+  | scss | `.ide/html/template/default/assets/scss/` | `frontend/scss/customize.scss` |
+
+  写しを編集しても本体には反映されない。**twig を丸ごと写さないこと**（本体を上げたときに
+  古いほうが勝ち続ける）。
+
+  本体テーマを丸ごと作り替えたいときだけ、純正 Gulp/Webpack を回す
+  `bin/assets.sh core-build`（＝本体直編集・Git 管理外・データ破棄で戻る）。
 
 # framework 級設定（monolog 等）の置き場所について
 

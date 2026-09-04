@@ -14,6 +14,15 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   - 独自 CSS/JS → `html/user_data/assets/{css,js}`。本体 `default_frame.twig` が
     `customize.css` / `customize.js` を自動読込する（上書き Twig 不要）。scss ソースは
     `frontend/scss/`、ビルドは `bin/assets.sh`。
+    **ビルド先は `customize-theme.css`。`customize.css` へ書き出さない。**
+    あちらは管理画面（コンテンツ管理 → CSS 管理）が `dumpFile` で直接書き換える
+    ファイルで、同じ場所へビルドすると**店が画面から入れた CSS がビルドのたびに
+    黙って消える**。`customize.css` 先頭の `@import` がテーマを読み込む。
+    **その `@import` を消さない／上に何も書かない**（先頭以外の `@import` は
+    CSS の仕様で無効になり、テーマが丸ごと効かなくなる）。
+  - **本体テーマの twig / scss はホストに無い。** `bin/ide-sync.sh` が参照用の写しを
+    `.ide/` に作る（twig は `src/Eccube/Resource/template/`、scss は
+    `html/template/default/assets/scss/`）。**写しを編集しても反映されない。**
 - **`app/template/` に本体のテンプレートを丸ごと写さない。** 写した瞬間は同じでも、
   本体を上げたときに**古いほうが勝ち続ける**。例外は出ず、直したはずの不具合が
   戻る・新しい項目が出ない、という形で出る。上書きするのは**直すファイルだけ**に

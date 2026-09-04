@@ -1,7 +1,9 @@
-@charset "UTF-8";
-/*! このファイルは frontend/scss/customize.scss からビルドされる生成物です。
- *  直接編集せず、scss を編集して bin/assets.sh build（または watch）してください。
- *  本体 default_frame.twig が style.css の後に自動読込します。 */
-:root {
-  --customize-accent: #ec6a29;
-}
+/*! 管理画面（コンテンツ管理 → CSS 管理）から編集する欄です。
+ *
+ *  **1 行目の @import を消さないでください。** テーマが読み込まれなくなります。
+ *  また、@import より上には何も書かないでください。CSS の仕様上、先頭以外の
+ *  @import は無効になり、やはりテーマが読み込まれません。
+ *
+ *  scss で組んだテーマは customize-theme.css 側にあります（frontend/scss/）。
+ *  ここへの追記はテーマより後に適用されるので、こちらが優先されます。 */
+@import url("customize-theme.css");

@@ -2,6 +2,17 @@
 # IDE（PhpStorm 等）にコード補完を効かせるため、コンテナの中にしか無い EC-CUBE 本体と
 # vendor をホストの .ide/ へ写す。
 #
+# 写るもの:
+#   .ide/vendor                                  composer の依存
+#   .ide/src                                     本体の PHP。**テーマの twig もここ**
+#                                                （src/Eccube/Resource/template/default/）
+#   .ide/html/template/default/assets/scss       **本体テーマの scss**
+#
+# テーマの twig と scss は、直したいときの参照元になる。**どちらも直接編集しても
+# 本体には反映されない**（写しなので）。直す場所は決まっている:
+#   twig → 直すファイルだけ app/template/<テーマ>/ へ置いて上書きする
+#   scss → frontend/scss/customize.scss に書く（本体の変数は @import で使える）
+#
 #   bin/ide-sync.sh            vendor と src/Eccube を同期（既存の写しは作り直す）
 #   bin/ide-sync.sh --proxy    app/proxy/entity も出す（エンティティ拡張を書くとき）
 #   bin/ide-sync.sh --clean    .ide/ を消す
@@ -62,7 +73,12 @@ trap 'rm -rf "$tmp"' EXIT
 echo "[ide-sync] 本体と vendor を写しています（200MB 程度・1 分ほど）..."
 # docker compose cp はファイル単位で往復するため 17,000 ファイルでは実用にならない。
 # tar でまとめてストリームする。set -o pipefail が効いているので途中の失敗は拾える。
-docker compose exec -T ec-cube tar cf - -C /var/www/html vendor src composer.json composer.lock \
+# html/template/.../scss も入れる。**ホストには本体テーマの scss が 1 ファイルも無く、**
+# frontend/scss/customize.scss の `@import "app"` はビルド時にコンテナ内の load-path で
+# 解決しているだけなので、どんな変数や mixin があるのかホストからは一切見えない。
+# 312K・75 ファイルなので写しても軽い。
+docker compose exec -T ec-cube tar cf - -C /var/www/html \
+        vendor src composer.json composer.lock html/template/default/assets/scss \
     | tar xf - -C "$tmp"
 
 if [ "$with_proxy" = 1 ]; then
@@ -79,6 +95,8 @@ fi
     || fail "写しが不完全です（src/Eccube/Entity/Order.php がありません）。もう一度実行してください。"
 [ -f "$tmp/vendor/autoload.php" ] \
     || fail "写しが不完全です（vendor/autoload.php がありません）。もう一度実行してください。"
+[ -f "$tmp/html/template/default/assets/scss/style.scss" ] \
+    || fail "写しが不完全です（本体テーマの scss がありません）。もう一度実行してください."
 
 version="$(sed -nE "s/.*const VERSION = '([^']+)'.*/\1/p" "$tmp/src/Eccube/Common/Constant.php" | head -1)"
 {
@@ -115,5 +133,16 @@ cat <<'EOS'
 
   **ソースルート（.iml の sourceFolder）には足さないこと。** Include Path なら
   解決だけに使われ、Find in Files や Refactor の対象からは外れる。
+
+テーマを直すとき（写しは参照用。直接編集しても本体には反映されない）:
+
+  twig … .ide/src/Eccube/Resource/template/default/ で中身を見て、
+         **直すファイルだけ** app/template/<テーマ>/ へ同じ相対パスで置く。
+         丸ごと写すと、本体を上げたときに古いほうが勝ち続ける。
+
+  scss … .ide/html/template/default/assets/scss/ で変数や mixin を確かめ、
+         frontend/scss/customize.scss に書く（bin/assets.sh build）。
+         Settings → Languages & Frameworks → Style Sheets → Sass の
+         import path にこのディレクトリを足すと、IDE でも @import が解決する。
 
 EOS

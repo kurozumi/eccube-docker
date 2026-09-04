@@ -78,6 +78,18 @@ services:
       - ./app/DoctrineMigrations:/var/www/html/app/CustomizeMigrations:ro
       - ./app/Plugin:/var/www/html/app/Plugin:ro
       - ./html/user_data:/var/www/html/html/user_data:ro
+      # 管理画面（コンテンツ管理 → CSS 管理 / JS 管理）は、この 2 つのディレクトリの
+      # customize.css / customize.js を**直接書き換える**（本体の CssController /
+      # JsController が dumpFile する）。親は ro のまま、ここだけ rw で入れ子にする。
+      #
+      # **ro のままだと「保存できない」ではなく「画面が空に見える」。** 本体は
+      # `file_exists && is_writable` が真のときしかテキストエリアに中身を入れないので、
+      # ファイルには CSS が入っているのに、管理画面では空欄が表示される。
+      #
+      # scss のビルド先は customize-theme.css で、こちらとは別（frontend/scss/）。
+      # 同じ場所へビルドすると、店が画面から入れた CSS をビルドのたびに黙って消す。
+      - ./html/user_data/assets/css:/var/www/html/html/user_data/assets/css
+      - ./html/user_data/assets/js:/var/www/html/html/user_data/assets/js
       - ./app/config/eccube/packages:/opt/eccube-config/packages:ro
       # アップロード画像は全ホスト共有（下部 volumes を NFS/EFS ドライバに差し替える）
       - eccube_upload:/var/www/html/html/upload
