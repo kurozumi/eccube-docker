@@ -15,6 +15,8 @@
 
 ## 単一ホスト強化（Tier 1）
 
+（Redis キャッシュは任意。`COMPOSE_PROFILES` に `redis` を足したときだけ。単一ホストなら無くても動く）
+
 単一ホストのまま高トラフィックに耐えるための強化が入っている。
 
 | 強化 | 場所 | 調整 |
@@ -59,6 +61,12 @@ nginx は Docker 内蔵 DNS を毎回引き直して各レプリカへ分散す�
   保つなら毎回 `--scale ec-cube=N` を付けるか、`deploy.replicas` を設定する。
 
 # セッションの Redis 共有（Tier 2）
+
+**初回は無効。** `.env` の `COMPOSE_PROFILES` に `redis` を足して `docker compose up -d`
+（例: `COMPOSE_PROFILES=tunnel,redis`）。`redis` / `redis-session` の起動と、
+`app/config/eccube/optional/redis/` の設定投入が同じ値で決まる。
+**切り替えた瞬間、全員ログアウトになる**（ファイルに入っていたセッションは移らない。
+カートも消える）。本番で有効にするなら時間を選ぶ。戻すときも同じ。
 
 セッションは専用の `redis-session` サービス（永続化・`noeviction`）に保存される。
 これにより **複数ホスト／複数レプリカでセッションが共有**され、ボリューム共有に依存せず
@@ -197,6 +205,12 @@ curl -fsS http://localhost:8080/ -o /dev/null && echo OK
 > 場合の雛形と注意は `docker/nginx/default.conf` 末尾のコメントを参照。
 
 # メール送信の非同期化（Messenger）
+
+**初回は無効。** `.env` の `COMPOSE_PROFILES` に `messenger` を足して `docker compose up -d`。
+`worker` の起動と `app/config/eccube/optional/messenger/` の設定投入が同じ値で決まる。
+**worker が居ないのに設定だけ入ると、メールは DB に溜まり続けて誰にも届かない**
+（エラーは出ない）。同じスイッチにしてあるのはそのため。`bin/plugin.sh doctor` が
+食い違いと未送信の件数を見る。
 
 メールはキュー経由で送信される（Symfony Messenger + Doctrine transport）。
 

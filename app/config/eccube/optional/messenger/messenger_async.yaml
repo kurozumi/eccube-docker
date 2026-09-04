@@ -8,7 +8,10 @@
 # messenger_messages は初回利用時に自動作成される（auto_setup）。
 # consumer は compose の `worker` サービス（messenger:consume async）。
 #
-# ▸ 同期送信に戻すには、このファイルを削除して worker を止めるだけ。
+# ▸ プロファイル messenger のときだけマージされ、worker も同じプロファイルで起動する
+#   （.env の COMPOSE_PROFILES）。外せば entrypoint が packages/ から消して同期送信に戻る。
+#   **worker が居ないのにこの設定だけ入ると、メールは DB に溜まり続けて誰にも届かない。**
+#   同じスイッチにしてあるのはそのため。bin/plugin.sh doctor が食い違いを見る。
 framework:
     messenger:
         transports:

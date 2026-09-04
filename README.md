@@ -33,7 +33,7 @@
 
 ```
 .
-├── compose.yaml            # base（ec-cube / worker / nginx / db / redis / redis-session）
+├── compose.yaml            # base（ec-cube / nginx / db。redis / redis-session / worker は任意: COMPOSE_PROFILES）
 ├── compose.override.yaml   # 開発用（自動読込: Mailpit・phpMyAdmin・node・rw マウント）
 ├── compose.prod.yaml       # 本番用（-f で指定。公開層をプロファイルで選択）
 ├── compose.app.yaml        # 複数ホスト用: app 層のみ（DB/Redis は外部共有を参照）
@@ -42,12 +42,13 @@
 ├── app/                    # ← Git 管理する「自分のコード」
 │   ├── Customize/
 │   │   ├── Command/MailTestCommand.php     # customize:mail-test（メール疎通確認）
-│   │   ├── Resource/config/services.yaml   # DI（Redis セッション差し替え等）
-│   │   └── Session/RawRedisSessionHandler.php
+│   │   ├── Resource/config/services.yaml   # DI
+│   │   └── Session/RawRedisSessionHandler.php   # 任意（optional/redis が有効なときだけ使われる）
 │   ├── template/
 │   ├── DoctrineMigrations/
 │   ├── Plugin/             # プラグイン（開発・ストア導入）
-│   └── config/eccube/packages/   # logging / cache / trusted_proxies / messenger
+│   ├── config/eccube/packages/   # logging / trusted_proxies など（常にマージ）
+│   └── config/eccube/optional/   # redis / messenger（COMPOSE_PROFILES にあるときだけマージ）
 │       └── test/messenger.yaml   # テストだけメール同期送信（後述）
 ├── frontend/               # 独自テーマの Sass ソース
 │   ├── package.json        # Dart Sass ビルド定義

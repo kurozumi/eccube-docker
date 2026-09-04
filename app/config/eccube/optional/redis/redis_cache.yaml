@@ -4,7 +4,8 @@
 # 本体 framework.yaml の cache 設定にマージされる（prefix_seed 等の既定は残る）。
 # REDIS_URL は compose の environment（既定 redis://redis:6379）で渡す。
 #
-# ▸ 無効化してファイルキャッシュに戻したいときは、このファイルを削除するだけ。
+# ▸ プロファイル redis のときだけマージされる（.env の COMPOSE_PROFILES）。外せば
+#   entrypoint が packages/ から消してファイルキャッシュに戻る。
 # ▸ セッションは本体の SameSite 対応ハンドラを保つため、ここでは触らない
 #   （複数ホスト対応でセッションも Redis 化する手順は README のスケール節を参照）。
 framework:

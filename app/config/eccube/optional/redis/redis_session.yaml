@@ -1,0 +1,31 @@
+# セッションを Redis に載せる（プロファイル redis のときだけマージされる）。
+#
+# 本体の SameSiteNoneCompatSessionHandler（決済リダイレクトの SameSite=None 対応）は
+# 内側の SessionHandlerInterface を decorate する設計。その内側を「ファイル」から
+# 「Redis」に差し替えることで、SameSite 対応を保ったままセッションを共有できる。
+#
+# **切り替えた瞬間、全員ログアウトになる。** ファイルに入っていたセッションは
+# Redis へ移らない。カートも消える。本番で有効にするなら、そのつもりで時間を選ぶ。
+# 戻すときも同じ。
+#
+# 以前は app/Customize/Resource/config/services.yaml に書いてあり、常に有効だった。
+services:
+  # セッション保存用 Redis 接続（キャッシュ用 redis とは別インスタンス＝noeviction）
+  eccube.session.redis:
+    class: Redis
+    factory: ['Symfony\Component\Cache\Adapter\RedisAdapter', 'createConnection']
+    arguments:
+      - '%env(SESSION_REDIS_URL)%'
+
+  # 生の Redis セッションハンドラ（SameSite ラッパの内側に差し込む）。
+  # Symfony の RedisSessionHandler は strict インターフェース実装済みで二重ラップ不可のため、
+  # strict を実装しない自前ハンドラを使う。TTL は gc_maxlifetime 準拠（既存挙動維持）。
+  Customize\Session\RawRedisSessionHandler:
+    arguments:
+      $redis: '@eccube.session.redis'
+      $prefix: 'ecses:'
+
+  # 本体の SameSite ラッパの内側を「ファイル」から「Redis」へ差し替え（id は不変＝別名も維持）
+  Eccube\Session\Storage\Handler\SameSiteNoneCompatSessionHandler:
+    arguments:
+      - '@Customize\Session\RawRedisSessionHandler'

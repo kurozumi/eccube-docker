@@ -52,6 +52,8 @@ services:
       MAILER_DSN: ${MAILER_DSN:-null://null}
       ECCUBE_ADMIN_ROUTE: ${ECCUBE_ADMIN_ROUTE:-admin}
       ECCUBE_TEMPLATE_CODE: ${ECCUBE_TEMPLATE_CODE:-default}
+      # 任意機能のスイッチ（compose.yaml と同じ。外部 Redis を使うなら redis を足す）
+      ECCUBE_PROFILES: ${COMPOSE_PROFILES:-}
       ECCUBE_LOCALE: ${ECCUBE_LOCALE:-ja}
       # 前段 LB の IP/サブネットを信頼して X-Forwarded-* を honor（HTTPS 判定に必須）
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
@@ -98,6 +100,7 @@ services:
       # 空のディレクトリで覆い隠してサイトの CSS が丸ごと消える。
       - ./html/template/original:/var/www/html/html/template/original:ro
       - ./app/config/eccube/packages:/opt/eccube-config/packages:ro
+      - ./app/config/eccube/optional:/opt/eccube-config/optional:ro
       # アップロード画像は全ホスト共有（下部 volumes を NFS/EFS ドライバに差し替える）
       - eccube_upload:/var/www/html/html/upload
     healthcheck:

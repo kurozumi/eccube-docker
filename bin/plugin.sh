@@ -532,6 +532,34 @@ PHP
         fi
     fi
 
+    # 任意機能（redis / messenger）の整合。スイッチは COMPOSE_PROFILES 一本だが、
+    # 「.env を変えたのに up -d していない」と、コンテナが見ている値と実際に
+    # 起動しているサービスがずれる。ずれ方によって症状が違う:
+    #   設定あり・Redis なし  → 全ページ 500（接続失敗）
+    #   設定あり・worker なし → メールが DB に溜まり続けて誰にも届かない（**エラーなし**）
+    cprof=",$(docker compose exec -T ec-cube sh -c 'printf %s "${ECCUBE_PROFILES:-}"' 2>/dev/null | tr -d '\r'),"
+    hprof=",$(grep -E '^COMPOSE_PROFILES=' .env 2>/dev/null | head -1 | cut -d= -f2-),"
+    if [ "$cprof" != "$hprof" ]; then
+        echo "[doctor] .env の COMPOSE_PROFILES（${hprof#,}）とコンテナが見ている値（${cprof#,}）が違います"
+        echo "           docker compose up -d で作り直してください（設定の投入は起動時に決まります）"
+        warn=1
+    fi
+    running="$(docker compose ps --status running --format '{{.Service}}' 2>/dev/null | tr '\n' ' ')"
+    case "$cprof" in *,redis,*)
+        case " $running " in *" redis "*) echo "[doctor] redis: 有効・起動中" ;;
+            *) echo "[doctor] redis の設定が入っているのに redis コンテナが動いていません（全ページ 500 の原因）"; ng=1 ;;
+        esac ;;
+    esac
+    case "$cprof" in *,messenger,*)
+        case " $running " in *" worker "*) echo "[doctor] messenger: 有効・worker 起動中" ;;
+            *) echo "[doctor] messenger の設定が入っているのに worker が動いていません。**メールが DB に溜まって届きません**"; ng=1 ;;
+        esac
+        # 溜まっている数。多ければ worker が消化できていない
+        q="$(docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N -B -u root "$MYSQL_DATABASE" -e "SELECT COUNT(*) FROM messenger_messages WHERE delivered_at IS NULL;"' 2>/dev/null | tr -d '\r' || true)"
+        [ -n "$q" ] && [ "$q" -gt 0 ] 2>/dev/null && { echo "[doctor] 未送信のメールが ${q} 件キューにあります"; warn=1; }
+        ;;
+    esac
+
     echo "[doctor] キャッシュを組み立て直します"
     clear_runtime_cache
     # **ここでは止まらない。** 点検の途中なので、失敗も所見として拾って先へ進む
