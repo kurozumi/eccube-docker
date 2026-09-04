@@ -101,9 +101,13 @@ services:
     logging: *default-logging
     # 配布イメージを使うなら .env に ECCUBE_IMAGE を書く（例:
     # ghcr.io/<owner>/<repo>/ec-cube:4.3-v1.0.0）。未設定ならローカル build。
+    # **既定名を変えないこと。** 一度 `eccube-ec-cube:local` に変えたところ、
+    # 既存の環境では稼働中のイメージ（eccube-ec-cube）と名前が食い違い、
+    # `docker compose run`（backup.sh / restore.sh / upgrade.sh の事前確認）の
+    # たびに**フルビルドが走った**。バックアップが数分止まって見える。
     # **切替はスクリプト側の bin/lib/image.sh が見ている。** 起動系のスクリプトで
     # `up -d --build` を直接書くと、pull した配布イメージを build で潰す。
-    image: ${ECCUBE_IMAGE:-eccube-ec-cube:local}
+    image: ${ECCUBE_IMAGE:-eccube-ec-cube}
     build:
       context: .
       dockerfile: docker/php/Dockerfile
@@ -138,7 +142,7 @@ services:
   worker:
     logging: *default-logging
     # ec-cube と同一イメージ（同じ本体コードで consume させる）
-    image: ${ECCUBE_IMAGE:-eccube-ec-cube:local}
+    image: ${ECCUBE_IMAGE:-eccube-ec-cube}
     build:
       context: .
       dockerfile: docker/php/Dockerfile

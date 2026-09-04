@@ -88,6 +88,15 @@ for d in save_image temp_image; do
 done
 chown -R www-data:www-data html/upload 2>/dev/null || true
 
+# 管理画面（CSS 管理 / JS 管理）が直接書く 2 つのディレクトリ。bind mount で
+# 本番だけ rw に入れ子にしてある（compose.yaml）。ホスト側の所有者が deploy
+# ユーザーだと Linux では www-data が書けず、**エラーではなく「画面が空に見える」**
+# （本体は is_writable が偽だとテキストエリアに中身を入れない）。ここで直す。
+# macOS の Docker Desktop では所有者が透過なので何も起きない。
+for d in html/user_data/assets/css html/user_data/assets/js; do
+    [ -d "$d" ] && chown -R www-data:www-data "$d" 2>/dev/null || true
+done
+
 # 2) DB 待ち（compose の healthcheck の保険）
 log "DB 起動待ち..."
 i=0

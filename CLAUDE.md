@@ -53,6 +53,16 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `4.4` 固定で、足さないと新版で一度も検証されない）。**黙って壊れる型が3つある**
   （目印による差し込み・本体の処理への割り込み・本体の副作用への対処）。
   詳細は `docs/upgrade.md`。
+- **ディスクに残る状態は、git か backup のどちらかに必ず入る。** 管理画面は DB
+  だけでなくファイルにも書く（CSS/JS 管理 → `html/user_data/assets/{css,js}`、
+  ページ管理 → `app/template/user_data/`、ブロック管理 → `app/template/<テーマ>/Block/`、
+  テーマ切替・セキュリティ設定 → **コンテナ内** `/var/www/html/.env`）。
+  `app/template/user_data/` は以前 .gitignore していたが、`dtb_page` の行と対なので
+  **DB だけ持って引っ越すとそのページが 500 になる**。追跡に戻した。
+  `bin/backup.sh` は 4 点セット（DB / 画像 / 管理画面が書いたファイル / コンテナ内 .env）。
+  引っ越しは「clone → `bin/init.sh` → `bin/restore.sh`」。
+  **本番で管理画面が書いたファイルはそのサーバーにしか無い。** `doctor` と `backup.sh` が
+  未コミット分を挙げる。
 - **`bin/reset.sh` と `bin/switch-version.sh` は `down -v` する。** DB・画像・
   セッションが消え、**その場では戻せない。** 稼働中が本番構成なら
   `CONFIRM_DESTROY=<プロジェクト名>` が無いと止まる（`bin/lib/guard.sh`）。

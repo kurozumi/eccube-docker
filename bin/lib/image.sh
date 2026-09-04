@@ -39,7 +39,7 @@ env_get() { # env_get KEY
 image_ref() {
     local ref
     ref="$(env_get ECCUBE_IMAGE)"
-    printf '%s' "${ref:-eccube-ec-cube:local}"
+    printf '%s' "${ref:-eccube-ec-cube}"
 }
 
 # ECCUBE_IMAGE がレジストリを指しているか（＝pull できるか）。
