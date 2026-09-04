@@ -3,6 +3,8 @@
 # 公開方式は .env の COMPOSE_PROFILES で選ぶ（tunnel / caddy / 空=背後配置）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=lib/image.sh
+. "$(dirname "$0")/lib/image.sh"
 
 # ── シークレットが既定値のまま本番公開するのを防ぐガード ──
 # どうしても既定値のまま起動したい場合のみ FORCE_PUBLISH=1 bin/publish.sh
@@ -26,5 +28,13 @@ if [ "${FORCE_PUBLISH:-0}" != "1" ] && [ -f .env ]; then
     fi
 fi
 
-docker compose -f compose.yaml -f compose.prod.yaml up -d --build
-docker compose -f compose.yaml -f compose.prod.yaml ps
+dc=(docker compose -f compose.yaml -f compose.prod.yaml)
+
+# 配布イメージなら pull、そうでなければ build。**`up -d --build` と書かない。**
+if ! image_provision "${dc[@]}"; then
+    echo "[publish] エラー: イメージを用意できませんでした。公開していません。" >&2
+    exit 1
+fi
+
+"${dc[@]}" up -d
+"${dc[@]}" ps

@@ -29,6 +29,15 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   本体がそれでもテーマへ書いた写しは、あちらがその場で消す（本体は読むのを
   ローダーに任せるが、**書くのは必ずテーマ配下**）。
 - **バージョンは `.env` の `ECCUBE_VERSION`**（build-arg）。切替は `bin/switch-version.sh`。
+  ただし **`.env` に `ECCUBE_IMAGE` があるときは build しないので、この値は使われない。**
+  動くのはタグに焼かれたバージョンで、両者は簡単にずれる。`bin/upgrade.sh` は pull した
+  イメージの実バージョンを表示して確認を求める。
+- **「更新」は 2 つあり、別物。** 環境（`bin/` や compose）は `bin/self-update.sh`、
+  EC-CUBE 本体は `bin/upgrade.sh`。順番は self-update → upgrade。逆にすると新しい本体を
+  古いスクリプトで扱うことになる。詳細は `docs/distribute.md`。
+- **起動系のスクリプトに `up -d --build` を直接書かない。** 配布イメージを使っている
+  利用者の環境では、pull したイメージをローカル build で上書きしてしまう。
+  build と pull の判定は `bin/lib/image.sh` の `image_provision` に寄せてある。
 - **マイナー（4.4 → 4.5）はプラグイン全数の移植を伴う。** パッチ（4.4.1 → 4.4.2）は
   `upgrade.sh` だけで済む。マイナーでは対象版ごとの保守ブランチを切り、コード名・
   パッケージ名・version を置換し、**CI の matrix にも新版を足す**（いまは全プラグインが
@@ -197,6 +206,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 | `docs/customize.md` | 本体を汚さずに実装を足す場所、framework 級設定 |
 | `docs/upgrade.md` | バージョン切替とバージョンアップ、切り戻し |
 | `docs/deploy.md` | 本番デプロイ |
+| `docs/distribute.md` | 配布と更新（配布イメージ、`bin/self-update.sh`） |
 | `docs/backup.md` | バックアップ / 復元 |
 | `docs/data-safety.md` | `down` と `down -v` の違い、消えるコマンド、復旧 |
 | `docs/scale.md` | 大規模アクセス、セッション・画像の共有、LB、メールの非同期化 |
@@ -208,6 +218,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 
 ```bash
 bin/init.sh                    # 初回セットアップ
+bin/self-update.sh             # この環境自体を新しいリリースへ（--check で確認だけ）
 bin/upgrade.sh ~4.3.2          # バージョンアップ（データ保持・運用環境向け）
 bin/upgrade.sh ~4.3.2 --prod   # 本番はこちら。付けないと開発構成のまま公開される
 bin/switch-version.sh ~4.2.0   # バージョン切替（データ破棄・開発用）

@@ -18,6 +18,8 @@
 #   さらに、スキーマ（DDL）とデータ移行は別経路なので両方を流す（詳細は下の 7)）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=lib/image.sh
+. "$(dirname "$0")/lib/image.sh"
 
 # --prod は本番構成（compose.prod.yaml）で上げる指定。位置は問わない。
 want_prod=0
@@ -40,6 +42,8 @@ if [ -z "$ver" ]; then
 fi
 
 current="$(grep -E '^ECCUBE_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
+current_image="$(env_get ECCUBE_IMAGE)"
+series="$(image_series "$ver")"
 
 # compose のプロジェクト名（ボリューム名の接頭辞）。COMPOSE_PROJECT_NAME や
 # compose.yaml の name: を compose 自身に解決させる。
@@ -133,6 +137,11 @@ restore_env() {
         sed "s|^ECCUBE_VERSION=.*|ECCUBE_VERSION=${current}|" .env > "$tmp" && mv "$tmp" .env
         echo "[upgrade] .env の ECCUBE_VERSION を ${current} へ戻しました。" >&2
     fi
+    if [ -n "$current_image" ]; then
+        tmp="$(mktemp)"
+        sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${current_image}|" .env > "$tmp" && mv "$tmp" .env
+        echo "[upgrade] .env の ECCUBE_IMAGE を ${current_image} へ戻しました。" >&2
+    fi
 }
 if grep -qE '^ECCUBE_VERSION=' .env 2>/dev/null; then
     tmp="$(mktemp)"
@@ -141,12 +150,53 @@ else
     echo "ECCUBE_VERSION=${ver}" >> .env
 fi
 
-# 3) 新バージョンのイメージを先に作る。ここで落ちても稼働中の環境は無傷。
-echo "[upgrade] イメージをビルドします（EC-CUBE 取得で数分かかります）..."
-if ! "${dc[@]}" build; then
-    echo "[upgrade] エラー: ビルドに失敗しました。稼働中の環境はそのままです。" >&2
+# 2b) 配布イメージを使っているなら、タグの系列も動かす。
+#     マイナーをまたぐとき（4.3 -> 4.4）ここを忘れると、.env だけ新しくなって
+#     **動くのは古い系列のイメージのまま**になる。build しないので
+#     ECCUBE_VERSION は誰にも読まれず、食い違いに気づく機会が無い。
+if [ -n "$current_image" ]; then
+    retagged="$(image_retag_series "$current_image" "$series")"
+    if [ "$retagged" != "$current_image" ]; then
+        tmp="$(mktemp)"
+        sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${retagged}|" .env > "$tmp" && mv "$tmp" .env
+        echo "[upgrade] ECCUBE_IMAGE を ${retagged} に合わせました。"
+        # **参照が変わったので取り直す。** 上で解決した $image は書き換え前の
+        # タグを指しており、そのままだと下の事前確認が古いイメージを見る。
+        image="$(docker compose config 2>/dev/null |
+            awk '/^  ec-cube:$/{b=1;next} b&&/^  [a-zA-Z_-]+:$/{b=0} b&&/^    image:/{sub(/^    image: */,"");print;exit}')"
+        if [ -z "$image" ]; then
+            echo "[upgrade] エラー: ec-cube のイメージ名を取得できませんでした。" >&2
+            restore_env
+            exit 1
+        fi
+    fi
+fi
+
+# 3) 新バージョンのイメージを先に用意する。ここで落ちても稼働中の環境は無傷。
+#    配布イメージなら pull、ローカル build 運用ならこれまでどおり build。
+if ! image_provision "${dc[@]}"; then
+    echo "[upgrade] エラー: イメージを用意できませんでした。稼働中の環境はそのままです。" >&2
     restore_env
     exit 1
+fi
+
+# 3a) 配布イメージは「焼かれたバージョン」が正。**.env の制約は build にしか
+#     使われない**ので、実際に何が入ってきたのかをここで見せる。
+#     `~4.3.2` と指定しても、タグが 4.3 系の古いビルドを指していれば 4.3.0 が来る。
+if image_uses_registry; then
+    baked="$(image_baked_version "$image")"
+    if [ -n "$baked" ]; then
+        echo "[upgrade] 取得したイメージの EC-CUBE: ${baked}（指定した制約: ${ver}）"
+        echo "[upgrade] 制約どおりか確認してください。違えばタグを見直して中断できます。"
+        read -r -p "このイメージで続行しますか? [y/N] " ans
+        if [ "$ans" != "y" ]; then
+            echo "[upgrade] 中止しました。稼働中の環境には触れていません。"
+            restore_env
+            exit 1
+        fi
+    else
+        echo "[upgrade] 注意: イメージのバージョンを読めませんでした。" >&2
+    fi
 fi
 
 # 3b) 新バージョンでプラグインと独自コードが読めるか、稼働中の環境に触る前に確かめる。

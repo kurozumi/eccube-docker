@@ -1,71 +1,161 @@
 # EC-CUBE アプリイメージを build して GHCR へ push する。
 #
-# 目的: 複数ホスト運用（compose.app.yaml）で「全ホストが同一イメージ」を保証する。
-# 各ホストでの build をやめ、ここで 1 回 build → 各ホストは pull するだけにする。
+# 目的:
+#   1) 複数ホスト運用（compose.app.yaml）で「全ホストが同一イメージ」を保証する。
+#   2) **配布**。利用者は build せず pull だけで動かす（.env の ECCUBE_IMAGE）。
 #
 # トリガ:
-#   - main への push のうち、イメージ内容に影響するパスの変更
-#   - 手動実行（workflow_dispatch。EC-CUBE バージョンを指定可能）
+#   - タグ push（v*）… リリース。**これが配布の実体**で、利用者が追うタグが動く。
+#   - pull_request  … Dockerfile を壊していないか確かめるだけ（push しない）。
+#   - 手動実行      … 系列を指定して試し焼き。**追跡タグは動かさない**（sha だけ）。
 #
-# 生成タグ:
-#   ghcr.io/<owner>/<repo>/ec-cube:latest     … 最新の main
-#   ghcr.io/<owner>/<repo>/ec-cube:<git-sha>  … 固定参照用（ロールバックに使う）
+#   ブランチへの push では動かさない。main で動かすと利用者が引くものが予告なく
+#   変わり、保守ブランチで動かすと直接 push のたびに回る。
+#
+# **`pull_request` に `types` を必ず書くこと。** 省くと既定の活動タイプに
+# `synchronize` が入り、**PR ブランチへ push するたびに matrix 全ジョブが回る。**
+# `push:` を消しただけでは止まらない。4.4 の実ビルドは 1 回 3 分半かかる。
+#
+# その代わり、**PR を開いたあとに Dockerfile を直しても CI は回らない。**
+# チェックの結果は最新コミットのものとは限らない。確かめ直したいときは
+# 手動実行（workflow_dispatch）を使う。
+#
+# 生成タグ（<owner>/<repo> は GitHub の所有者とリポジトリ名）:
+#   ghcr.io/<owner>/<repo>/ec-cube:4.3-v1.2.0  … 固定。**利用者はこれを指定する**
+#   ghcr.io/<owner>/<repo>/ec-cube:4.3         … 系列の最新リリース（追跡用）
+#   ghcr.io/<owner>/<repo>/ec-cube:4.3-<sha>   … ロールバック・試し焼き用
+#
+#   **`latest` は作らない。** EC-CUBE は 4.2 / 4.3 / 4.4 が並行して現役で、
+#   単一の「最新」は存在しない。作ると、利用者は自分がどの系列を引くのか
+#   指定できないまま、マイナーをまたぐ更新を引き当てる。
 #
 # 認証は GITHUB_TOKEN（permissions: packages: write）。追加シークレット不要。
 name: build-image
 
 on:
   push:
-    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    types: [opened, reopened]
     paths:
       - "docker/php/**"
       - ".github/workflows/build-image.yml"
   workflow_dispatch:
     inputs:
-      eccube_version:
-        description: "ECCUBE_VERSION（composer 制約）"
-        default: "~4.3.0"
+      series:
+        description: "対象の系列（空なら全系列）。例: 4.4"
         required: false
-      php_version:
-        description: "PHP_VERSION"
-        default: "8.2"
-        required: false
+        default: ""
+
+# 同じ ref で走っているものは、新しいほうだけ残す（実行時間ぶん課金されるため）。
+# **リリース（タグ）は止めない。** タグごとに ref が違うので group も別になるが、
+# 取り違えないよう cancel は pull_request のときだけに限定する。
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/ec-cube
 
 jobs:
+  # 焼く対象の一覧を作る。
+  #
+  # **系列ごとに PHP と phpredis が決まる。** phpredis は EC-CUBE 側の
+  # Symfony Cache と両立しないバージョンがあり、間違えると起動時に落ちる
+  # （docker/php/Dockerfile のコメント参照）。**bin/lib/image.sh の
+  # image_php_for_series / image_phpredis_for_series と揃えること。**
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - id: build
+        run: |
+          # **4.4 は `4.4.x-dev`。** Packagist に 4.4 のリリースはまだ 1 つも無く、
+          # 上流にあるのは `4.4` ブランチだけなので `~4.4.0` は解決できない
+          # （`Could not find package ec-cube/ec-cube with version ~4.4.0`）。
+          # `dev-4.4` も不可で、通るのは `4.4.x-dev` の形。
+          #
+          # **これは動く的なので、焼くたびに中身が変わる。** 4.4 が正式に出たら
+          # `~4.4.0` へ変えること。それまで 4.4 のイメージは「その時点の
+          # ブランチの写し」であって、再現しない。
+          all='[
+            {"series":"4.2","eccube":"~4.2.0","php":"8.2","phpredis":"6.0.2"},
+            {"series":"4.3","eccube":"~4.3.0","php":"8.2","phpredis":"6.0.2"},
+            {"series":"4.4","eccube":"4.4.x-dev","php":"8.3","phpredis":"6.3.0"}
+          ]'
+          want='${{ github.event.inputs.series }}'
+          if [ -n "$want" ]; then
+            matrix="$(printf '%s' "$all" | jq -c --arg s "$want" '[.[] | select(.series == $s)]')"
+            if [ "$(printf '%s' "$matrix" | jq 'length')" = "0" ]; then
+              echo "系列 '$want' は対象外です。" >&2
+              exit 1
+            fi
+          else
+            matrix="$(printf '%s' "$all" | jq -c .)"
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   build-and-push:
+    needs: setup
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      # 1 系列が落ちても他は焼く。**片方だけ古いまま**にならないよう、
+      # 失敗した系列は次のリリースまで前のタグが残る（追跡タグは動かない）。
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.setup.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
+        # pull_request では push しないので認証も要らない（fork からの PR で
+        # トークンが読み取り専用になり、login 自体が失敗するため）
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: タグを決める
+        id: tags
+        run: |
+          img="${REGISTRY}/${IMAGE_NAME}"
+          series='${{ matrix.target.series }}'
+
+          # 常に sha 付きを打つ（ロールバックの固定参照）
+          tags="${img}:${series}-${GITHUB_SHA}"
+
+          # **追跡タグを動かすのはリリース（タグ push）のときだけ。**
+          # 手動実行で動かすと、試し焼きが利用者に配られてしまう。
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tags="${tags},${img}:${series}-${GITHUB_REF_NAME},${img}:${series}"
+          fi
+
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "$tags" | tr ',' '\n'
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/php/Dockerfile
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           # 必要なら linux/arm64 を足す（build 時間は倍近くになる）
           platforms: linux/amd64
           build-args: |
-            ECCUBE_VERSION=${{ github.event.inputs.eccube_version || '~4.3.0' }}
-            PHP_VERSION=${{ github.event.inputs.php_version || '8.2' }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ECCUBE_VERSION=${{ matrix.target.eccube }}
+            PHP_VERSION=${{ matrix.target.php }}
+            PHPREDIS_VERSION=${{ matrix.target.phpredis }}
+          tags: ${{ steps.tags.outputs.tags }}
+          # 系列ごとにキャッシュを分ける。共有すると 4.3 の layer を 4.4 が
+          # 引き当てて、違う系列の vendor が混ざる。
+          cache-from: type=gha,scope=${{ matrix.target.series }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target.series }}

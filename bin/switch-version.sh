@@ -11,6 +11,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/guard.sh
 . "$(dirname "$0")/lib/guard.sh"
+# shellcheck source=lib/image.sh
+. "$(dirname "$0")/lib/image.sh"
 
 ver="${1:-}"
 if [ -z "$ver" ]; then
@@ -27,13 +29,12 @@ guard_destructive switch-version.sh "DB・アップロード画像・セッシ�
 current="$(grep -E '^ECCUBE_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
 current_redis="$(grep -E '^PHPREDIS_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
 
+current_image="$(env_get ECCUBE_IMAGE)"
+
 # phpredis は EC-CUBE 側の Symfony Cache に合わせる必要があり、両立しない。
-#   4.2 / 4.3（Symfony Cache 6.4） … 6.0.x（6.1+ は hSet のシグネチャ変更で衝突）
-#   4.4（Symfony Cache 7.4）       … 6.1 以上（symfony/cache が ext-redis <6.1 を conflict）
-case "$ver" in
-    4.4*|~4.4*|^4.4*) redis_ver="6.3.0" ;;
-    *)                redis_ver="6.0.2" ;;
-esac
+# 対応表は bin/lib/image.sh に集約してある（CI の matrix と揃える先もそこ）。
+series="$(image_series "$ver")"
+redis_ver="$(image_phpredis_for_series "$series")"
 echo "[switch] phpredis は ${redis_ver} を使用します（EC-CUBE ${ver} 向け）。"
 
 if grep -qE '^PHPREDIS_VERSION=' .env 2>/dev/null; then
@@ -50,10 +51,25 @@ else
     echo "ECCUBE_VERSION=${ver}" >> .env
 fi
 
-# 先にビルドする。ここで落ちても既存の環境とデータは無傷なので、.env だけ戻して終わる。
-echo "[switch] イメージをビルドします（EC-CUBE 取得で数分かかります）..."
-if ! docker compose build; then
-    echo "[switch] エラー: ビルドに失敗しました。既存の環境とデータはそのままです。" >&2
+# 配布イメージを使っているなら、タグの系列も一緒に動かす。
+# **ここを忘れると、.env だけ 4.4 になって動くのは 4.3 のイメージ**という
+# 食い違いになる（build しないので ECCUBE_VERSION は参照されない）。
+if [ -n "$current_image" ]; then
+    retagged="$(image_retag_series "$current_image" "$series")"
+    if [ "$retagged" != "$current_image" ]; then
+        tmp="$(mktemp)"
+        sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${retagged}|" .env > "$tmp" && mv "$tmp" .env
+        echo "[switch] ECCUBE_IMAGE を ${retagged} に合わせました。"
+    elif image_uses_registry; then
+        echo "[switch] 注意: ECCUBE_IMAGE=${current_image} は系列を含まないタグです。"
+        echo "         このタグが ${series} 系のものか、自分で確かめてください。"
+    fi
+fi
+
+# 先にイメージを用意する。ここで落ちても既存の環境とデータは無傷なので、
+# .env だけ戻して終わる。
+if ! image_provision docker compose; then
+    echo "[switch] エラー: イメージを用意できませんでした。既存の環境とデータはそのままです。" >&2
     if [ -n "$current" ]; then
         tmp="$(mktemp)"
         sed "s|^ECCUBE_VERSION=.*|ECCUBE_VERSION=${current}|" .env > "$tmp" && mv "$tmp" .env
@@ -62,6 +78,10 @@ if ! docker compose build; then
     if [ -n "$current_redis" ]; then
         tmp="$(mktemp)"
         sed "s|^PHPREDIS_VERSION=.*|PHPREDIS_VERSION=${current_redis}|" .env > "$tmp" && mv "$tmp" .env
+    fi
+    if [ -n "$current_image" ]; then
+        tmp="$(mktemp)"
+        sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${current_image}|" .env > "$tmp" && mv "$tmp" .env
     fi
     exit 1
 fi
