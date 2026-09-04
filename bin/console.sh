@@ -10,6 +10,11 @@
 # 手で打つと付け忘れるのでここで固定する。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source "$(dirname "$0")/lib/stack.sh"
+
+# 素の compose は「service "ec-cube" is not running」としか言わない。
+# 別のスタックで動いていることが多いので、そこまで出す。
+stack_require_running ec-cube console || exit 1
 
 if [ "$#" -eq 0 ]; then
     set -- list

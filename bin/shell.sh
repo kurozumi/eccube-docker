@@ -12,6 +12,7 @@
 # php-fpm への USR2 送信など限られた場面だけ。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source "$(dirname "$0")/lib/stack.sh"
 
 as_root=0
 service=""
@@ -41,10 +42,13 @@ if [ "$as_root" = "0" ]; then
     esac
 fi
 
-# 止まっていると exec は通らない。使い捨てのコンテナで入る。
-# （アップグレードに失敗してサイトが落ちているときなど）
-if [ -z "$(docker compose ps -q "$service" 2>/dev/null)" ]; then
-    echo "[shell] ${service} が起動していないので、使い捨てのコンテナで入ります。" >&2
+# 止まっていると exec は通らない。**まず「本当に止まっているのか、別のスタックを
+# 見ているのか」を切り分ける。** 名前がずれているだけなら、使い捨てのコンテナで
+# 入っても意味がない（DB も別なので中身が違う）。
+if ! stack_require_running "$service" shell; then
+    echo >&2
+    echo "[shell] このまま使い捨てのコンテナで入ります（中身は空の状態です）。" >&2
+    echo "[shell] 上の案内で目的のスタックが分かるなら、Ctrl-C で中止してください。" >&2
     exec docker compose run --rm --no-deps ${user[@]+"${user[@]}"} "$service" "$shell"
 fi
 

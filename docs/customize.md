@@ -143,8 +143,31 @@ php-fpm（www-data）が書けなくなって**全ページ 500** になる。ro
 「unable to find user」で入れない。`nginx` と `redis` は alpine なので `bash` が
 無く、`sh` に切り替える。ラッパーがどちらも見て決める。
 
-**コンテナが止まっていると `exec` は通らない。** そのときは使い捨てのコンテナで
-入る（ラッパーが自動で切り替え、その旨を表示する）。
+**「起動していない」の多くは、別のスタックを見ているだけ。** compose は
+`COMPOSE_PROJECT_NAME` か `compose.yaml` の `name:` でスタックを決めるので、
+別名で起動していたり、**クローンが2つあってそちらで打っていたり**すると、
+止まっているほうへ行く。素の compose は `service "ec-cube" is not running` と
+しか言わないので、どこで動いているのか分からない。
+
+ラッパーは繋ぐ前にそれを出す（`bin/lib/stack.sh`。`console.sh` / `shell.sh` /
+`plugin.sh` / `test.sh` / `ide-sync.sh` が使う）。
+
+```
+[console] ec-cube が起動していません（プロジェクト名: eccube）。
+
+  いま ec-cube が動いているのは別のスタックです:
+
+    eccube44    /Users/you/eccube-docker/compose.yaml,...
+
+  同じ compose ファイルなら、.env に名前を書いて固定してください:
+    COMPOSE_PROJECT_NAME=eccube44
+```
+
+**`bin/*.sh` はスクリプト自身の置き場所を見る。** 別のディレクトリで打てば、
+そちらの `.env` と `compose.yaml` が使われる。
+
+**本当に止まっているなら `exec` は通らない。** そのときは使い捨てのコンテナで
+入る（`bin/shell.sh` が自動で切り替え、その旨を表示する）。
 
 ```bash
 docker compose run --rm --no-deps ec-cube bash

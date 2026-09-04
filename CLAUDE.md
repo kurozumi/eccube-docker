@@ -84,6 +84,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   reload も doctor も成功したように見えてブラウザは古いままになる。上の
   「効かないプラグイン」も、元をたどるとこれで reload が空振りしていた。
   `.env` に `COMPOSE_PROJECT_NAME=<稼働中の名前>` を書いて固定する。
+  **`bin/console.sh` / `shell.sh` / `plugin.sh` / `test.sh` / `ide-sync.sh` は
+  繋ぐ前に切り分ける**（`bin/lib/stack.sh`）。素の compose は
+  `service "ec-cube" is not running` としか言わないが、これらは
+  **どのスタックで動いているかを名前と compose ファイルごと出す。**
+  **クローンが2つあるときも同じ形で出る**（`bin/*.sh` はスクリプト自身の
+  置き場所を見るので、別のディレクトリで打つと別のスタックへ行く）。
   同じ `app/` を bind-mount した二重起動は `app/proxy/entity` を奪い合うので、
   使わないスタックは落としておく。
 - **プラグインの install/enable/disable は前後でキャッシュ操作が要る。**

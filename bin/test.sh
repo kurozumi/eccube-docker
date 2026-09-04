@@ -26,11 +26,15 @@ cd "$(dirname "$0")/.."
 
 fail() { echo "[test] エラー: $*" >&2; exit 1; }
 
+# 0) そもそも目的のスタックに繋がっているか。**先に切り分ける。**
+#    別のスタックを見ていると、以降の判定が全部「取れない」に化ける。
+source "$(dirname "$0")/lib/stack.sh"
+stack_require_running ec-cube test || exit 1
+
 # 1) コンテナに入っている PHPUnit のメジャーバージョンを取る
 version_line="$(docker compose exec -T ec-cube php vendor/bin/phpunit --version 2>/dev/null | head -1 || true)"
 major="$(printf '%s' "$version_line" | sed -nE 's/^PHPUnit ([0-9]+)\..*/\1/p')"
-[ -n "$major" ] || fail "コンテナの PHPUnit バージョンを判別できませんでした。
-       コンテナが起動しているか確認してください（docker compose ps）。"
+[ -n "$major" ] || fail "コンテナの PHPUnit バージョンを判別できませんでした。"
 
 # 2) メジャーバージョンに対応する設定ファイルを選ぶ
 if [ "$major" -ge 10 ]; then

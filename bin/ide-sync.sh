@@ -45,12 +45,14 @@ for arg in "$@"; do
     esac
 done
 
-# コンテナが動いているか。止まっているスタックには exec が通らないので、
-# ここで「読めるか」を確かめておけば COMPOSE_PROJECT_NAME のズレも一緒に捕まえられる。
+# コンテナが動いているか。止まっているスタックには exec が通らない。
+# **プロジェクト名のズレはここで名前ごと出す**（lib/stack.sh）。
+source "$(dirname "$0")/lib/stack.sh"
+stack_require_running ec-cube ide-sync || exit 1
+
 docker compose exec -T ec-cube test -d /var/www/html/vendor >/dev/null 2>&1 \
     || fail "ec-cube コンテナから /var/www/html/vendor を読めません。
-       起動しているか確認してください（docker compose ps）。止まっていれば docker compose up -d。
-       別名でスタックを起動しているなら .env に COMPOSE_PROJECT_NAME=<稼働中の名前> を書きます。"
+       本体の展開が終わっているか確認してください（bin/init.sh）。"
 
 # 書きかけの写しを IDE に読ませないため、別名で展開してから入れ替える。
 # 途中で失敗しても直前の写しがそのまま残る。

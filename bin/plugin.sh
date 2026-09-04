@@ -239,6 +239,17 @@ read_code() { # read_code <dir>
 
 cmd="${1:-help}"; shift || true
 
+# **どのスタックに繋がっているかを先に確かめる。** 名前がずれていると、
+# reload も doctor も成功したように見えてブラウザは古いままになる
+# （止まっているスタックにも exec が通ることがある）。help は繋がなくても出す。
+case "$cmd" in
+  help|-h|--help) ;;
+  *)
+    source "$(dirname "$0")/lib/stack.sh"
+    stack_require_running ec-cube plugin || exit 1
+    ;;
+esac
+
 case "$cmd" in
   add)
     url="${1:-}"; want="${2:-}"
