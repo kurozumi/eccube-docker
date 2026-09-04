@@ -2,6 +2,8 @@
 # 初回セットアップ: .env 作成 → シークレット生成 → ビルド＆起動。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=lib/image.sh
+. "$(dirname "$0")/lib/image.sh"
 
 fresh_env=0
 if [ ! -f .env ]; then
@@ -40,8 +42,16 @@ else
     done
 fi
 
-echo "[init] ビルドして起動します（初回は EC-CUBE 取得で数分かかります）..."
-docker compose up -d --build
+# 配布イメージ（ECCUBE_IMAGE）を使うなら pull、そうでなければ build。
+# **ここで `up -d --build` と書かない。** 配布イメージを指定している利用者の
+# 環境では、pull したイメージをローカル build で上書きしてしまう。
+if ! image_provision docker compose; then
+    echo "[init] エラー: イメージを用意できませんでした。" >&2
+    exit 1
+fi
+
+echo "[init] 起動します..."
+docker compose up -d
 
 echo "[init] 進捗確認: docker compose logs -f ec-cube"
 echo "[init] フロント: http://localhost:${HTTP_PORT:-8080}/   管理: http://localhost:${HTTP_PORT:-8080}/admin/"

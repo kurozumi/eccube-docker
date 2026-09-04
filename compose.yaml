@@ -87,7 +87,11 @@ x-eccube-volumes: &eccube-volumes
 services:
   ec-cube:
     logging: *default-logging
-    image: eccube-ec-cube
+    # 配布イメージを使うなら .env に ECCUBE_IMAGE を書く（例:
+    # ghcr.io/<owner>/<repo>/ec-cube:4.3-v1.0.0）。未設定ならローカル build。
+    # **切替はスクリプト側の bin/lib/image.sh が見ている。** 起動系のスクリプトで
+    # `up -d --build` を直接書くと、pull した配布イメージを build で潰す。
+    image: ${ECCUBE_IMAGE:-eccube-ec-cube:local}
     build:
       context: .
       dockerfile: docker/php/Dockerfile
@@ -121,7 +125,8 @@ services:
   # --time-limit で定期的に終了し restart で再起動（コードやキャッシュの鮮度維持）。
   worker:
     logging: *default-logging
-    image: eccube-ec-cube
+    # ec-cube と同一イメージ（同じ本体コードで consume させる）
+    image: ${ECCUBE_IMAGE:-eccube-ec-cube:local}
     build:
       context: .
       dockerfile: docker/php/Dockerfile

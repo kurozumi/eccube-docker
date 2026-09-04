@@ -27,9 +27,11 @@ services:
   ec-cube:
     logging: *default-logging
     # 本番は CI（.github/workflows/build-image.yml）が push した GHCR イメージを使う。
-    #   .env で ECCUBE_IMAGE=ghcr.io/<owner>/<repo>/ec-cube:<sha|latest> を指定し、
+    #   .env で ECCUBE_IMAGE=ghcr.io/<owner>/<repo>/ec-cube:<系列>-<リリース> を指定し、
     #   docker compose -f compose.app.yaml pull ec-cube && up -d --no-build
     # ECCUBE_IMAGE 未指定ならローカル build（従来どおり）。
+    # **`latest` は作っていない。** 4.2/4.3/4.4 が並行して現役なので、
+    # 単一の「最新」を置くと系列をまたぐ更新を黙って引き当てることになる。
     image: ${ECCUBE_IMAGE:-eccube-ec-cube:local}
     build:
       context: .
@@ -37,6 +39,9 @@ services:
       args:
         ECCUBE_VERSION: ${ECCUBE_VERSION:-~4.3.0}
         PHP_VERSION: ${PHP_VERSION:-8.2}
+        # phpredis は系列で決まる（4.4 は 6.1 以上でないと symfony/cache と conflict）。
+        # ここを渡し忘れると 4.4 のローカル build だけが起動時に落ちる。
+        PHPREDIS_VERSION: ${PHPREDIS_VERSION:-6.0.2}
     env_file: .env
     environment:
       APP_ENV: ${APP_ENV:-prod}
