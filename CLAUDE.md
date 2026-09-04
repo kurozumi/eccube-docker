@@ -215,6 +215,8 @@ bin/reset.sh                   # DB 初期化
 bin/publish.sh                 # 本番構成で起動（起動するだけ。本体の入れ替えはしない）
 bin/console.sh <cmd>           # bin/console をコンテナの中で実行（www-data 固定）
                                # migration は --namespace=CustomizeMigrations を自動で補う
+bin/shell.sh                   # コンテナに入る（既定 ec-cube・www-data）
+bin/shell.sh db                # 他のサービス。--root で root
 
 bin/ide-sync.sh                # IDE 用に本体・vendor を .ide/ へ写す（--proxy / --clean）
 

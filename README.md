@@ -89,15 +89,17 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
 
 ```bash
 bin/console.sh <cmd>       # コンテナの中で bin/console を実行（www-data 固定）
+bin/shell.sh               # コンテナの中に入る（www-data 固定。--root で root）
 bin/plugin.sh reload       # PHP / 設定を触ったあとのキャッシュ一掃
 bin/plugin.sh doctor       # システムエラーが出たときの点検と修復
 bin/test.sh <パス>          # テスト（素の phpunit は使わない）
 bin/backup.sh              # DB と画像のバックアップ
 ```
 
-**`bin/console.sh` は www-data で実行する。** root で走らせると `var/cache` と
-`var/log` に root 所有のファイルができ、php-fpm が書けなくなって**全ページ 500**
-になる。手で打つと付け忘れるのでラッパーに固定してある。
+**`bin/console.sh` と `bin/shell.sh` は www-data で実行する。** root で走らせると
+`var/cache` と `var/log` に root 所有のファイルができ、php-fpm が書けなくなって
+**全ページ 500** になる。手で打つと付け忘れるのでラッパーに固定してある。
+root が要るのはパッケージの導入など限られた場面だけで、そのときは `--root`。
 
 ## ドキュメント
 
@@ -105,7 +107,7 @@ bin/backup.sh              # DB と画像のバックアップ
 
 | 文書 | 中身 |
 | --- | --- |
-| [カスタマイズ](docs/customize.md) | 本体を汚さずに実装を足す場所。Controller / Entity / テンプレート / 独自 CSS・JS / framework 級設定 |
+| [カスタマイズ](docs/customize.md) | 本体を汚さずに実装を足す場所。Controller / Entity / テンプレート / 独自 CSS・JS / framework 級設定 / コンテナに入る / migration |
 | [バージョン切替 / バージョンアップ](docs/upgrade.md) | 運用中の店舗を上げる手順、切り戻し、プラグインの互換性 |
 | [本番デプロイ](docs/deploy.md) | どのサーバーでも同じ手順で公開する |
 | [バックアップ / 復元](docs/backup.md) | DB と画像の保全。**バージョンアップの前に必ず取る** |
