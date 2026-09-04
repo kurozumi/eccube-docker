@@ -146,8 +146,8 @@ Fatal error: Declaration of Plugin\MigrationSample\PluginManager::install(
 使っていないプラグインを外す手順:
 
 ```bash
-docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:disable --code=Foo
-docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:uninstall --code=Foo
+bin/console.sh eccube:plugin:disable --code=Foo
+bin/console.sh eccube:plugin:uninstall --code=Foo
 rm -rf app/Plugin/Foo
 ```
 

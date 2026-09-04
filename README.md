@@ -85,6 +85,20 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
 既定は本番モード（`.env` の `APP_ENV=prod`）。デバッグしたいときだけ `.env` を
 `APP_ENV=dev` / `APP_DEBUG=1` にして `docker compose up -d`。
 
+### よく使うコマンド
+
+```bash
+bin/console.sh <cmd>       # コンテナの中で bin/console を実行（www-data 固定）
+bin/plugin.sh reload       # PHP / 設定を触ったあとのキャッシュ一掃
+bin/plugin.sh doctor       # システムエラーが出たときの点検と修復
+bin/test.sh <パス>          # テスト（素の phpunit は使わない）
+bin/backup.sh              # DB と画像のバックアップ
+```
+
+**`bin/console.sh` は www-data で実行する。** root で走らせると `var/cache` と
+`var/log` に root 所有のファイルができ、php-fpm が書けなくなって**全ページ 500**
+になる。手で打つと付け忘れるのでラッパーに固定してある。
+
 ## ドキュメント
 
 用途ごとに `docs/` へ分けてある。**README はここまでで、以降は各文書を見ること。**

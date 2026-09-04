@@ -213,7 +213,8 @@ bin/upgrade.sh ~4.3.2 --prod   # 本番はこちら。付けないと開発構�
 bin/switch-version.sh ~4.2.0   # バージョン切替（データ破棄・開発用）
 bin/reset.sh                   # DB 初期化
 bin/publish.sh                 # 本番構成で起動（起動するだけ。本体の入れ替えはしない）
-docker compose exec ec-cube runuser -u www-data -- php bin/console <cmd>
+bin/console.sh <cmd>           # bin/console をコンテナの中で実行（www-data 固定）
+                               # migration は --namespace=CustomizeMigrations を自動で補う
 
 bin/ide-sync.sh                # IDE 用に本体・vendor を .ide/ へ写す（--proxy / --clean）
 
