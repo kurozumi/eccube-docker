@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DB とアップロード画像のバックアップ。
+# 引っ越し・切り戻しに要るものを 1 か所に集める。
 #   使い方:  bin/backup.sh                  # ./backups/<日時>/ に保存
 #            BACKUP_DIR=/mnt/nas bin/backup.sh   # 保存先を変える
 #            BACKUP_KEEP=14 bin/backup.sh        # 保持世代数（既定 7）
@@ -8,9 +8,27 @@
 #
 # - DB は mysqldump --single-transaction（InnoDB 前提・サービス無停止で整合ダンプ）
 # - 画像は html/upload を tar.gz（eccube_upload ボリュームの実体）
+# - **管理画面がディスクに書いたもの**を admin-files.tar.gz に（下の説明）
+# - コンテナ内の .env を container.env に（テーマ切替とセキュリティ設定の書き先）
 # - パスワードは MYSQL_PWD で渡し、プロセスリストに露出させない
+#
+# 原則: **ディスクに残る状態は、git か backup のどちらかに必ず入る。**
+# これが崩れると「DB には行があるのにファイルが無い」形で引っ越し後に壊れる。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=lib/guard.sh
+. "$(dirname "$0")/lib/guard.sh"
+
+# ボリュームの中身は **alpine で読む。** ec-cube のイメージで `docker compose run`
+# すると、イメージが無いときにフルビルドが始まる（composer で本体取得、数分）。
+# バックアップは「イメージが壊れている・無い」状況でこそ要るので、依存させない。
+proj="$(guard_project_name)"
+[ -n "$proj" ] || { echo "[backup] エラー: compose のプロジェクト名を取得できません" >&2; exit 1; }
+# busybox の tar には --transform が無いので、書庫の先頭（upload/）はマウント先の
+# 名前で作る。従来の書庫と同じ形になり、古いバックアップもそのまま戻せる。
+vol() { # vol <ボリューム名> <マウント先> <コマンド…>
+    docker run --rm -v "${proj}_$1:$2:ro" alpine:3 "${@:3}"
+}
 
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
 BACKUP_KEEP="${BACKUP_KEEP:-7}"
@@ -23,16 +41,52 @@ docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump
     --single-transaction --routines --triggers --events \
     -u root "$MYSQL_DATABASE"' | gzip > "${dest}/db.sql.gz"
 
-# exec ではなく run を使う。exec は ec-cube が起動中でないと失敗するため、
+# exec ではなく使い捨てコンテナで読む。exec は ec-cube が起動中でないと失敗し、
 # 「アップグレードに失敗してサイトが落ちている状態から復旧したい」ときに
-# バックアップが取れなくなる。run なら使い捨てコンテナで画像ボリュームを読める。
+# バックアップが取れなくなる。
 echo "[backup] アップロード画像を退避しています..."
-docker compose run --rm --no-deps -T --entrypoint tar ec-cube \
-    -C /var/www/html/html -czf - upload > "${dest}/upload.tar.gz"
+vol eccube_upload /upload tar -C / -czf - upload > "${dest}/upload.tar.gz"
+
+# 管理画面がディスクに書いたものを退避する。
+#
+# 本体の管理画面は DB だけでなくファイルも書く:
+#   CSS 管理 / JS 管理  → html/user_data/assets/{css,js}/customize.*
+#   ページ管理（新規）  → app/template/user_data/*.twig（dtb_page の行と対）
+#   ブロック管理        → app/template/<テーマ>/Block/*.twig
+# どれも bind mount なのでホストにはあるが、**git 管理下のパスでも、本番で
+# 書かれた分はコミットされていない**。DB と画像だけで引っ越すと、dtb_page には
+# 行があるのに twig が無い、という壊れ方をする。ホスト側で直接 tar する。
+echo "[backup] 管理画面が書いたファイルを退避しています..."
+tar -czf "${dest}/admin-files.tar.gz" \
+    app/template \
+    html/user_data/assets/css html/user_data/assets/js
+
+# コンテナ内の .env。テーマ切替（オーナーズストア → テンプレート管理）と
+# セキュリティ設定の一部は、ホストの .env ではなく**コンテナ内の
+# /var/www/html/.env** に書かれる。そこは eccube_app ボリュームの中で、
+# bin/upgrade.sh がボリュームを作り直すと消える。
+# 復元は自動ではしない（ホストの .env や compose が渡す値と衝突しうる）。
+# bin/restore.sh が差分を出す。
+if ! vol eccube_app /app cat /app/.env > "${dest}/container.env" 2>/dev/null; then
+    echo "[backup] 注意: コンテナ内の .env を読めませんでした（ボリュームが無い？）"
+    rm -f "${dest}/container.env"
+fi
+
+# git 管理下なら、コミットされていない「管理画面が書いた分」を見せておく。
+# backup には入っているので失われはしないが、git にも残すかは人が決めること。
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    dirty="$(git status --porcelain -- app/template html/user_data/assets/css html/user_data/assets/js 2>/dev/null || true)"
+    if [ -n "$dirty" ]; then
+        echo "[backup] 注意: 管理画面が書いたと思われる、コミットされていない変更があります:"
+        printf '%s\n' "$dirty" | sed 's/^/           /'
+        echo "           admin-files.tar.gz には入っています。git にも残すならコミットしてください。"
+    fi
+fi
 
 # 中身の妥当性を軽く確認（空ダンプ・壊れた tar を検知）
 gzip -t "${dest}/db.sql.gz"
 gzip -t "${dest}/upload.tar.gz"
+gzip -t "${dest}/admin-files.tar.gz"
 db_size=$(wc -c < "${dest}/db.sql.gz")
 if [ "$db_size" -lt 1024 ]; then
     echo "[backup] エラー: DB ダンプが小さすぎます（${db_size} bytes）。失敗の可能性。" >&2
