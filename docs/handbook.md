@@ -8,31 +8,72 @@
 ## 登場するものは 4 つ
 
 ```
- あなたのパソコン ──(git push)──▶ GitHub ──(git pull)──▶ サーバー ──▶ お客さんのブラウザ
-   直す・試す                  控え              動かす           見る
+ あなたのパソコン ──(git push)──▶ あなたのリポジトリ ──(git pull)──▶ サーバー ──▶ お客さんのブラウザ
+   直す・試す                     控え（非公開）              動かす           見る
+        ▲
+        │ (self-update)  この仕組みの新しい版を取り込む
+ 配布元（eccube-docker）
 ```
 
 - **あなたのパソコン** … ここで直して、ここで試す
-- **GitHub** … 直したものの控え。あなた専用のリポジトリ（非公開）
-- **サーバー** … お店が動いている場所。**ここでは直さない。** GitHub から持ってくるだけ
+- **あなたのリポジトリ** … 直したものの控え。あなた専用の GitHub リポジトリ（**非公開**）。作り方は次の節
+- **サーバー** … お店が動いている場所。**ここでは直さない。** あなたのリポジトリから持ってくるだけ
 - **お客さんのブラウザ** … 見るだけ
+- **配布元** … この仕組み（`eccube-docker`）の置き場。サーバーとは直接つながらない
 
 「直す場所」と「動かす場所」を分けるのが、この仕組みの全部です。
 
 ---
 
+## 「あなたのリポジトリ」とは
+
+この文書で **あなたのリポジトリ** と言ったら、**あなたのお店専用の、非公開の GitHub リポジトリ**
+のことです。この仕組み（`eccube-docker`）そのものではありません。
+
+**やってはいけない 2 つ:**
+
+| やり方 | 何がまずいか |
+|---|---|
+| `eccube-docker` を **fork** する | 公開リポジトリの fork は**非公開にできない**。お店のコードが世界に見える |
+| `eccube-docker` を **clone** してそのまま使う | 送り先（origin）が配布元のまま。**あなたのコードを保存する場所が無い** |
+
+正しくは「配布元から**中身だけ**をもらって、**自分の**リポジトリとして始める」です。
+
 ## 最初に 1 回だけやること
 
-[導入手順](install.md) のとおりに進めてください。終わると、あなたのパソコンとサーバーの
-両方で `docker compose ps` を打つと一覧が出て、ブラウザでお店が開きます。
-
-サーバーで打ったコマンドはこれだけのはず:
+### 1. あなたのパソコンで、あなたのリポジトリを作る
 
 ```bash
-git clone <あなたのリポジトリ> myshop && cd myshop
+# 配布元の最新リリースの中身をもらう（git の履歴は付いてこない）
+curl -fsSL https://github.com/kurozumi/eccube-docker/archive/refs/tags/v1.0.0.tar.gz | tar -xz
+mv eccube-docker-1.0.0 myshop && cd myshop
+
+# 自分のリポジトリとして始める
+git init -b main
+git add -A
+git commit -m "eccube-docker v1.0.0 から開始"
+
+# GitHub に、非公開で置く（これが「あなたのリポジトリ」）
+gh repo create myshop --private --source=. --push
+```
+
+`v1.0.0` の部分は、そのとき出ている最新のリリース番号にしてください
+（https://github.com/kurozumi/eccube-docker/releases）。
+
+このあと `bin/init.sh` で、あなたのパソコンでお店が動きます（http://localhost:8080/）。
+
+### 2. サーバーで、あなたのリポジトリから持ってきて動かす
+
+```bash
+git clone <あなたのリポジトリの URL> myshop && cd myshop
 bin/init.sh          # .env を作って起動
 bin/publish.sh       # 公開する
 ```
+
+サーバーは**あなたのリポジトリから持ってくるだけ**です。配布元（`eccube-docker`）とは
+直接つながりません。
+
+細かい判断（`.env` の中身、公開方式、プラグインの扱い）は [導入手順](install.md)。
 
 ---
 
@@ -73,13 +114,42 @@ bin/deploy.sh --remote=shop:/srv/myshop     # あなたのパソコンから
 
 ---
 
+## この仕組み（eccube-docker）に更新があったとき
+
+配布元が `bin/` や `docker/` を直すことがあります。**サーバーではやりません。**
+あなたのパソコンで取り込んで、いつもの 3 手順で流します。
+
+```bash
+# あなたのパソコンで
+bin/self-update.sh --check     # 新しい版があるか、何が変わるか（まだ何も書き換えない）
+bin/self-update.sh             # 取り込む。あなたのコードと .env には触らない
+
+# 動くか確かめて
+bin/test.sh
+# ブラウザで http://localhost:8080/ を開く
+
+# いつもどおり
+git add -A && git commit -m "eccube-docker を v1.1.0 へ" && git push
+bin/deploy.sh --remote=shop:/srv/myshop
+```
+
+`self-update.sh` は「配布元が変えたファイル」だけを差し替えます。あなたが手を入れた
+ファイルが更新でも変わる場合は、上書きせずに止まって知らせます。
+`.env` に新しい項目が増えていたら一覧で出るので、必要なものを自分で足してください。
+
+つまり流れはいつも同じです:
+
+```
+配布元 ──(self-update)──▶ あなたのパソコン ──(push)──▶ あなたのリポジトリ ──(deploy)──▶ サーバー
+```
+
 ## ときどきやること
 
-| いつ | 何を |
-|---|---|
-| 月に 1 回くらい | `bin/self-update.sh --check` … この仕組み自体の新しい版があるか。あれば `bin/self-update.sh` |
-| EC-CUBE の新しい版が出たとき | [バージョンアップ](upgrade.md) を読んでから `bin/upgrade.sh`。**`deploy.sh` ではない** |
-| 毎日（自動） | `bin/backup.sh` を cron に。[バックアップ](backup.md) |
+| いつ | 何を | どこで |
+|---|---|---|
+| 月に 1 回くらい | `bin/self-update.sh --check`（上の節） | あなたのパソコン |
+| EC-CUBE の新しい版が出たとき | [バージョンアップ](upgrade.md) を読んでから `bin/upgrade.sh`。**`deploy.sh` ではない** | サーバー |
+| 毎日（自動） | `bin/backup.sh` を cron に。[バックアップ](backup.md) | サーバー |
 
 ---
 
