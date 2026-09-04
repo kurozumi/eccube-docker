@@ -42,8 +42,8 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
     「コマンドは通るのにブラウザだけ壊れる」という切り分けにくい状態になる。
     手で消すなら:
     ```bash
-    docker compose exec ec-cube runuser -u www-data -- php bin/console cache:clear --no-warmup
-    docker compose exec ec-cube runuser -u www-data -- php bin/console cache:pool:clear --all
+    bin/console.sh cache:clear --no-warmup
+    bin/console.sh cache:pool:clear --all
     docker compose exec ec-cube bash -c 'kill -USR2 1'   # php-fpm を graceful reload
     ```
   - **本番モードでは「キャッシュが古い」こと自体はエラーにならない。** 上の表はエラーが
@@ -76,9 +76,9 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
     | **後**の warmup 込み `cache:clear` | トレイトで足した getter が例外も出さずに空のコレクションを返す。`findBy()` は件数を返すのに `$Product->getBundleItems()` は 0 件になり、Processor が黙って何もしない |
 
     ```bash
-    docker compose exec ec-cube runuser -u www-data -- php bin/console cache:pool:clear --all
-    docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:enable --code=MyPlugin
-    docker compose exec ec-cube runuser -u www-data -- php bin/console cache:clear   # --no-warmup を付けない
+    bin/console.sh cache:pool:clear --all
+    bin/console.sh eccube:plugin:enable --code=MyPlugin
+    bin/console.sh cache:clear   # --no-warmup を付けない
     ```
 
     `bin/plugin.sh` の各コマンドはこれを両方やるので、基本はそちらを使えばよい。
@@ -99,7 +99,7 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
     状態でも致命エラーにならない。
   - スケルトン生成は従来どおり:
     ```bash
-    docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate "My Plugin" MyPlugin 1.0.0
+    bin/console.sh eccube:plugin:generate "My Plugin" MyPlugin 1.0.0
     ```
 - **デザイン（CSS/JS）** は `html/user_data/assets/{css,js}`。本体の `default_frame.twig` が
   `customize.css` / `customize.js` を（`style.css` の後に）自動読込するので、上書き Twig は不要。
@@ -124,6 +124,88 @@ EC-CUBE 4.3 の `src/Eccube/Kernel.php::configureContainer()` は、
 > この点は本環境で実証済み。`packages/` から `monolog:` を外し、
 > `app/Customize/Resource/config/services.yaml` にだけ書いた状態で
 > `bin/console debug:container monolog.logger.<channel>` がサービスを解決した。
+
+## コンテナの中に入る
+
+```bash
+bin/shell.sh              # ec-cube に www-data で入る（既定）
+bin/shell.sh --root       # ec-cube に root で入る
+bin/shell.sh db           # 他のサービス（db / redis / nginx / node ...）
+bin/shell.sh db --root
+```
+
+**既定を www-data にしてあるのは事故を避けるため。** root のまま `bin/console` や
+composer を打つと `var/cache` と `var/log` に root 所有のファイルができ、そのあと
+php-fpm（www-data）が書けなくなって**全ページ 500** になる。root が要るのは
+パッケージの導入や php-fpm への USR2 送信など限られた場面だけ。
+
+`www-data` を持たないイメージ（db / redis / nginx）には `-u` を渡さない。渡すと
+「unable to find user」で入れない。`nginx` と `redis` は alpine なので `bash` が
+無く、`sh` に切り替える。ラッパーがどちらも見て決める。
+
+**コンテナが止まっていると `exec` は通らない。** そのときは使い捨てのコンテナで
+入る（ラッパーが自動で切り替え、その旨を表示する）。
+
+```bash
+docker compose run --rm --no-deps ec-cube bash
+```
+
+アップグレードに失敗してサイトが落ちているときはこちら。`bin/backup.sh` が画像を
+取るのに `run` を使っているのも同じ理由。
+
+素の形も残しておく。
+
+```bash
+docker compose exec ec-cube bash                  # root
+docker compose exec -u www-data ec-cube bash      # www-data
+docker compose exec db mysql -u root -p           # そのまま SQL
+docker compose exec redis redis-cli               # Doctrine のメタデータ
+docker compose exec redis-session redis-cli       # セッション
+```
+
+## migration を作る
+
+**独自の migration はホストの `app/DoctrineMigrations/` に置く。**
+
+```bash
+bin/console.sh doctrine:migrations:generate
+```
+
+`bin/console.sh` が `--namespace=CustomizeMigrations` を補う。開発では
+ホストへ rw で mount してあるので、**生成されたファイルはそのまま手元に出る**
+（Git 管理下）。
+
+**素の `bin/console` で `--namespace` を省くと本体側に作られる。** そちらは
+イメージの中なので、**ホストには現れず、次のビルドで消える。** その場では
+動くので気づきにくい。
+
+置き場所がねじれているのは意図的で、
+
+| | |
+| --- | --- |
+| ホスト `app/DoctrineMigrations/` | 自分で書くもの |
+| コンテナ `app/CustomizeMigrations` | 上の mount 先 |
+| コンテナ `app/DoctrineMigrations` | **本体同梱の 18 件**（触らない） |
+
+同じパスへ mount すると本体分を覆い隠すため、別名で載せて両方を登録している
+（`app/config/eccube/packages/doctrine_migrations.yaml`）。
+
+**`--diff` は勧めない。** 本体のスキーマは migration ではなくエンティティ定義が
+持っている（本体 migration に `CREATE TABLE` も `ALTER TABLE` も 1 件も無い）ので、
+diff を取ると本体の差分まで拾う。`up()` / `down()` は手で書く。
+
+流すとき:
+
+```bash
+bin/console.sh doctrine:migrations:migrate
+bin/console.sh doctrine:migrations:status
+```
+
+**Linux ホストでは所有者が www-data になることがある。** 手元で編集できない
+ときは `sudo chown $(id -u):$(id -g) app/DoctrineMigrations/Version*.php`。
+
+**プラグインでは基本は要らない。** エンティティ拡張とトレイトで列を足し、テーブルの
+作成は本体のプラグイン機構に任せる。migration が要るのは既存データの移行だけ。
 
 ---
 
