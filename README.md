@@ -69,6 +69,12 @@
 
 ## クイックスタート（開発）
 
+**この環境を配布物として受け取って使う側は [導入手順](docs/install.md) を見ること。**
+そちらは `git clone` せず、リリースから**自分のリポジトリ**として始める手順になっている
+（clone だと origin が配布元のままで、自分のコードを自分の GitHub で管理できない）。
+
+以下はこのリポジトリ自体を開発する場合。
+
 ```bash
 git clone <this-repo> eccube-docker && cd eccube-docker
 bin/init.sh                       # .env 作成・AUTH_MAGIC 生成・build & up
@@ -107,6 +113,7 @@ root が要るのはパッケージの導入など限られた場面だけで、
 
 | 文書 | 中身 |
 | --- | --- |
+| [導入手順](docs/install.md) | **使う人向けの入口。** 取得から公開まで、そのあとの更新の受け取り方 |
 | [カスタマイズ](docs/customize.md) | 本体を汚さずに実装を足す場所。Controller / Entity / テンプレート / 独自 CSS・JS / framework 級設定 / コンテナに入る / migration |
 | [バージョン切替 / バージョンアップ](docs/upgrade.md) | 運用中の店舗を上げる手順、切り戻し、プラグインの互換性 |
 | [本番デプロイ](docs/deploy.md) | どのサーバーでも同じ手順で公開する |

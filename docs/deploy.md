@@ -10,7 +10,7 @@
 
 ```bash
 # .env で公開方式を選ぶ（COMPOSE_PROFILES）
-bin/publish.sh   # docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+bin/publish.sh   # compose.prod.yaml を重ねて起動（配布イメージなら pull、なければ build）
 ```
 
 | プロファイル | 公開方式 | 開けるポート |
