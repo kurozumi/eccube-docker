@@ -1,3 +1,9 @@
+// **先頭のコメントは `/*!` で書くこと。** 普通の `//` や `/* */` はビルドで消えるので、
+// 生成物の側に「触るな」と書いておけない。`/*!` なら --style=compressed でも残る。
+/*! このファイルは frontend/scss/customize.scss からビルドされる生成物です。
+ *  直接編集せず、scss を編集して bin/assets.sh build（または watch）してください。
+ *  本体 default_frame.twig が style.css の後に自動読込します。 */
+
 // 独自スタイルのソース。ビルドすると
 //   html/user_data/assets/css/customize.css
 // になり、本体の default_frame.twig が style.css の「後」に自動で読み込みます。

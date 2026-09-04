@@ -103,6 +103,9 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
     ```
 - **デザイン（CSS/JS）** は `html/user_data/assets/{css,js}`。本体の `default_frame.twig` が
   `customize.css` / `customize.js` を（`style.css` の後に）自動読込するので、上書き Twig は不要。
+  **`customize.css` は生成物なので直接編集しない。** `build` と `watch` は同じ出力
+  （expanded）になるよう揃えてあるので、どちらで作っても Git に差分は出ない。
+  逆に片方だけ `--style` を変えると、**ビルドし直すたびに追跡ファイルが書き換わる。**
   scss ソースは `frontend/scss/`、ビルドは:
   ```bash
   bin/assets.sh build        # 一括ビルド → html/user_data/assets/css/customize.css
