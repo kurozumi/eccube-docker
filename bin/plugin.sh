@@ -518,6 +518,20 @@ PHP
         esac
     fi
 
+    # テーマコードに対応する静的物があるか。asset() の base_path は
+    # /html/template/<コード> の 1 本でフォールバックが無いので、無いと
+    # **サイトの CSS と画像が丸ごと 404** になる。ページ自体は 200 で開く。
+    tcode="$(docker compose exec -T ec-cube sh -c 'printf %s "${ECCUBE_TEMPLATE_CODE:-default}"' 2>/dev/null | tr -d '\r' || true)"
+    if [ -n "$tcode" ] && [ "$tcode" != "default" ]; then
+        if docker compose exec -T ec-cube test -f "/var/www/html/html/template/${tcode}/assets/css/style.css" 2>/dev/null; then
+            echo "[doctor] テーマ ${tcode}: 静的物あり"
+        else
+            echo "[doctor] テーマ ${tcode} の静的物がありません（html/template/${tcode}/assets/css/style.css）"
+            echo "           サイトの CSS と画像が 404 になっています。bin/theme.sh init で本体から写してください"
+            ng=1
+        fi
+    fi
+
     echo "[doctor] キャッシュを組み立て直します"
     clear_runtime_cache
     # **ここでは止まらない。** 点検の途中なので、失敗も所見として拾って先へ進む

@@ -51,6 +51,7 @@ services:
       DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-10.6.0}
       MAILER_DSN: ${MAILER_DSN:-null://null}
       ECCUBE_ADMIN_ROUTE: ${ECCUBE_ADMIN_ROUTE:-admin}
+      ECCUBE_TEMPLATE_CODE: ${ECCUBE_TEMPLATE_CODE:-default}
       ECCUBE_LOCALE: ${ECCUBE_LOCALE:-ja}
       # 前段 LB の IP/サブネットを信頼して X-Forwarded-* を honor（HTTPS 判定に必須）
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
@@ -90,6 +91,12 @@ services:
       # 同じ場所へビルドすると、店が画面から入れた CSS をビルドのたびに黙って消す。
       - ./html/user_data/assets/css:/var/www/html/html/user_data/assets/css
       - ./html/user_data/assets/js:/var/www/html/html/user_data/assets/js
+      # オリジナルテーマの静的物。asset() の base_path は /html/template/<テーマコード>
+      # の 1 本だけでフォールバックが無いので、テーマを変えるなら丸ごと要る
+      # （bin/theme.sh init が本体から写す）。**テーマコードは original 固定。**
+      # `${ECCUBE_TEMPLATE_CODE}` で可変にすると、default のとき本体のテーマを
+      # 空のディレクトリで覆い隠してサイトの CSS が丸ごと消える。
+      - ./html/template/original:/var/www/html/html/template/original:ro
       - ./app/config/eccube/packages:/opt/eccube-config/packages:ro
       # アップロード画像は全ホスト共有（下部 volumes を NFS/EFS ドライバに差し替える）
       - eccube_upload:/var/www/html/html/upload
@@ -109,6 +116,7 @@ services:
     volumes:
       - eccube_app:/var/www/html:ro
       - ./html/user_data:/var/www/html/html/user_data:ro
+      - ./html/template/original:/var/www/html/html/template/original:ro
       - eccube_upload:/var/www/html/html/upload:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:

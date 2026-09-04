@@ -20,6 +20,14 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
     黙って消える**。`customize.css` 先頭の `@import` がテーマを読み込む。
     **その `@import` を消さない／上に何も書かない**（先頭以外の `@import` は
     CSS の仕様で無効になり、テーマが丸ごと効かなくなる）。
+  - **オリジナルテーマ（コード `original` 固定）は twig と静的物で正反対。** twig は
+    `app/template/original/` に直すファイルだけ（フォールバックあり）。静的物は
+    `html/template/original/assets/` に**丸ごと**（`asset()` の base_path は 1 本で
+    フォールバック無し。1 ファイル欠けると 404）。`bin/theme.sh init` が本体から写し、
+    `.base` に版と sha256 を記録。**写しはフォールバック無しで勝ち続ける**ので、
+    `bin/upgrade.sh` の最後に `theme.sh diff` で本体側の変更を出す。
+    テーマの選択は `.env` の `ECCUBE_TEMPLATE_CODE`（管理画面の選択はコンテナ内 `.env` に
+    書かれ、upgrade で消える）。
   - **本体テーマの twig / scss はホストに無い。** `bin/ide-sync.sh` が参照用の写しを
     `.ide/` に作る（twig は `src/Eccube/Resource/template/`、scss は
     `html/template/default/assets/scss/`）。**写しを編集しても反映されない。**

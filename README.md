@@ -54,6 +54,7 @@
 │   └── scss/customize.scss
 ├── html/user_data/         # 独自 CSS/JS（本体が自動読込）
 │   └── assets/{css/{customize.css, customize-theme.css}, js/customize.js}
+├── html/template/original/ # オリジナルテーマの静的物（bin/theme.sh init が本体から写す）
 ├── docker/
 │   ├── php/{Dockerfile,php.ini,www-pool.conf.tmpl,docker-entrypoint.sh}
 │   ├── nginx/{default.conf,lb.conf.example}
