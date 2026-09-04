@@ -9,7 +9,16 @@
 #   - pull_request  … Dockerfile を壊していないか確かめるだけ（push しない）。
 #   - 手動実行      … 系列を指定して試し焼き。**追跡タグは動かさない**（sha だけ）。
 #
-#   main への push では動かさない。動かすと、利用者が引くものが予告なく変わる。
+#   ブランチへの push では動かさない。main で動かすと利用者が引くものが予告なく
+#   変わり、保守ブランチで動かすと直接 push のたびに回る。
+#
+# **`pull_request` に `types` を必ず書くこと。** 省くと既定の活動タイプに
+# `synchronize` が入り、**PR ブランチへ push するたびに matrix 全ジョブが回る。**
+# `push:` を消しただけでは止まらない。4.4 の実ビルドは 1 回 3 分半かかる。
+#
+# その代わり、**PR を開いたあとに Dockerfile を直しても CI は回らない。**
+# チェックの結果は最新コミットのものとは限らない。確かめ直したいときは
+# 手動実行（workflow_dispatch）を使う。
 #
 # 生成タグ（<owner>/<repo> は GitHub の所有者とリポジトリ名）:
 #   ghcr.io/<owner>/<repo>/ec-cube:4.3-v1.2.0  … 固定。**利用者はこれを指定する**
@@ -27,6 +36,7 @@ on:
   push:
     tags: ["v*"]
   pull_request:
+    types: [opened, reopened]
     paths:
       - "docker/php/**"
       - ".github/workflows/build-image.yml"
@@ -36,6 +46,13 @@ on:
         description: "対象の系列（空なら全系列）。例: 4.4"
         required: false
         default: ""
+
+# 同じ ref で走っているものは、新しいほうだけ残す（実行時間ぶん課金されるため）。
+# **リリース（タグ）は止めない。** タグごとに ref が違うので group も別になるが、
+# 取り違えないよう cancel は pull_request のときだけに限定する。
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
