@@ -203,6 +203,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 
 | 文書 | 中身 |
 |---|---|
+| `docs/install.md` | 利用者向けの導入手順（取得 → 起動 → 更新の受け取り） |
 | `docs/customize.md` | 本体を汚さずに実装を足す場所、framework 級設定 |
 | `docs/upgrade.md` | バージョン切替とバージョンアップ、切り戻し |
 | `docs/deploy.md` | 本番デプロイ |
