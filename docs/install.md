@@ -35,16 +35,53 @@ ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-v1.0.0
 
 ---
 
-## 1. 取得する
+## 1. 自分のリポジトリを作る
+
+**`git clone` しない。** clone すると origin が配布元のままで、あなたのコードを
+あなたの GitHub で管理できない。**リリースの中身だけを取り出して、自分のリポジトリ
+として始める。**
 
 ```bash
-git clone <配布元のリポジトリ> eccube-docker
-cd eccube-docker
+# 1) リリースを取得する（git 履歴は付いてこない）
+curl -fsSL https://github.com/kurozumi/eccube-docker/archive/refs/tags/v1.0.0.tar.gz | tar -xz
+mv eccube-docker-1.0.0 myshop && cd myshop
+
+# 2) 自分のリポジトリとして初期化する
+git init -b main
+git add -A
+git commit -m "eccube-docker v1.0.0 から開始"
+
+# 3) 自分の GitHub へ。**非公開で作る**（店のコードと設定が入るため）
+gh repo create myshop --private --source=. --push
 ```
 
 `app/`（Customize / template / DoctrineMigrations / Plugin）と
-`html/user_data`（独自 CSS/JS）は**あなたの成果物**なのでここで Git 管理する。
+`html/user_data`（独自 CSS/JS）は**あなたの成果物**なので、ここで Git 管理する。
 EC-CUBE 本体はイメージの中にあり、このリポジトリには 1 ファイルも入らない。
+
+### なぜ clone / fork / テンプレートではないのか
+
+| 方法 | 問題 |
+|---|---|
+| `git clone` | origin が配布元のまま。あなたの履歴に配布元の履歴が丸ごと混ざる |
+| fork | **公開リポジトリの fork は非公開にできない。** 店のコードを置く場所として使えない |
+| テンプレート | **リリースではなく `main` の先頭が複製される。** `main` が最後のタグより進んでいると、`VERSION` は `v1.0.0` なのに中身が違う状態になり、`bin/self-update.sh` がその差分を「あなたの変更」と判定して止まる |
+
+`bin/self-update.sh` は **git を使わない**（Releases の tarball を取ってきて突き合わせる）。
+配布元とは git 上の関係を持たなくてよいので、tarball から始めるのが一番素直になる。
+`ECCUBE_DOCKER_REPO` を origin から推測しないのも同じ理由で、**あなたの origin は
+あなたのリポジトリであって、配布元ではない**。
+
+### 決めておくこと
+
+- **`.env` はリポジトリに入らない**（`.gitignore` 済み）。シークレットの控えは
+  パスワードマネージャなど別の場所に置く。**`.env` を失うと DB のパスワードが分からなくなる。**
+- **`app/Plugin/*` も既定では追跡しない。** 買ったプラグインはそれぞれの提供元が持つもの
+  だという前提。自分で開発するプラグインは、別リポジトリにして `bin/plugin.sh add` で
+  入れるか、`.gitignore` の該当行を外して一緒に管理する。**どちらでもよいが、最初に
+  決めておくこと。**
+- **配布元が非公開なら**、`gh auth token` などで取った値を `GITHUB_TOKEN` に入れておく
+  （取得も `bin/self-update.sh` も、あれば使う）。
 
 ## 2. 設定を作る
 
@@ -161,6 +198,23 @@ docker compose up -d --force-recreate
 
 単一ファイルの bind mount（`phpunit.xml` など）はホスト側で書き換えても inode が変わって
 コンテナ側へ反映されないことがあり、中途半端な内容を掴んだまま起動する。
+
+### 更新を自分のリポジトリに残す
+
+`bin/self-update.sh` は作業ツリーのファイルを書き換えるだけで、**コミットはしない。**
+何が変わったのかを見てから、あなたのコミットとして残す。
+
+```bash
+git diff --stat        # 何が変わったか
+bin/test.sh            # 動くか
+git add -A
+git commit -m "環境を v1.1.0 へ更新"
+git push
+```
+
+こうしておくと、**次の更新で「あなたが変更したファイル」を正しく判定できる**
+（判定は配布元のリリースとの突き合わせなので、コミットの有無そのものには依存しないが、
+更新が壊れたときに `git revert` で戻せるのはコミットしてある場合だけ）。
 
 ---
 

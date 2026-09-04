@@ -69,6 +69,12 @@
 
 ## クイックスタート（開発）
 
+**この環境を配布物として受け取って使う側は [導入手順](docs/install.md) を見ること。**
+そちらは `git clone` せず、リリースから**自分のリポジトリ**として始める手順になっている
+（clone だと origin が配布元のままで、自分のコードを自分の GitHub で管理できない）。
+
+以下はこのリポジトリ自体を開発する場合。
+
 ```bash
 git clone <this-repo> eccube-docker && cd eccube-docker
 bin/init.sh                       # .env 作成・AUTH_MAGIC 生成・build & up
