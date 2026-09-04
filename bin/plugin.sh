@@ -302,8 +302,19 @@ case "$cmd" in
         echo "[plugin] 注意: $dir は git 管理外（手動で最新化してください）"
     fi
     prepare_plugin_command
-    ec eccube:plugin:update --code="$code" || true
-    ec eccube:plugin:schema-update --code="$code" || true
+    # **`<code>` は位置引数。** 4.4 の update / schema-update に --code は無く、
+    # 付けると「The "--code" option does not exist」で落ちる。
+    # **失敗を握りつぶさない。** 以前は `|| true` で流していたので、CRITICAL が
+    # 2 行出たあとに「更新完了」と表示され、dtb_plugin の version も
+    # PluginManager::update() も動かないままだった（実際にそうなった）。
+    # ファイルは pull で新しくなっているので、失敗してもキャッシュは組み立て直す
+    # （組み立てないと、消えたクラスを参照したコンテナが残って落ちる）。
+    if ! ec eccube:plugin:update "$code"; then
+        settle
+        die "eccube:plugin:update が失敗しました。ファイルは新しくなっています（キャッシュは組み立て直しました）。
+       上のエラーを直してから、もう一度 bin/plugin.sh update $code"
+    fi
+    ec eccube:plugin:schema-update "$code" || echo "[plugin] 注意: schema-update が失敗しました（スキーマを持たないプラグインなら無視してよい）"
     settle
     echo "[plugin] 更新完了: $code"
     ;;
