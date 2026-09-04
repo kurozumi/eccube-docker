@@ -16,7 +16,8 @@
   | `app/template/` | `app/template` | テーマ・テンプレート上書き（開発は rw） |
   | `app/DoctrineMigrations/` | `app/CustomizeMigrations` | 独自マイグレーション（開発は rw）。本体同梱の `app/DoctrineMigrations` を隠さないため別パスへ載せる |
   | `app/Plugin/` | `app/Plugin` | プラグイン（開発は rw、生成・導入可） |
-  | `app/config/eccube/packages/` | 同左（entrypoint がマージ） | monolog / cache / trusted_proxies 等の framework 級設定 |
+  | `app/config/eccube/packages/` | 同左（entrypoint がマージ） | monolog / trusted_proxies 等の framework 級設定（常に入る） |
+  | `app/config/eccube/optional/` | 同左（`COMPOSE_PROFILES` にあるものだけ） | redis / messenger など、無い環境で壊れる設定 |
   | `html/user_data/` | `html/user_data` | 独自 CSS/JS（本体が自動読込。ec-cube/nginx/caddy へ） |
 
   アップロード画像（`html/upload`）は bind ではなく**専用ボリューム `eccube_upload`**

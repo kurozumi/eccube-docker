@@ -52,7 +52,7 @@ x-eccube-environment: &eccube-environment
   DB_USER: ${DB_USER:-eccube}
   DB_PASSWORD: ${DB_PASSWORD:-eccube_pass}
   DB_NAME: ${DB_NAME:-eccube_db}
-  # Symfony アプリキャッシュの Redis 共有（app/config/eccube/packages/cache.yaml が参照）
+  # Symfony アプリキャッシュの Redis 共有（optional/redis/redis_cache.yaml が参照。redis プロファイルのときだけ）
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
   # セッション保存用 Redis（Tier 2）。app/Customize/Resource/config/services.yaml が参照。
   # キャッシュ用 redis とは別インスタンス（永続化・noeviction）を既定にする。

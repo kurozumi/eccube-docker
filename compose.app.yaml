@@ -9,7 +9,7 @@ x-logging: &default-logging
 # 共有サービス」を指す（このファイルには db/redis を含めない）。
 #
 #   使い方（各アプリホスト）:
-#     docker compose -f compose.app.yaml up -d --build   # or 事前に push した image を pull
+#     docker compose -f compose.app.yaml pull ec-cube && docker compose -f compose.app.yaml up -d
 #
 #   前提: .env に外部エンドポイントを設定しておく（.env.example の「複数ホスト」節を参照）:
 #     DB_HOST / DB_USER / DB_PASSWORD / DB_NAME  … 共有 DB
@@ -32,7 +32,7 @@ services:
     # ECCUBE_IMAGE 未指定ならローカル build（従来どおり）。
     # **`latest` は作っていない。** 4.2/4.3/4.4 が並行して現役なので、
     # 単一の「最新」を置くと系列をまたぐ更新を黙って引き当てることになる。
-    image: ${ECCUBE_IMAGE:-eccube-ec-cube:local}
+    image: ${ECCUBE_IMAGE:-eccube-ec-cube}
     build:
       context: .
       dockerfile: docker/php/Dockerfile

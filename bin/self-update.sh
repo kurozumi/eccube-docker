@@ -15,6 +15,7 @@
 # 触るもの・触らないもの:
 #   上書きする … bin/ docker/ docs/ .github/ compose*.yaml phpunit*.xml
 #                 .env.example .gitignore README.md CLAUDE.md VERSION
+#                 app/config/eccube/{packages,optional}（環境側の設定）
 #                 ただし**その中で配布元が変えたファイルだけ**。あなたが
 #                 bin/ に置いた独自スクリプトなどは触らない。
 #   触らない   … .env / app/ / html/user_data / frontend/ / var/ / backups/ / .ide/
@@ -54,6 +55,11 @@ ENV_PATHS=(
     docker
     docs
     .github
+    # framework 級設定と任意機能の設定。app/ の下だが**環境側**のもので、
+    # entrypoint が参照する（optional/ が無いと redis / messenger を有効にできない）。
+    # 店が logging.yaml などを直していれば、衝突として止まる。
+    app/config/eccube/packages
+    app/config/eccube/optional
     compose.yaml
     compose.override.yaml
     compose.prod.yaml

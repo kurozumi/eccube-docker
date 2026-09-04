@@ -250,7 +250,7 @@ matrix:
 
 手順 5 を**公開前**にやるのは、先に `up -d` すると新コードと旧スキーマが噛み合わない状態で
 nginx が公開され、スキーマ更新が終わるまで全ページ 500 を返すため。`compose run` の
-使い捨てコンテナは `ec-cube` の `depends_on`（db / redis / redis-session）しか連れて
+使い捨てコンテナは `ec-cube` の `depends_on`（db。redis / redis-session は有効なときだけ）しか連れて
 こないので、nginx と worker を上げずに DB だけ整合させられる。
 
 > それでも `down` から `up -d` までの**ダウンタイムそのものは無くならない**（接続断に
