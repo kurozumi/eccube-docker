@@ -471,6 +471,53 @@ PHP
         echo "[doctor] エンティティ拡張: 反映済み"
     fi
 
+    # 管理画面が本番で書いたファイルのうち、git にまだ入っていないもの。
+    #
+    # CSS 管理 / JS 管理 / ページ管理 / ブロック管理はディスクに書く。bind mount
+    # なのでホストにはあるが、コミットされない限り**このサーバーにしか無い**。
+    # bin/backup.sh には入るが、引っ越しを git だけでやると消える。
+    # 壊れているわけではないので warn 止まり。
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        dirty="$(git status --porcelain -- app/template html/user_data/assets/css html/user_data/assets/js 2>/dev/null || true)"
+        if [ -n "$dirty" ]; then
+            echo "[doctor] 管理画面が書いたと思われる、コミットされていないファイル:"
+            printf '%s\n' "$dirty" | sed 's/^/           /'
+            echo "           git にも残すならコミット。残さないなら bin/backup.sh には入っています"
+            warn=1
+        else
+            echo "[doctor] 管理画面が書いたファイル: すべてコミット済み"
+        fi
+    fi
+
+    # customize.css の先頭が @import か。
+    #
+    # customize.css は管理画面（CSS 管理）が丸ごと書き換えるファイルで、テーマ
+    # （customize-theme.css）は先頭の @import で読み込んでいる。CSS の仕様上、
+    # @import は他のルールより前に無いと**黙って無視される**。店が上に書き足すと
+    # テーマが丸ごと効かなくなるが、エラーは出ず、ページも 200 で開く。
+    css=html/user_data/assets/css/customize.css
+    if [ -f "$css" ]; then
+        # コメントと空行を除いた最初の 1 行を見る。**sed は使わない。** 1 行ずつしか
+        # 見ないので、複数行の /*! ... */ を剥がせず、必ず「先頭が @import でない」と
+        # 誤判定する（実際にそうなった）。perl なら複数行をまたいで消せる。
+        if command -v perl >/dev/null 2>&1; then
+            first="$(perl -0pe 's{/\*.*?\*/}{}gs' "$css" | grep -vE '^[[:space:]]*$' | head -1 || true)"
+        else
+            first="@import"   # perl が無ければ判定しない（誤検知で ng にしない）
+            echo "[doctor] customize.css: perl が無いので @import の位置は確認していません"
+        fi
+        case "$first" in
+            @charset*|@import*) echo "[doctor] customize.css: @import が先頭にあります" ;;
+            *)
+                echo "[doctor] customize.css の先頭が @import ではありません:"
+                echo "           ${first:-（空）}"
+                echo "           テーマ（customize-theme.css）が読み込まれていません。"
+                echo "           管理画面（CSS 管理）で、@import url(\"customize-theme.css\"); を 1 行目に戻してください"
+                ng=1
+                ;;
+        esac
+    fi
+
     echo "[doctor] キャッシュを組み立て直します"
     clear_runtime_cache
     # **ここでは止まらない。** 点検の途中なので、失敗も所見として拾って先へ進む
