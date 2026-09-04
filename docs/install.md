@@ -151,7 +151,42 @@ bin/plugin.sh list                                  # 導入状況
 あり、怠るとコマンドが異常終了するか、トレイトで足した getter が**例外も出さずに
 空のコレクション**を返す（詳細は [カスタマイズ](customize.md)）。
 
-## 6. 公開する（本番のみ）
+## 6. デザインを直す
+
+**書き手が 2 つあり、混ぜると片方が黙って消える。** 場所が分かれているので、そのとおりに使う。
+
+| 直したいもの | どこで | 触るファイル |
+|---|---|---|
+| ちょっとした CSS（本番の調整） | 管理画面 → コンテンツ管理 → **CSS 管理** | `html/user_data/assets/css/customize.css` |
+| 本格的なスタイル（scss で組む） | `frontend/scss/customize.scss` → `bin/assets.sh build` | `customize-theme.css`（生成物） |
+| テンプレート（twig） | `app/template/original/` に**直すファイルだけ**置く | 無いファイルは本体にフォールバックする |
+| テーマの画像・本体 CSS を差し替える | `bin/theme.sh init` で本体から写してから編集 | `html/template/original/assets/` |
+
+`customize.css` の 1 行目は `@import url("customize-theme.css");` で、これが scss 側を
+読み込む。**この行を消さない／上に何も書かない。** CSS の仕様上、先頭以外の `@import` は
+黙って無視され、テーマが丸ごと効かなくなる（`bin/plugin.sh doctor` が検出する）。
+
+### オリジナルテーマにする
+
+```bash
+bin/theme.sh init                 # 本体の静的物（110 ファイル・6MB）を html/template/original/ へ写す
+# .env に ECCUBE_TEMPLATE_CODE=original
+docker compose up -d
+git add html/template/original && git commit -m "オリジナルテーマ"
+```
+
+- **twig は丸ごと写さない。** 本体を上げたときに古いほうが勝ち続け、直ったはずの不具合が
+  戻る形でだけ現れる。直すファイルだけ `app/template/original/` に置く
+- **静的物は丸ごと要る。** `asset()` の参照先はテーマごとに 1 本でフォールバックが無く、
+  1 ファイル欠けるとその URL が 404 になる。だから `init` が全部写す
+- 写した版と各ファイルの sha256 を `.base` に記録してある。本体を上げたあと
+  `bin/theme.sh diff` で「自分が変えた／本体側で変わった／両方」が分かれて出る
+  （`bin/upgrade.sh` の最後に自動で出る）
+- **テーマの選択は `.env` の `ECCUBE_TEMPLATE_CODE` が正。** 管理画面のテンプレート管理は
+  コンテナ内の `.env` に書くので `bin/upgrade.sh` で消える。環境変数で渡してあると、
+  管理画面は「上書きされている」と表示して変更を拒否する。それでよい
+
+## 7. 公開する（本番のみ）
 
 ```bash
 bin/publish.sh
@@ -202,6 +237,27 @@ docker compose up -d --force-recreate
 単一ファイルの bind mount（`phpunit.xml` など）はホスト側で書き換えても inode が変わって
 コンテナ側へ反映されないことがあり、中途半端な内容を掴んだまま起動する。
 
+### バックアップと引っ越し
+
+```bash
+bin/backup.sh                          # ./backups/<日時>/ に 4 点セット
+bin/restore.sh backups/20260904-040000 # 戻す（確認プロンプトあり）
+```
+
+| ファイル | 中身 |
+|---|---|
+| `db.sql.gz` | DB |
+| `upload.tar.gz` | アップロード画像 |
+| `admin-files.tar.gz` | **管理画面がディスクに書いたもの**（CSS/JS 管理・ページ管理・ブロック管理） |
+| `container.env` | コンテナ内 `.env`（テーマ切替・セキュリティ設定の書き先）。**自動では戻さない** |
+
+**本番で管理画面が書いたファイルは、そのサーバーの作業ツリーにしか無い。**
+git にも入れるならコミットする（`bin/plugin.sh doctor` が未コミット分を挙げる）。
+入れなくても `admin-files.tar.gz` に入る。**どちらにも入っていない状態を作らないこと。**
+
+引っ越しは「clone → `bin/init.sh` → `bin/restore.sh <退避先>`」で完結する。
+`container.env` の差分は `restore.sh` が出すので、必要なものはホストの `.env` に書く。
+
 ### 更新を自分のリポジトリに残す
 
 `bin/self-update.sh` は作業ツリーのファイルを書き換えるだけで、**コミットはしない。**
@@ -231,6 +287,7 @@ git push
 | 直したのに反映されない | `bin/plugin.sh reload` — 本番モードでは OPcache と Redis 上のメタデータが残り、**足したサービスやタグだけが例外も 500 も出さずに効かない** |
 | フロントだけ 503（メンテナンス中） | `bin/plugin.sh doctor` — 中断した操作で `.maintenance` が残っている。**管理画面は素通りできるので気づきにくい** |
 | コンテナに繋がらない | `bin/console.sh` などが、どのスタックで動いているかを名前ごと出す。`.env` に `COMPOSE_PROJECT_NAME` を書いて固定する |
+| CSS が丸ごと効かない・テーマを変えたら消えた | `bin/plugin.sh doctor` — `customize.css` の先頭が `@import` か、テーマコードに対応する静的物があるか、を見る。**どちらもページは 200 で開く**ので疎通確認では分からない |
 | テストが動かない | `bin/test.sh` を使う。素の `vendor/bin/phpunit` はコンテナの `APP_ENV=prod` が勝って prod カーネルで起動し、`WebTestCase` 系が全部落ちる |
 
 **`bin/reset.sh` と `bin/switch-version.sh` は DB・画像・セッションを消す。**
