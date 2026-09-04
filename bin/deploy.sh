@@ -169,6 +169,13 @@ ec php bin/console eccube:generate:proxies
 log "キャッシュを消して温め直します（数分かかります。止めないでください）..."
 bin/plugin.sh reload
 
+# ── 7b. プラグインテンプレートの写しの差分 ──
+# app/template/plugin/ の写しはプラグインを更新しても勝ち続ける。ここで見せる。
+if [ -f app/template/plugin/.base ]; then
+    log "プラグインテンプレートの写しと、プラグイン側との差分:"
+    bin/plugin.sh template diff || true
+fi
+
 # ── 8. 疎通 ──
 # メンテナンス中なので bin/healthcheck.sh は 503 を見てしまう。token cookie を付けて
 # 本体を通し、フロントと商品一覧が実際に描画できるかを見る（管理画面はもともと素通り）。

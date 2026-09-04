@@ -27,8 +27,10 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
     git clone git@github.com:you/my-awesome-plugin.git app/Plugin/MyAwesomePlugin
     ```
   - 導入したプラグインは各自の repo で管理する前提で、eccube-docker 側の git には追跡させない
-  - **プラグインの画面を直したいときは `app/template/plugin/<Code>/`。** プラグインの
-    ファイルは触らない。本体が有効なプラグインごとに、この順で twig のパスを登録する
+  - **プラグインの画面やメール文面を直すときは `app/template/plugin/<Code>/` に置く。
+    プラグインは触らない。管理画面からも直さない（履歴が残らないため）。**
+
+    本体は有効なプラグインごとに、この順で twig のパス（`@<Code>`）を登録する
     （`src/Eccube/DependencyInjection/EccubeExtension.php` の `configureTwigPaths`）:
 
     ```
@@ -36,42 +38,31 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
     app/Plugin/<Code>/Resource/template/   ← プラグイン自身のもの
     ```
 
-    `@<Code>/admin/config.twig` のような参照はこの順で探されるので、**直すファイルだけ**
-    同じ相対パスで置けばよい。無いファイルはプラグイン側にフォールバックする。
-    `app/template/<テーマ>/` は**本体テーマ**の上書き場所で、役割が違う。混ぜない。
+    直すファイルだけ同じ相対パスで置けばよく、無いファイルはプラグイン側に
+    フォールバックする。`app/template/<テーマ>/` は**本体テーマ**の上書き場所で役割が違う。
+
+    ```bash
+    bin/plugin.sh template add CustomerGroup44 admin/config.twig   # 原本を写す（reload 込み）
+    # app/template/plugin/CustomerGroup44/admin/config.twig を直す
+    bin/plugin.sh template diff                                     # プラグインを更新したあとに
+    ```
+
+    `add` は写した時点の原本の sha256 を `app/template/plugin/.base` に記録する。
+    **写しはプラグインを更新しても勝ち続ける**ので、`diff` が「自分が変えた／プラグイン側で
+    変わった／両方（衝突）」を分けて出す。`bin/deploy.sh` の最後に自動で出る。
 
     落とし穴が 3 つ:
-    - **ディレクトリの有無はコンテナのコンパイル時に見ている**（`file_exists`）。あとから
-      作っただけでは効かず、`bin/plugin.sh reload` が要る。本番モードでは「例外も出ずに
-      効かない」型
-    - **無効なプラグインは登録されない**（有効なものだけ回している）
-    - **丸ごと写すと、プラグインを更新しても古いほうが勝ち続ける。** 本体テーマの上書きと同じ罠
+    - **ディレクトリの有無はコンテナのコンパイル時に見ている**（`file_exists`）。手でファイルを
+      置いただけでは効かず、`bin/plugin.sh reload` が要る（`template add` は済ませる）
+    - **無効なプラグインは登録されない**
+    - **丸ごと写さない。** 直すファイルだけ。`add` は 1 ファイルずつしか写さない
 
-    **プラグインテンプレート編集プラグイン（`PluginTemplateEditor`）との関係。** あちらは
-    同じことを管理画面から DB に保存する方式で、`twig.loader` の priority が 100 なので
-    **ファイルより先に読まれる。** 優先順位は:
-
-    ```
-    DB（PluginTemplateEditor）> app/template/plugin/<Code>/ > app/Plugin/<Code>/Resource/template/
-    ```
-
-    | | `app/template/plugin/` | PluginTemplateEditor |
-    |---|---|---|
-    | 誰が | 開発者 | 店のスタッフ |
-    | どこで | ファイル → git → `bin/deploy.sh` | 管理画面、その場で反映 |
-    | 残る場所 | git と `admin-files.tar.gz` | DB（`db.sql.gz`） |
-    | 反映 | `reload` が要る | 即時（保存前に Twig を組み立てて検査） |
-
-    **同じテンプレートを両方で直さない。** DB 側が黙って勝つ。開発フローが
-    「手元で直して deploy」なら `app/template/plugin/` で足りる。管理画面から直せる
-    必要が無いなら、編集機能としてのプラグインは要らない。
-
-    **ただしプラグインを外すのは別の話。** `PluginTemplateEditor` は編集機能のほかに
-    `ThemePathFallbackLoader` を持っていて、**テーマを変えたときにプラグインのメール
-    文面が消える**問題（本体が `dtb_mail_template.file_name` をテーマ配下へ書くため、
-    新しいテーマには写しが無い）を、プラグインの中の原本へフォールバックして防いでいる。
-    CLAUDE.md の「プラグインはテーマへ何も写さない」はこれで成り立っている。
-    外すなら、その役目をどうするかを先に決めること。
+    **`PluginTemplateEditor` の編集画面は使わない。** DB に保存された上書きは
+    `twig.loader` の priority 100 で**ファイルより先に読まれる**ので、両方で直すと DB が
+    黙って勝つ。編集画面は次の版で外し、プラグインには「守り」だけを残す:
+    テーマ相対のメール名をプラグインの原本へ振り替えるローダー（両方の名前の形を
+    `@<Code>/...` に正規化する）、本体がテーマへ書く写しを消す処理、本文欄を伏せる処理。
+    `dtb_page` の行はレイアウト・ブロック配置・SEO のためのもので、置き場が変わっても要る。
     （`.gitignore` で `app/Plugin/*` 除外済み）。
   - **開発を速く回すコツ**: `.env` を `APP_ENV=dev` にすると Twig/テンプレート変更は即反映。
     PHP・サービス・config を変えたら `bin/plugin.sh reload`。

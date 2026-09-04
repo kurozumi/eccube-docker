@@ -85,6 +85,7 @@ bin/publish.sh       # 公開する
 |---|---|
 | 見た目（CSS） | `frontend/scss/customize.scss` → `bin/assets.sh build` |
 | 画面の部品（twig） | `app/template/original/` に**直すファイルだけ**置く |
+| プラグインの画面・メール文面 | `bin/plugin.sh template add <Code> <ファイル>` で写してから直す。**管理画面からは直さない** |
 | 動き（PHP） | `app/Customize/` |
 | プラグイン | `bin/plugin.sh add <URL>` |
 

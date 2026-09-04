@@ -16,6 +16,13 @@
 #   bin/plugin.sh list                  導入状況（ファイル + dtb_plugin）を表示
 #   bin/plugin.sh doctor                システムエラーが出たときの点検と修復
 #
+#   プラグインのテンプレートを直す（プラグインは触らず、app/template/plugin/ に置く）:
+#   bin/plugin.sh template add <Code> <相対パス>   原本を写して直せる状態にする（reload 込み）
+#   bin/plugin.sh template diff                    自分が変えた / プラグイン側で変わった / 衝突
+#   bin/plugin.sh template list                    写してあるもの
+#   相対パスは app/Plugin/<Code>/Resource/template/ からのもの（例: admin/config.twig）。
+#   **管理画面からは直さない**（履歴が残らない）。ファイルに置いて git で持つ。
+#
 # 開発を高速に回すコツ: .env を APP_ENV=dev にすると Twig/テンプレート変更は即反映。
 # PHP/サービス/config を変えたら bin/plugin.sh reload。
 # 各コマンドは prod と test の var/cache に加えて、キャッシュプール（Redis 上の
@@ -604,6 +611,74 @@ PHP
     else
         echo "[doctor] 問題なし"
     fi
+    ;;
+
+  # ── プラグインのテンプレートを app/template/plugin/ で上書きする ──
+  #
+  # 本体は有効なプラグインごとに app/template/plugin/<Code>/ を先、
+  # app/Plugin/<Code>/Resource/template/ を後で twig のパス（@<Code>）に登録する
+  # （EccubeExtension::configureTwigPaths）。直すファイルだけ写して置けば、
+  # プラグインを触らずに画面を変えられる。
+  #
+  # **写しはプラグインを更新しても勝ち続ける。** 写した時点の原本の sha256 を
+  # app/template/plugin/.base に記録し、diff で「自分が変えた」「プラグイン側で
+  # 変わった」「両方（衝突）」を分けて出す（bin/theme.sh と同じ構造）。
+  #
+  # ディレクトリの有無はコンテナのコンパイル時に見られるので、add の最後に reload する。
+  template)
+    tbase=app/template/plugin/.base
+    if command -v sha256sum >/dev/null 2>&1; then tsha="sha256sum"; else tsha="shasum -a 256"; fi
+    # shellcheck disable=SC2086
+    fsha() { $tsha "$1" | cut -d' ' -f1; }
+    # 先頭で shift 済みなので、サブコマンドは $1、以降は $2 $3
+    case "${1:-}" in
+      add)
+        code="${2:-}"; rel="${3:-}"
+        [ -n "$code" ] && [ -n "$rel" ] || die "使い方: bin/plugin.sh template add <Code> <相対パス>   例: template add CustomerGroup44 admin/config.twig"
+        src="app/Plugin/${code}/Resource/template/${rel}"
+        dst="app/template/plugin/${code}/${rel}"
+        [ -f "$src" ] || die "原本がありません: ${src}
+       相対パスは app/Plugin/${code}/Resource/template/ からのものです。候補:
+$(cd "app/Plugin/${code}/Resource/template" 2>/dev/null && find . -name '*.twig' | sed 's#^\./#         #' | head -20)"
+        [ -f "$dst" ] && die "すでに写してあります: ${dst}（直すならそのファイルを編集。差分は template diff）"
+        mkdir -p "$(dirname "$dst")"
+        cp "$src" "$dst"
+        printf '%s  %s/%s\n' "$(fsha "$src")" "$code" "$rel" >> "$tbase"
+        echo "[plugin] 写しました: ${dst}"
+        echo "[plugin] ここを直してください。原本（${src}）は触らないこと。"
+        echo "[plugin] 登録はコンパイル時に決まるので、キャッシュを組み立て直します..."
+        settle
+        echo "[plugin] 完了。git add ${dst} ${tbase} して控えを残してください。"
+        ;;
+      diff)
+        [ -f "$tbase" ] || { echo "[plugin] 写しはありません（bin/plugin.sh template add）"; exit 0; }
+        mine=""; theirs=""; both=""; gone=""
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            bsha="${line%%  *}"; path="${line#*  }"
+            code="${path%%/*}"; rel="${path#*/}"
+            ours="app/template/plugin/${path}"; orig="app/Plugin/${code}/Resource/template/${rel}"
+            if [ ! -f "$orig" ]; then gone="${gone}    ${path}\n"; continue; fi
+            m=0; t=0
+            [ -f "$ours" ] && [ "$(fsha "$ours")" != "$bsha" ] && m=1
+            [ "$(fsha "$orig")" != "$bsha" ] && t=1
+            [ "$m" = 1 ] && mine="${mine}    ${path}\n"
+            [ "$t" = 1 ] && theirs="${theirs}    ${path}\n"
+            [ "$m" = 1 ] && [ "$t" = 1 ] && both="${both}    ${path}\n"
+        done < "$tbase"
+        if [ -z "$mine$theirs$gone" ]; then echo "[plugin] 差分なし。写したときのままで、プラグイン側も変わっていません。"; exit 0; fi
+        [ -n "$mine" ]   && { echo "[plugin] あなたが変えたファイル:"; printf '%b' "$mine"; }
+        [ -n "$theirs" ] && { echo "[plugin] プラグイン側で変わったファイル。**いまはあなたの写しが勝っている**:"; printf '%b' "$theirs"
+                              echo "         比べる: diff app/Plugin/<Code>/Resource/template/<相対パス> app/template/plugin/<Code>/<相対パス>"; }
+        [ -n "$both" ]   && { echo "[plugin] **両方が変えたファイル（衝突）**。手で合わせてください:"; printf '%b' "$both"; }
+        [ -n "$gone" ]   && { echo "[plugin] プラグイン側から原本が消えたファイル（写しは無効かもしれない）:"; printf '%b' "$gone"; }
+        [ -n "$theirs" ] && echo "[plugin] 取り込んだら .base の行を更新: bin/plugin.sh template add をやり直すか、sha を書き換える"
+        ;;
+      list)
+        [ -f "$tbase" ] && sed 's/^[0-9a-f]*  /  /' "$tbase" || echo "[plugin] 写しはありません"
+        ;;
+      *) die "使い方: bin/plugin.sh template {add <Code> <相対パス> | diff | list}" ;;
+    esac
     ;;
 
   list)
