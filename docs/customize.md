@@ -27,6 +27,51 @@ EC-CUBE 本体を汚さずに独自の実装を足す場所と、その決まり
     git clone git@github.com:you/my-awesome-plugin.git app/Plugin/MyAwesomePlugin
     ```
   - 導入したプラグインは各自の repo で管理する前提で、eccube-docker 側の git には追跡させない
+  - **プラグインの画面を直したいときは `app/template/plugin/<Code>/`。** プラグインの
+    ファイルは触らない。本体が有効なプラグインごとに、この順で twig のパスを登録する
+    （`src/Eccube/DependencyInjection/EccubeExtension.php` の `configureTwigPaths`）:
+
+    ```
+    app/template/plugin/<Code>/            ← 先に登録 = 勝つ（店の上書き）
+    app/Plugin/<Code>/Resource/template/   ← プラグイン自身のもの
+    ```
+
+    `@<Code>/admin/config.twig` のような参照はこの順で探されるので、**直すファイルだけ**
+    同じ相対パスで置けばよい。無いファイルはプラグイン側にフォールバックする。
+    `app/template/<テーマ>/` は**本体テーマ**の上書き場所で、役割が違う。混ぜない。
+
+    落とし穴が 3 つ:
+    - **ディレクトリの有無はコンテナのコンパイル時に見ている**（`file_exists`）。あとから
+      作っただけでは効かず、`bin/plugin.sh reload` が要る。本番モードでは「例外も出ずに
+      効かない」型
+    - **無効なプラグインは登録されない**（有効なものだけ回している）
+    - **丸ごと写すと、プラグインを更新しても古いほうが勝ち続ける。** 本体テーマの上書きと同じ罠
+
+    **プラグインテンプレート編集プラグイン（`PluginTemplateEditor`）との関係。** あちらは
+    同じことを管理画面から DB に保存する方式で、`twig.loader` の priority が 100 なので
+    **ファイルより先に読まれる。** 優先順位は:
+
+    ```
+    DB（PluginTemplateEditor）> app/template/plugin/<Code>/ > app/Plugin/<Code>/Resource/template/
+    ```
+
+    | | `app/template/plugin/` | PluginTemplateEditor |
+    |---|---|---|
+    | 誰が | 開発者 | 店のスタッフ |
+    | どこで | ファイル → git → `bin/deploy.sh` | 管理画面、その場で反映 |
+    | 残る場所 | git と `admin-files.tar.gz` | DB（`db.sql.gz`） |
+    | 反映 | `reload` が要る | 即時（保存前に Twig を組み立てて検査） |
+
+    **同じテンプレートを両方で直さない。** DB 側が黙って勝つ。開発フローが
+    「手元で直して deploy」なら `app/template/plugin/` で足りる。管理画面から直せる
+    必要が無いなら、編集機能としてのプラグインは要らない。
+
+    **ただしプラグインを外すのは別の話。** `PluginTemplateEditor` は編集機能のほかに
+    `ThemePathFallbackLoader` を持っていて、**テーマを変えたときにプラグインのメール
+    文面が消える**問題（本体が `dtb_mail_template.file_name` をテーマ配下へ書くため、
+    新しいテーマには写しが無い）を、プラグインの中の原本へフォールバックして防いでいる。
+    CLAUDE.md の「プラグインはテーマへ何も写さない」はこれで成り立っている。
+    外すなら、その役目をどうするかを先に決めること。
     （`.gitignore` で `app/Plugin/*` 除外済み）。
   - **開発を速く回すコツ**: `.env` を `APP_ENV=dev` にすると Twig/テンプレート変更は即反映。
     PHP・サービス・config を変えたら `bin/plugin.sh reload`。
