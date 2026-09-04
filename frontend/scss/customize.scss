@@ -1,7 +1,19 @@
+// **先頭のコメントは `/*!` で書くこと。** 普通の `//` や `/* */` はビルドで消えるので、
+// 生成物の側に「触るな」と書いておけない。`/*!` なら --style=compressed でも残る。
+/*! このファイルは frontend/scss/customize.scss からビルドされる生成物です。
+ *  直接編集せず、scss を編集して bin/assets.sh build（または watch）してください。
+ *  customize.css の @import から読み込まれます。 */
+
 // 独自スタイルのソース。ビルドすると
-//   html/user_data/assets/css/customize.css
-// になり、本体の default_frame.twig が style.css の「後」に自動で読み込みます。
-// ＝ ここに書いた指定は本体テーマより優先されます（上書き Twig は不要）。
+//   html/user_data/assets/css/customize-theme.css
+// になります。
+//
+// **customize.css へは書き出しません。あちらは管理画面（コンテンツ管理 → CSS 管理）が
+// 直接書き換えるファイルで、本体の CssController が dumpFile しているためです。**
+// 同じ場所へビルドすると、店が画面から入れた CSS をビルドのたびに黙って消します。
+// customize.css の先頭にある @import がこのファイルを読み込みます。
+//
+// 順序は「テーマ（ここ）が先 → 店の追記が後」なので、**管理画面の調整が勝ちます。**
 //
 // ビルド:  bin/assets.sh build      （一括）
 // 監視:    bin/assets.sh watch      （保存で自動ビルド。ブラウザは手動リロード）

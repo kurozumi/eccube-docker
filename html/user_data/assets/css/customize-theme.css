@@ -1,0 +1,7 @@
+@charset "UTF-8";
+/*! このファイルは frontend/scss/customize.scss からビルドされる生成物です。
+ *  直接編集せず、scss を編集して bin/assets.sh build（または watch）してください。
+ *  customize.css の @import から読み込まれます。 */
+:root {
+  --customize-accent: #ec6a29;
+}

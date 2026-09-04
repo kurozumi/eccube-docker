@@ -53,7 +53,7 @@
 │   ├── package.json        # Dart Sass ビルド定義
 │   └── scss/customize.scss
 ├── html/user_data/         # 独自 CSS/JS（本体が自動読込）
-│   └── assets/{css/customize.css, js/customize.js}
+│   └── assets/{css/{customize.css, customize-theme.css}, js/customize.js}
 ├── docker/
 │   ├── php/{Dockerfile,php.ini,www-pool.conf.tmpl,docker-entrypoint.sh}
 │   ├── nginx/{default.conf,lb.conf.example}
