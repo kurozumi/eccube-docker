@@ -37,7 +37,8 @@
   body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.85; -webkit-font-smoothing: antialiased; }
   a { color: var(--accent-deep); text-decoration-thickness: 1px; text-underline-offset: 3px; }
   a:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
+  @media (max-width: 640px) { .wrap { padding: 0 20px; } }
   code { font-family: var(--f-mono); font-size: .9em; background: var(--sunk); padding: 1px 6px; border-radius: 4px; color: var(--ink); }
 
   /* 主張したい語だけ浮かせる（Cloudflare の見出しのやり方） */
@@ -45,27 +46,27 @@
   .voice em.k { color: var(--accent-deep); }
 
   /* ── 冒頭 ── */
-  header.hero { padding: 88px 0 64px; background: linear-gradient(180deg, #FFF7F1 0%, #FFFFFF 70%); border-bottom: 1px solid var(--line); }
+  header.hero { padding: 104px 0 80px; background: linear-gradient(180deg, #FFF7F1 0%, #FFFFFF 70%); border-bottom: 1px solid var(--line); }
   .eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .12em; color: var(--ink-mute); margin: 0 0 20px; }
-  h1 { font-family: var(--f-display); font-weight: 900; font-size: clamp(32px, 5.6vw, 52px); line-height: 1.28; word-break: keep-all; overflow-wrap: anywhere; letter-spacing: -.005em; margin: 0 0 22px; text-wrap: balance; }
-  .lede { font-size: 18px; color: var(--ink-soft); max-width: 40em; margin: 0 0 32px; }
+  h1 { max-width: 20em; font-family: var(--f-display); font-weight: 900; font-size: clamp(32px, 5.2vw, 60px); line-height: 1.28; word-break: keep-all; overflow-wrap: anywhere; letter-spacing: -.005em; margin: 0 0 22px; text-wrap: balance; }
+  .lede { font-size: 19px; color: var(--ink-soft); max-width: 44em; margin: 0 0 32px; }
   .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
   .btn { display: inline-block; padding: 13px 24px; border-radius: 6px; font-family: var(--f-display); font-weight: 700; font-size: 15px; text-decoration: none; background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); box-shadow: 0 2px 0 var(--accent-deep); }
   .btn.ghost { background: #FFFFFF; color: var(--ink); border-color: var(--line); box-shadow: none; }
 
   /* ── 節 ── */
-  section { padding: 64px 0; }
+  section { padding: 80px 0; }
   section.band { background: var(--band); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   h2 { font-family: var(--f-display); font-weight: 900; font-size: clamp(26px, 3.6vw, 34px); line-height: 1.35; margin: 0 0 10px; text-wrap: balance; }
-  .sub { color: var(--ink-soft); margin: 0 0 32px; max-width: 44em; font-size: 16.5px; }
+  .sub { color: var(--ink-soft); margin: 0 0 36px; max-width: 48em; font-size: 17px; }
   p { max-width: 44em; }
 
   /* ── 症状 → この環境では ── */
   .pains { display: flex; flex-direction: column; gap: 18px; }
   .pain { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); overflow: hidden; box-shadow: 0 1px 2px rgba(11,31,51,.04); }
-  .pain > div { padding: 24px 24px 26px; min-width: 0; }
+  .pain > div { padding: 28px 30px 30px; min-width: 0; }
   .pain .who { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-mute); margin: 0 0 10px; }
-  .pain .voice { font-family: var(--f-display); font-weight: 700; font-size: 18px; line-height: 1.55; margin: 0; text-wrap: balance; }
+  .pain .voice { font-family: var(--f-display); font-weight: 700; font-size: 20px; line-height: 1.55; margin: 0; text-wrap: balance; }
   .pain .voice small { display: block; font-family: var(--f-body); font-weight: 400; font-size: 14px; color: var(--ink-soft); margin-top: 8px; }
   .pain .fix { border-left: 1px solid var(--line); background: var(--accent-soft); }
   .pain .fix h3 { font-family: var(--f-display); font-size: 16px; font-weight: 900; margin: 0 0 8px; color: var(--accent-deep); }
@@ -77,7 +78,7 @@
   pre .c { color: #8FA3B8; }
   .pain pre { font-size: 12.5px; padding: 12px 14px; }
 
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
   .step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px; display: flex; flex-direction: column; gap: 10px; }
   .num { font-family: var(--f-display); font-weight: 900; font-size: 28px; line-height: 1; color: var(--accent); }
   .step h3 { font-family: var(--f-display); font-size: 17px; font-weight: 700; margin: 0; }
