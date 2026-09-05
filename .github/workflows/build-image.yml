@@ -70,6 +70,10 @@ on:
         type: boolean
         required: false
         default: false
+      restore_floating_from:
+        description: "追跡タグ（4.3 / 4.3-php8.2 …）をこのリリースタグの中身に戻す（例: v1.0.4）。GHCR で追跡タグを消してしまったときの復旧用。焼かない"
+        required: false
+        default: ""
 
 # 同じ ref で走っているものは、新しいほうだけ残す（実行時間ぶん課金されるため）。
 # **リリース（タグ）は止めない。** タグごとに ref が違うので group も別になるが、
@@ -99,6 +103,7 @@ jobs:
       ref: ${{ steps.ref.outputs.ref }}
       refresh: ${{ steps.ref.outputs.refresh }}
       mode: ${{ steps.mode.outputs.mode }}
+      restore_from: ${{ github.event.inputs.restore_floating_from }}
     steps:
       - id: ref
         env:
@@ -162,7 +167,9 @@ jobs:
           MATRIX: ${{ steps.build.outputs.matrix }}
         run: |
           mode=build
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+          if [ -n '${{ github.event.inputs.restore_floating_from }}' ]; then
+            mode=restore
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             # 「このタグから辿れる、自分以外でいちばん新しいタグ」。`git describe <tag>^` だと親コミットを
             # 見るので、同じコミットに打った 1 つ前のタグ（リリース直後の再タグ）を飛ばしてしまう
             prev="$(git tag --merged "${GITHUB_REF_NAME}" --sort=-creatordate | grep -vx "${GITHUB_REF_NAME}" | head -1 || true)"
@@ -182,7 +189,7 @@ jobs:
 
   build-and-push:
     needs: setup
-    if: needs.setup.outputs.mode != 'retag'
+    if: needs.setup.outputs.mode == 'build'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -320,5 +327,37 @@ jobs:
           src="${img}:${series}-php${php}"
           tags=(-t "${img}:${series}-php${php}-${GITHUB_REF_NAME}")
           [ '${{ matrix.target.default }}' = 'true' ] && tags+=(-t "${img}:${series}-${GITHUB_REF_NAME}")
+          echo "${src} → ${tags[*]}"
+          docker buildx imagetools create "${tags[@]}" "$src"
+
+  # 追跡タグの復旧。<系列>-php<版>-<リリースタグ> の中身を <系列>-php<版>（と既定なら <系列>）に写す。
+  # 手元の gh のトークンには write:packages が無く、`imagetools create` が 403 で黙って失敗する
+  # （その状態で GHCR の版を消し、追跡タグ 12 本を失った。2026-09-06）。書けるのは Actions の
+  # GITHUB_TOKEN だけなので、復旧はここでやる。
+  restore-floating:
+    needs: setup
+    if: needs.setup.outputs.mode == 'restore'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: 追跡タグを戻す
+        run: |
+          img="${REGISTRY}/${IMAGE_NAME}"
+          series='${{ matrix.target.series }}'; php='${{ matrix.target.php }}'; from='${{ needs.setup.outputs.restore_from }}'
+          src="${img}:${series}-php${php}-${from}"
+          tags=(-t "${img}:${series}-php${php}")
+          [ '${{ matrix.target.default }}' = 'true' ] && tags+=(-t "${img}:${series}")
           echo "${src} → ${tags[*]}"
           docker buildx imagetools create "${tags[@]}" "$src"
