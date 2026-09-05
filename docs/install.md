@@ -95,6 +95,12 @@ cp .env.example .env
 引いて使うなら `ECCUBE_IMAGE` を書く。`ECCUBE_AUTH_MAGIC` と DB のパスワードは
 次の手順で自動生成されるので触らなくてよい。
 
+**DB の種類はここで決める。** `DB_ENGINE=mysql`（MariaDB、既定）か `DB_ENGINE=postgresql`。
+どちらも同梱で、PostgreSQL を選ぶと `db` サービスが `postgres:16` になり、`bin/init.sh` が
+`.env` の `COMPOSE_FILE` に `compose.postgresql.yaml` を足す（手で `-f` を並べない）。
+**あとから変えられない**（DB のダンプは種類をまたいで戻らない。変えるなら作り直し）。
+迷ったら既定のまま。EC-CUBE のプラグインは MariaDB / MySQL で試されているものが多い。
+
 **タグは必ず系列（`4.3` など）で始まるものを選ぶ。**
 
 | タグ | 意味 |

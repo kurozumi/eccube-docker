@@ -55,14 +55,22 @@ bin/restore.sh backups/20260721-040000   # 復元（確認プロンプトあり�
 
 ## 対応する DB と、外部 DB
 
-**MariaDB / MySQL のみ。** イメージに入っている PHP 拡張が `pdo_mysql` だけなので、EC-CUBE が対応する
-PostgreSQL はこの環境では動かない（バックアップ以前に本体が繋げない）。
+**MariaDB / MySQL と PostgreSQL。** `.env` の `DB_ENGINE`（`mysql` / `postgresql`）で決まり、
+`bin/backup.sh` と `bin/restore.sh` はそれを見てダンプの取り方を変える。ファイル名は同じ `db.sql.gz`。
 
-DB が外部（`compose.app.yaml` の複数ホスト、マネージド DB）のときも、`bin/backup.sh` と `bin/restore.sh` は
-そのまま使える。`db` サービスが無ければ、**同じ `mariadb` イメージの使い捨てコンテナから `.env` の
+| `DB_ENGINE` | 手元の `db` サービス | ダンプ | 戻し |
+|---|---|---|---|
+| `mysql`（既定） | `mariadb:10.6` | `mysqldump --single-transaction`（無停止・整合） | `mysql` |
+| `postgresql` | `postgres:16` | `pg_dump --clean --if-exists`（既存の表を落として作り直す） | `psql` |
+
+DB が外部（`compose.app.yaml` の複数ホスト、マネージド DB）のときも、そのまま使える。`db` サービスが
+無ければ、**同じ DB のクライアントを使い捨てコンテナで起動して `.env` の
 `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` で繋ぐ**。compose のネットワークに入れるので、
 別スタックの DB 名でもマネージド DB のホスト名でも引ける。外部はアプリのユーザーで繋ぐので
-`--routines` / `--events` は付けない（EC-CUBE はどちらも使わない）。
+MariaDB では `--routines` / `--events` は付けない（EC-CUBE はどちらも使わない）。
+
+**DB の種類は途中で変えない。** ダンプの形式が違うので、`mysql` で取った `db.sql.gz` は
+`postgresql` の環境には戻らない（逆も）。引っ越し先も同じ `DB_ENGINE` にする。
 
 ## サーバーの外へ出す
 

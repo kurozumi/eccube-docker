@@ -66,7 +66,7 @@ gh repo create myshop --private --source=. --push
 
 ```bash
 git clone <あなたのリポジトリの URL> myshop && cd myshop
-bin/init.sh          # .env を作って起動
+bin/init.sh          # .env を作って起動（DB は MariaDB。PostgreSQL 派は先に .env の DB_ENGINE、docs/install.md）
 bin/publish.sh       # 公開する
 ```
 

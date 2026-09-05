@@ -96,8 +96,10 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **`ECCUBE_AUTH_MAGIC` は全パスワードのハッシュの鍵。** 違う値で DB を戻すと誰も
   ログインできず、エラーも出ない。`restore.sh` が DB を戻す前に突き合わせて止める。
   引っ越しは「clone → `bin/init.sh` → AUTH_MAGIC を合わせる → `bin/restore.sh`」。
-  **DB は MariaDB / MySQL のみ**（イメージは `pdo_mysql` だけ）。外部 DB でも backup / restore は
-  そのまま使える（`db` サービスが無ければ `mariadb` の使い捨てコンテナから `.env` の `DB_*` で繋ぐ）。
+  **DB は MariaDB / MySQL か PostgreSQL**（`.env` の `DB_ENGINE`。イメージは両方の拡張を持つ）。
+  backup / restore はそれを見て mysqldump / pg_dump を使い分ける。外部 DB でも同じ
+  （`db` サービスが無ければ同じ DB のクライアントを使い捨てコンテナで起動し `.env` の `DB_*` で繋ぐ）。
+  **ダンプは種類をまたいで戻らない**ので、引っ越し先も同じ `DB_ENGINE` にする。
   **`BACKUP_SYNC`** で外へ送る。送れなければ失敗にする（黙って飛ばすと「取れているつもり」になる）。
   **本番で管理画面が書いたファイルはそのサーバーにしか無い。** `doctor` と `backup.sh` が
   未コミット分を挙げる。
@@ -109,6 +111,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **本番を上げるときは `bin/upgrade.sh <制約> --prod`。** `--prod` を落とすと
   `compose.override.yaml`（開発用のポートと bind mount）が効いた状態で公開される。
   **画面は出るので気づきにくい。** 稼働中なら自動でも寄せるが、停止中に打つと効かない。
+- **compose ファイルの並びは `.env` の `COMPOSE_FILE` が正。`-f` を直書きしない。**
+  PostgreSQL（`DB_ENGINE=postgresql`）は `compose.postgresql.yaml` を重ねる必要があり、
+  `bin/init.sh` がそれを `COMPOSE_FILE` に書く。`docker compose -f a -f b` と直書きすると
+  **`COMPOSE_FILE` は無視される**ので、その場所だけ MariaDB が立つ。**本番だけそうなっていた**
+  （`upgrade` / `publish` / `deploy` が直書きだった）。`bin/lib/compose.sh` の
+  `compose_files [--prod]` が `.env` の並びを読んで prod の出し入れだけをする。
 - **IDE がライブラリを未定義と言うのは正常。** 本体と `vendor` はボリュームの中だけにあり
   ホストには1ファイルも無い。`bin/ide-sync.sh` で `.ide/` へ写し、PhpStorm の
   **Include Path**（ソースルートではない）に足す。リモートインタプリタを設定しても

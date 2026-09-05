@@ -70,6 +70,7 @@ ENV_PATHS=(
     compose.override.yaml
     compose.prod.yaml
     compose.app.yaml
+    compose.postgresql.yaml
     phpunit.xml
     phpunit.11.xml
     .env.example

@@ -72,18 +72,38 @@ read -r -p "続行しますか? [y/N] " ans
 [ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
 
 # DB は手元の db サービスか外部か（bin/backup.sh と同じ判定）
+db_engine="$(env_get DB_ENGINE)"; db_engine="${db_engine:-mysql}"
 db_host="$(env_get DB_HOST)"; db_host="${db_host:-db}"
-db_port="$(env_get DB_PORT)"; db_port="${db_port:-3306}"
-if [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null)" ]; then
-    echo "[restore] DB を復元しています（手元の db サービス）..."
-    gunzip -c "${src}/db.sql.gz" | docker compose exec -T db sh -c \
-        'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root "$MYSQL_DATABASE"'
-else
-    echo "[restore] DB を復元しています（外部: ${db_host}:${db_port}）..."
-    gunzip -c "${src}/db.sql.gz" | docker run --rm -i --network "${proj}_default" \
-        -e MYSQL_PWD="$(env_get DB_PASSWORD)" mariadb:10.6 \
-        mysql -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)"
-fi
+db_port="$(env_get DB_PORT)"
+local_db=0; [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null)" ] && local_db=1
+case "$db_engine" in
+  postgresql)
+    db_port="${db_port:-5432}"
+    # pg_dump --clean で作ってあるので、既存の表は DROP されてから作り直される
+    if [ "$local_db" = 1 ]; then
+        echo "[restore] DB を復元しています（手元の db サービス / PostgreSQL）..."
+        gunzip -c "${src}/db.sql.gz" | docker compose exec -T db sh -c \
+            'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -q -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null
+    else
+        echo "[restore] DB を復元しています（外部 PostgreSQL: ${db_host}:${db_port}）..."
+        gunzip -c "${src}/db.sql.gz" | docker run --rm -i --network "${proj}_default" -e PGPASSWORD="$(env_get DB_PASSWORD)" postgres:16-alpine \
+            psql -q -v ON_ERROR_STOP=0 -h "$db_host" -p "$db_port" -U "$(env_get DB_USER)" -d "$(env_get DB_NAME)" >/dev/null
+    fi
+    ;;
+  *)
+    db_port="${db_port:-3306}"
+    if [ "$local_db" = 1 ]; then
+        echo "[restore] DB を復元しています（手元の db サービス）..."
+        gunzip -c "${src}/db.sql.gz" | docker compose exec -T db sh -c \
+            'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root "$MYSQL_DATABASE"'
+    else
+        echo "[restore] DB を復元しています（外部: ${db_host}:${db_port}）..."
+        gunzip -c "${src}/db.sql.gz" | docker run --rm -i --network "${proj}_default" \
+            -e MYSQL_PWD="$(env_get DB_PASSWORD)" mariadb:10.6 \
+            mysql -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)"
+    fi
+    ;;
+esac
 
 if [ -f "${src}/upload.tar.gz" ]; then
     echo "[restore] アップロード画像を復元しています..."

@@ -47,8 +47,11 @@ services:
       APP_ENV: ${APP_ENV:-prod}
       APP_DEBUG: ${APP_DEBUG:-0}
       # 外部の共有 DB を指す（DB_HOST は別サーバー / マネージド DB）
-      DATABASE_URL: "mysql://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@${DB_HOST:-db}:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-10.6.0}&charset=utf8mb4"
+      # DB の種類は DB_ENGINE（mysql / postgresql）。compose.yaml と同じ組み立て
+      DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@${DB_HOST:-db}:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-10.6.0}&charset=${DB_CHARSET:-utf8mb4}"
       DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-10.6.0}
+      DB_ENGINE: ${DB_ENGINE:-mysql}
+      DB_PORT: ${DB_PORT:-3306}
       MAILER_DSN: ${MAILER_DSN:-null://null}
       ECCUBE_ADMIN_ROUTE: ${ECCUBE_ADMIN_ROUTE:-admin}
       ECCUBE_TEMPLATE_CODE: ${ECCUBE_TEMPLATE_CODE:-default}

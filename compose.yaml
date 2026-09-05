@@ -17,8 +17,14 @@ x-eccube-environment: &eccube-environment
   # DATABASE_URL は DB_* から組み立てる（パスワードを二重に持たせない）。
   # environment は env_file より優先されるので、.env に古い DATABASE_URL が
   # 残っていてもこの derived 値が勝つ。
-  DATABASE_URL: "mysql://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@db:3306/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-10.6.0}&charset=utf8mb4"
+  # **DB の種類は DB_ENGINE（mysql / postgresql）で決まる。** compose に条件分岐は無いので、
+  # スキーム・ポート・serverVersion・charset をそれぞれ変数から引いて 1 本の URL にする。
+  # postgresql のときは compose.postgresql.yaml が db サービスを差し替え、これらの既定を
+  # 5432 / 16 / utf8 に上書きする（bin/init.sh が COMPOSE_FILE に足す）。
+  DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@db:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-10.6.0}&charset=${DB_CHARSET:-utf8mb4}"
   DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-10.6.0}
+  DB_ENGINE: ${DB_ENGINE:-mysql}
+  DB_PORT: ${DB_PORT:-3306}
   # 本番は実メールサービスの DSN を .env で設定する。未設定なら送信は破棄（null）。
   # 開発は compose.override.yaml が Mailpit 宛てに上書きする。
   MAILER_DSN: ${MAILER_DSN:-null://null}
