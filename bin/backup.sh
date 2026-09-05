@@ -47,8 +47,8 @@ mkdir -p "$dest"
 # ネットワークに入れておけば、別スタックの DB 名でもマネージド DB のホスト名でも引ける。
 # 外部は root ではなくアプリのユーザーなので --routines / --events は付けない
 # （SHOW ROUTINE 等の権限が無いと落ちる。EC-CUBE はどちらも使わない）。
-# **対応は MariaDB / MySQL のみ。** イメージに pdo_mysql しか入っておらず、EC-CUBE が
-# 対応する PostgreSQL はこの環境では動かない（dump も pg_dump になる）。
+# **対応は MariaDB / MySQL と PostgreSQL。** .env の DB_ENGINE で決まり、mysqldump / pg_dump を
+# 使い分ける（restore.sh も同じ判定）。ダンプは種類をまたいで戻らない。
 db_engine="$(env_get DB_ENGINE)"; db_engine="${db_engine:-mysql}"
 # 外部 DB に繋ぐクライアントの版は、手元の db サービスと同じ変数から（.env の MARIADB_VERSION / PG_VERSION）
 mariadb_img="$(env_get MARIADB_IMAGE)"; mariadb_img="${mariadb_img:-mariadb}"
