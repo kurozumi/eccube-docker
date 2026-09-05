@@ -17,6 +17,13 @@ services:
     environment:
       APP_ENV: prod
       APP_DEBUG: 0
+      # 本番は必ず公開層（cloudflared / caddy / ホスト nginx）の背後で、HTTPS はそこで終端する。
+      # 直前の peer を信頼しないと $request->isSecure() が false のままになり、
+      # セッション Cookie に Secure が付かず、生成 URL とリダイレクトが http:// になり、
+      # 記録される IP が公開層のコンテナの IP になる（#106）。
+      # REMOTE_ADDR は「直前の peer だけ」。nginx は 127.0.0.1 にしか開いていないので、
+      # そこへ来られるのは公開層だけ。複数ホストで LB の IP を絞るなら .env で上書き。
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-REMOTE_ADDR}
     restart: always
 
   nginx:

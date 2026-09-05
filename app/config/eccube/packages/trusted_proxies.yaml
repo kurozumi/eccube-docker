@@ -10,7 +10,8 @@
 # 広く信頼しすぎると X-Forwarded-For 詐称を許すセキュリティリスクになる。
 #   例: TRUSTED_PROXIES=10.0.0.0/8      （プライベート網の LB）
 #       TRUSTED_PROXIES=REMOTE_ADDR     （直前の peer を常に信頼＝単純だが緩い）
-# 既定は空＝どのプロキシも信頼しない（単一ホスト時と同じ挙動）。
+# 既定は空＝どのプロキシも信頼しない。**本番は compose.prod.yaml が REMOTE_ADDR を入れる**
+# （tunnel / caddy / ホスト nginx はどれも直前の peer が公開層だけなので）。
 parameters:
     env(TRUSTED_PROXIES): ''
 
