@@ -108,7 +108,8 @@ for a in "$@"; do
         --check) check_only=1 ;;
         --force) force=1 ;;
         -h|--help)
-            sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+            # 行数を決め打ちしない。ヘッダを足すたびに途中で切れる（実際に切れていた）
+            awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
             exit 0
             ;;
         -*) die "不明なオプション: $a" ;;

@@ -20,7 +20,11 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
     黙って消える**。`customize.css` 先頭の `@import` がテーマを読み込む。
     **その `@import` を消さない／上に何も書かない**（先頭以外の `@import` は
     CSS の仕様で無効になり、テーマが丸ごと効かなくなる）。
-  - **オリジナルテーマ（コード `original` 固定）は twig と静的物で正反対。** twig は
+  - **`html/template/original/assets` と `.base` は eccube-docker では追跡しない。** 店ごとの
+  成果物で、tag からの tarball（＝配布物）にそのまま入るため。一度コミットして
+  6MB・125 ファイルの 4.4-dev の写しを全利用者に配りかけた。手元の無視は
+  `.git/info/exclude`（`.gitignore` に書くと利用者の `git add` まで黙って落ちる）。
+- **オリジナルテーマ（コード `original` 固定）は twig と静的物で正反対。** twig は
     `app/template/original/` に直すファイルだけ（フォールバックあり）。静的物は
     `html/template/original/assets/` に**丸ごと**（`asset()` の base_path は 1 本で
     フォールバック無し。1 ファイル欠けると 404）。`bin/theme.sh init` が本体から写し、
