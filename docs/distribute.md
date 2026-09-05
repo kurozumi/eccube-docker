@@ -110,15 +110,24 @@ git tag v1.1.0 && git push origin v1.1.0
 `.github/workflows/build-image.yml` が動き、**対応する全系列**のイメージを焼いて
 GHCR へ push する。
 
-**初回だけ、GHCR のパッケージを公開にする。** GHCR の新規パッケージは**既定が非公開**で、
-そのままだと利用者が pull できない。
+**初回は、GHCR のパッケージが匿名で pull できるか確かめる。**
+
+```bash
+curl -s "https://ghcr.io/token?scope=repository:<owner>/<repo>/ec-cube:pull" | jq -r .token \
+  | xargs -I{} curl -s -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer {}' \
+    https://ghcr.io/v2/<owner>/<repo>/ec-cube/tags/list      # 200 なら公開
+```
+
+Actions の `GITHUB_TOKEN` で公開リポジトリから push したパッケージは、**リポジトリの
+公開範囲を引き継いで public になる**（v1.0.0 で実際にそうなった。パッケージを消して
+作り直しても同じ）。手元から `docker push` した場合や、リポジトリが非公開の場合は
+非公開で作られるので、そのときは画面で切り替える:
 
 ```
 Packages → ec-cube → Package settings → Danger Zone → Change visibility → Public
 ```
 
-**エラーは「認証しろ」の形で出る**ので原因にたどり着きにくい。パッケージを消して
-作り直したときも、この設定は一緒に消えているので再設定が要る。系列ごとに PHP と phpredis が違う（phpredis は EC-CUBE 側の
+非公開のままだと利用者の pull は**「認証しろ」の形で失敗する**ので、原因にたどり着きにくい。系列ごとに PHP と phpredis が違う（phpredis は EC-CUBE 側の
 Symfony Cache と両立しないバージョンがあり、間違えると起動時に落ちる）。対応表は
 2 か所にあり、**必ず揃えること**:
 
