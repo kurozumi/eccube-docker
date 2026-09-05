@@ -334,13 +334,13 @@ bin/init.sh</pre>
       <table>
         <thead><tr><th>系列</th><th>イメージ（本番はこれ）</th><th>選べる PHP</th><th>備考</th></tr></thead>
         <tbody>
-          <tr><td>4.3</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.3</code></td><td>8.1 / <strong>8.2</strong> / 8.3</td><td>推奨</td></tr>
-          <tr><td>4.2</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.2</code></td><td>8.1 / <strong>8.2</strong></td><td></td></tr>
+          <tr><td>4.3</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.3</code></td><td>8.1<sup>†</sup> / <strong>8.2</strong> / 8.3</td><td>推奨</td></tr>
+          <tr><td>4.2</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.2</code></td><td>8.1<sup>†</sup> / <strong>8.2</strong></td><td></td></tr>
           <tr><td>4.4</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.4</code></td><td>8.2 / <strong>8.3</strong> / 8.4 / 8.5</td><td>上流の開発ブランチから焼いている。同じものを立てたいなら日付タグで固定</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="sub"><strong>イメージは毎週月曜に焼き直され、PHP と OS のセキュリティパッチが入ります。</strong>太字は <code>-php</code> 無しの既定。PHP を選ぶなら <code>4.4-php8.5</code> のように書く。同じものを何度も立てたい人は日付タグ <code>4.3-20260907</code>、リリース時点なら <code>4.3-__TAG__</code>。</p>
+    <p class="sub"><strong>イメージは毎週月曜に焼き直され、PHP と OS のセキュリティパッチが入ります。</strong> <sup>†</sup>PHP 8.1 は 2025 年 12 月で終了しています。OS のパッチは入りますが PHP 自体の修正はもう出ないので、8.1 でしか動かないプラグインが無ければ 8.2 以上を。太字は <code>-php</code> 無しの既定。PHP を選ぶなら <code>4.4-php8.5</code> のように書く。同じものを何度も立てたい人は日付タグ <code>4.3-20260907</code>、リリース時点なら <code>4.3-__TAG__</code>。</p>
     <p class="sub">DB は <strong>MariaDB / MySQL</strong>（既定）か <strong>PostgreSQL</strong>。版は <code>.env</code> の <code>MARIADB_VERSION</code> / <code>PG_VERSION</code>。<code>.env</code> の <code>DB_ENGINE</code> で選び、バックアップも引っ越しも同じコマンドで通ります。手元の DB でも、クラウドのマネージド DB でも。</p>
   </div>
 </section>
