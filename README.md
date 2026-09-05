@@ -62,7 +62,7 @@
 │   ├── nginx/{default.conf,lb.conf.example}
 │   ├── mariadb/conf.d/eccube.cnf
 │   └── caddy/Caddyfile
-└── bin/{init,upgrade,switch-version,reset,publish,healthcheck,assets,plugin,test,ide-sync,backup,restore}.sh
+└── bin/                    # 下の「主なコマンド」と docs/handbook.md。全一覧は bin/*.sh の先頭コメント
 ```
 
 ## 必要環境
@@ -105,7 +105,13 @@ bin/shell.sh               # コンテナの中に入る（www-data 固定。--r
 bin/plugin.sh reload       # PHP / 設定を触ったあとのキャッシュ一掃
 bin/plugin.sh doctor       # システムエラーが出たときの点検と修復
 bin/test.sh <パス>          # テスト（素の phpunit は使わない）
-bin/backup.sh              # DB と画像のバックアップ
+bin/backup.sh              # 5 点セットのバックアップ（DB / 画像 / 管理画面が書いたファイル / .env ×2）
+bin/restore.sh <dir>       # 上を戻す。ECCUBE_AUTH_MAGIC が違えば止まる
+bin/pull-admin-files.sh    # 本番で管理画面が書いたファイルを手元へ
+bin/self-update.sh         # この環境自体を新しいリリースへ（--check で確認だけ）
+bin/upgrade.sh <制約> --prod  # EC-CUBE 本体を上げる（データ保持）
+bin/theme.sh init|diff     # オリジナルテーマの静的物を本体から写す・本体側の変更を見る
+bin/healthcheck.sh         # 主要ページの疎通
 ```
 
 **`bin/console.sh` と `bin/shell.sh` は www-data で実行する。** root で走らせると
