@@ -19,14 +19,14 @@ services:
       DB_PORT: ${DB_PORT:-5432}
       DATABASE_SERVER_VERSION: ${PG_SERVER_VERSION:-${PG_VERSION:-16}}
       DB_CHARSET: ${DB_CHARSET:-utf8}
-      DATABASE_URL: "postgresql://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@db:${DB_PORT:-5432}/${DB_NAME:-eccube_db}?serverVersion=${PG_SERVER_VERSION:-${PG_VERSION:-16}}&charset=${DB_CHARSET:-utf8}"
+      DATABASE_URL: "postgresql://${DB_USER:-eccube}:${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}@db:${DB_PORT:-5432}/${DB_NAME:-eccube_db}?serverVersion=${PG_SERVER_VERSION:-${PG_VERSION:-16}}&charset=${DB_CHARSET:-utf8}"
 
   worker:
     environment:
       DB_PORT: ${DB_PORT:-5432}
       DATABASE_SERVER_VERSION: ${PG_SERVER_VERSION:-${PG_VERSION:-16}}
       DB_CHARSET: ${DB_CHARSET:-utf8}
-      DATABASE_URL: "postgresql://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@db:${DB_PORT:-5432}/${DB_NAME:-eccube_db}?serverVersion=${PG_SERVER_VERSION:-${PG_VERSION:-16}}&charset=${DB_CHARSET:-utf8}"
+      DATABASE_URL: "postgresql://${DB_USER:-eccube}:${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}@db:${DB_PORT:-5432}/${DB_NAME:-eccube_db}?serverVersion=${PG_SERVER_VERSION:-${PG_VERSION:-16}}&charset=${DB_CHARSET:-utf8}"
 
   db:
     logging: *default-logging
@@ -35,7 +35,7 @@ services:
     environment: !override
       POSTGRES_DB: ${DB_NAME:-eccube_db}
       POSTGRES_USER: ${DB_USER:-eccube}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-eccube_pass}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}
       TZ: Asia/Tokyo
     command: !override []
     volumes: !override

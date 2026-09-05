@@ -42,13 +42,21 @@ services:
         # phpredis は系列で決まる（4.4 は 6.1 以上でないと symfony/cache と conflict）。
         # ここを渡し忘れると 4.4 のローカル build だけが起動時に落ちる。
         PHPREDIS_VERSION: ${PHPREDIS_VERSION:-6.0.2}
-    env_file: .env
+    # .env は丸ごと渡さない（#107）。渡すのは上の environment に列挙したものだけ。
+    # DB_ROOT_PASSWORD / TUNNEL_TOKEN / BACKUP_SYNC のような、アプリに要らない秘密が
+    # アプリのコンテナに乗らないようにする。EC-CUBE の任意の設定（ECCUBE_COOKIE_LIFETIME、
+    # ECCUBE_ADMIN_ALLOW_HOSTS 等）を渡したいときは .env.app に書く（無ければ無視される。
+    # 空文字を environment で注入すると本体の既定値を潰すので、あえて別ファイルにしている）。
+    env_file:
+      - path: .env.app
+        required: false
     environment:
       APP_ENV: ${APP_ENV:-prod}
       APP_DEBUG: ${APP_DEBUG:-0}
+      ECCUBE_AUTH_MAGIC: ${ECCUBE_AUTH_MAGIC:?ECCUBE_AUTH_MAGIC が .env に無い（全パスワードの鍵。bin/init.sh が生成する）}
       # 外部の共有 DB を指す（DB_HOST は別サーバー / マネージド DB）
       # DB の種類は DB_ENGINE（mysql / postgresql）。compose.yaml と同じ組み立て
-      DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@${DB_HOST:-db}:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}&charset=${DB_CHARSET:-utf8mb4}"
+      DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}@${DB_HOST:-db}:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}&charset=${DB_CHARSET:-utf8mb4}"
       DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}
       DB_ENGINE: ${DB_ENGINE:-mysql}
       DB_PORT: ${DB_PORT:-3306}
@@ -68,7 +76,7 @@ services:
       # DB 起動待ち用（外部 DB を指す）
       DB_HOST: ${DB_HOST:-db}
       DB_USER: ${DB_USER:-eccube}
-      DB_PASSWORD: ${DB_PASSWORD:-eccube_pass}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}
       DB_NAME: ${DB_NAME:-eccube_db}
       # app ロール: スキーマに触らない（init ロールだけ 0 にする）
       ECCUBE_SKIP_DB_INIT: ${ECCUBE_SKIP_DB_INIT:-1}

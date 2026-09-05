@@ -116,6 +116,13 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **`BACKUP_SYNC`** で外へ送る。送れなければ失敗にする（黙って飛ばすと「取れているつもり」になる）。
   **本番で管理画面が書いたファイルはそのサーバーにしか無い。** `doctor` と `backup.sh` が
   未コミット分を挙げる。
+- **`.env` はアプリのコンテナに丸ごと渡さない。** 渡るのは `compose.yaml` の
+  `x-eccube-environment` に列挙したものだけ（`DB_ROOT_PASSWORD` / `TUNNEL_TOKEN` /
+  `BACKUP_SYNC` をアプリに乗せないため。#107）。EC-CUBE の任意設定は `.env.app`
+  （`env_file` の `required: false`）。**空文字を `environment` で注入しない**
+  （Symfony Dotenv が「設定済み」と見て本体の既定値を潰す）ので、任意のものは
+  列挙せず `.env.app` に逃がす。`DB_PASSWORD` / `DB_ROOT_PASSWORD` / `ECCUBE_AUTH_MAGIC`
+  は `:?` で必須（既定値 `eccube_pass` で黙って立ち上がらない。#110）。
 - **`bin/reset.sh` と `bin/switch-version.sh` は `down -v` する。** DB・画像・
   セッションが消え、**その場では戻せない。** 稼働中が本番構成なら
   `CONFIRM_DESTROY=<プロジェクト名>` が無いと止まる（`bin/lib/guard.sh`）。
