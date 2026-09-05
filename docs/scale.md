@@ -141,6 +141,25 @@ DB=外部）になっているので、**アプリホストを N 台並べて前
         共有: DB / Redis(cache) / Redis(session) / アップロード画像(NFS/EFS)
 ```
 
+## 管理画面が書くファイルは 1 台にしか無い
+
+管理画面は DB だけでなくファイルにも書く（ページ管理 → `app/template/user_data/`、ブロック管理 →
+`app/template/<テーマ>/Block/`、CSS・JS 管理 → `html/user_data/assets/`、ファイル管理 →
+`html/user_data/`、プラグインの導入 → `app/Plugin/`）。**複数ホストでは、それが起きたホストにしか
+無い。** 別のホストに振られた人には「保存したのに変わらない」「ページが 500」になる（#100）。
+
+対処は 2 つのどちらか:
+
+1. **共有ストレージに載せる**（推奨）。アップロード画像と同じ NFS / EFS に `app/template`、
+   `html/user_data`、`app/Plugin` も置き、全ホストで同じものを bind mount する。プラグインの
+   有効化はキャッシュの組み立て直しを伴うので、その後に各ホストで `bin/plugin.sh reload`
+2. **管理画面を 1 台に固定する**。LB で `/admin` をホスト 1 台にだけ振り（sticky ではなく固定）、
+   そこで書いたものを `bin/pull-admin-files.sh` → git → `bin/deploy.sh` で他へ配る。
+   手順が増えるが、共有ストレージが無い環境でも成り立つ
+
+どちらも取らないなら、複数ホストでは管理画面からファイルを書く操作をしない
+（テンプレートは git で、`docs/customize.md`）。
+
 ## バックアップは 1 台で
 
 DB が外部になっても `bin/backup.sh` はそのまま使える（`db` サービスが無ければ `.env` の `DB_*` で

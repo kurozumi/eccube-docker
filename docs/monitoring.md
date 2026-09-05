@@ -36,3 +36,25 @@
 ---
 
 [← README へ戻る](../README.md)
+
+## ログをサーバーの外へ出す
+
+compose の `logging` は `json-file`（10MB × 5 世代）で、**そのサーバーにしか無い**。侵入や障害の
+あとで見たいログが、いちばん見たいときに消えている（#119）。外へ出す方法は 2 段:
+
+1. **Docker ごと出す**（推奨・compose を触らない）。`/etc/docker/daemon.json` で
+   ```json
+   { "log-driver": "journald" }
+   ```
+   にすると全コンテナのログが journald に入り、`journalctl CONTAINER_NAME=eccube-nginx-1` で
+   引ける。journald から外へは `systemd-journal-remote`、または Vector / Promtail / Fluent Bit
+   で Loki / CloudWatch / S3 へ。compose の `logging:` は driver を上書きするので、
+   daemon.json を使うなら `compose.yaml` の `x-logging` を外す（`driver` を消せば daemon の既定）。
+2. **アプリのログだけ出す**。EC-CUBE 自身のログは `eccube_app` ボリュームの `var/log/`
+   （`site.log` / `front.log` / `admin.log` / `error.log`。管理画面の操作は `admin.log`）。
+   `bin/backup.sh` には**入っていない**。残すなら cron で
+   `docker compose cp ec-cube:/var/www/html/var/log ./var/log-$(date +%F)` を取って
+   `BACKUP_SYNC` と同じ先へ送る。
+
+最低限、**管理画面のログ（`admin.log`）と nginx のアクセスログ**が外にあれば、「誰がいつ何を
+したか」は追える。
