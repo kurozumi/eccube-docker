@@ -12,7 +12,12 @@ ARG ECCUBE_VERSION=~4.3.0
 # コンテナの中で ssh を使う処理は無く、プラグインの clone はホスト側の bin/plugin.sh がやる）。
 # git と composer は残す: 4.4 は `4.4.x-dev` を composer が git で取るのと、古いボリュームに
 # messenger を足す経路（docker-entrypoint.sh）が composer を使うため。
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# **apt-get upgrade を必ず入れる。** 土台の php:8.x イメージが焼き直されるのを当てにしない。
+# PHP 8.1 の土台は EOL（2025-12）で二度と焼き直されず、そのままだと Debian の修正済み CVE が
+# 数百件（ほとんど linux-libc-dev）残ったまま毎週配ることになった（v1.0.3 の Trivy で判明）。
+# ここで上げれば、毎週の焼き直し（キャッシュ無し）のたびに bookworm の最新パッチが入る。
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
         git \
         unzip \
         libicu-dev \
