@@ -218,8 +218,11 @@ services:
   nginx:
     logging: *default-logging
     image: nginx:1.27-alpine
+    # 既定は手元（127.0.0.1）にだけ開く。VPS で quick start しても外に出ない。
+    # 同じ LAN の別端末から見るなら .env に DEV_BIND=0.0.0.0。本番は compose.prod.yaml が
+    # 127.0.0.1 に上書きし、公開層（cloudflared / caddy / ホスト nginx）だけが到達する。
     ports:
-      - "${HTTP_PORT:-8080}:80"
+      - "${DEV_BIND:-127.0.0.1}:${HTTP_PORT:-8080}:80"
     volumes:
       - eccube_app:/var/www/html:ro
       # 独自 CSS/JS はホスト側 bind を直接配信（named volume には無いため）

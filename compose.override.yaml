@@ -37,7 +37,7 @@ services:
     environment:
       MP_MAX_MESSAGES: 500
     ports:
-      - "${MAILPIT_UI_PORT:-8025}:8025"   # メール確認 UI
+      - "${DEV_BIND:-127.0.0.1}:${MAILPIT_UI_PORT:-8025}:8025"   # メール確認 UI
     restart: unless-stopped
 
   # ── フロント CSS/JS ビルド（開発） ──
@@ -81,7 +81,7 @@ services:
       PMA_PASSWORD: ${DB_PASSWORD:-eccube_pass}
       UPLOAD_LIMIT: 64M
     ports:
-      - "${PMA_PORT:-8081}:80"            # DB 管理
+      - "${DEV_BIND:-127.0.0.1}:${PMA_PORT:-8081}:80"            # DB 管理（自動ログイン。手元だけに開く）
     depends_on:
       - db
     restart: unless-stopped
