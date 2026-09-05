@@ -120,8 +120,13 @@ services:
   nginx:
     logging: *default-logging
     image: nginx:1.27-alpine
+    # 複数ホスト構成では LB がここへ来るので、既定は全インターフェイス。
+    # **LB からしか到達させないこと。** プライベート側の IP に束縛する
+    # （HTTP_BIND=10.0.0.11 のようにホストごとに書く）か、ファイアウォールで LB の IP
+    # だけ許可する。0.0.0.0 のまま公開 IP にも開いていると LB をバイパスして直接叩ける
+    # （TRUSTED_PROXIES で信頼している X-Forwarded-* を詐称できる）。
     ports:
-      - "${HTTP_PORT:-8080}:80"
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8080}:80"
     volumes:
       - eccube_app:/var/www/html:ro
       - ./html/user_data:/var/www/html/html/user_data:ro
