@@ -12,6 +12,29 @@ APP_DIR=/var/www/html
 log() { echo "[entrypoint] $*"; }
 cd "$APP_DIR"
 
+# 0a) www-data の uid / gid をホストのユーザーに合わせる（PUID / PGID）。
+#
+# bind mount した app/template や html/user_data に、管理画面（PHP = www-data）が
+# 書く。Linux では www-data（uid 33）が書いたファイルはホストの deploy ユーザーから
+# 見て他人のもので、**次の git pull が書けずに落ちる**。逆にホストが置いたファイルは
+# www-data が書けず、**管理画面の保存が失敗する**（本体は is_writable が偽だと
+# 欄を空で出すので、症状は「空に見える」）。
+# uid を揃えれば、どちらの向きの食い違いも根本から消える。macOS の Docker Desktop
+# は所有者が透過なので未設定でよい。
+if [ -n "${PUID:-}" ] && [ "$PUID" != "$(id -u www-data)" ]; then
+    log "www-data の uid を ${PUID} に合わせます（PUID）"
+    usermod -o -u "$PUID" www-data
+    # 名前付きボリュームの中（vendor / var / app/proxy）は古い uid のまま。
+    # 揃えないと php-fpm が自分のキャッシュに書けない。bind mount は別マウントなので
+    # -xdev で除外する（ホストのファイルの所有者は触らない）。
+    log "ボリューム内の所有者を揃えます（初回だけ。1 分ほど）..."
+    find "$APP_DIR" -xdev \( -user 33 -o -group 33 \) -exec chown -h www-data:www-data {} + 2>/dev/null || true
+fi
+if [ -n "${PGID:-}" ] && [ "$PGID" != "$(id -g www-data)" ]; then
+    log "www-data の gid を ${PGID} に合わせます（PGID）"
+    groupmod -o -g "$PGID" www-data
+fi
+
 # 0) php-fpm プールを env から生成（envsubst）。テンプレ/コマンドが無ければ黙って飛ばす。
 POOL_TMPL=/usr/local/etc/php/eccube/www-pool.conf.tmpl
 POOL_OUT=/usr/local/etc/php-fpm.d/zzz-eccube-pool.conf
