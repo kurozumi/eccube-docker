@@ -1,0 +1,65 @@
+# リリースに「検証できる配布物」を付ける。
+#
+#   eccube-docker-<ver>.tar.gz … git archive で作る tarball（.gitattributes の export-ignore を尊重）。
+#                                GitHub が自動生成する tar.gz はバイト列が安定しないので、
+#                                ハッシュを配るには自分で作る必要がある
+#   SHA256SUMS                 … その sha256
+#   attestation                … actions/attest-build-provenance。「この tarball はこのリポジトリの
+#                                このワークフローが、このコミットから作った」を GitHub が署名する。
+#                                bin/self-update.sh は gh があれば `gh attestation verify` で確かめる
+#
+# release を publish した直後に走る（gh release create の数十秒後に付く）。その間に
+# self-update を打つと添付が無いので、codeload の tar.gz に落ちて「検証なし」と出る。
+# 古いリリースに後から付けるには workflow_dispatch で tag を指定する。
+name: release-assets
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "対象のタグ（例: v1.0.2）"
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    steps:
+      - id: tag
+        run: |
+          tag='${{ github.event.inputs.tag || github.event.release.tag_name }}'
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ver=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+
+      - name: tarball と SHA256SUMS を作る
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          VER: ${{ steps.tag.outputs.ver }}
+        run: |
+          # 展開先のディレクトリ名は GitHub の自動 tar.gz と同じ eccube-docker-<ver>/ にする
+          # （docs/install.md の手順がそのまま使える）
+          git archive --format=tar.gz --prefix="eccube-docker-${VER}/" -o "eccube-docker-${VER}.tar.gz" "$TAG"
+          sha256sum "eccube-docker-${VER}.tar.gz" > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: eccube-docker-${{ steps.tag.outputs.ver }}.tar.gz
+
+      - name: リリースに添付
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VER: ${{ steps.tag.outputs.ver }}
+        run: gh release upload "$TAG" "eccube-docker-${VER}.tar.gz" SHA256SUMS --clobber

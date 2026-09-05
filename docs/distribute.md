@@ -150,6 +150,29 @@ Symfony Cache と両立しないバージョンがあり、間違えると起動
 自動で更新される**（手動実行も可）。ページ内の `__TAG__` / `__VER__` は配る直前に最新 Release の
 番号で置き換わるので、版を書き換えて回る必要は無い。`site/` は配布物から外してある。
 
+### リリースの添付と、self-update の検証
+
+release を publish すると `release-assets.yml` が **`eccube-docker-<ver>.tar.gz`**（`git archive`。
+`.gitattributes` の `export-ignore` を尊重）、**`SHA256SUMS`**、**署名（attestation）** を付ける。
+`bin/self-update.sh` はこれを取り、
+
+1. `SHA256SUMS` と突き合わせる（合わなければ展開しない）
+2. `gh` があってログイン済みなら `gh attestation verify`（「このリポジトリのワークフローが
+   このコミットから作った」の署名。合わなければ展開しない）
+
+を通してから展開する。入れるのは `docker-entrypoint.sh` や `deploy.sh` のようにホストで root
+相当の権限で動くものなので、受け手が真正性を確かめられるようにしてある。添付の無いリリース
+（v1.0.2 以前、publish 直後の数十秒）は GitHub 自動生成の tar.gz に落ち、**「検証なし」と出す**。
+古いリリースに後から付けるには `release-assets.yml` を `workflow_dispatch` で tag 指定。
+
+手で確かめるなら:
+
+```bash
+gh release download v1.0.3 -p 'eccube-docker-*.tar.gz' -p SHA256SUMS
+sha256sum -c SHA256SUMS                                   # macOS: shasum -a 256 -c
+gh attestation verify eccube-docker-1.0.3.tar.gz --repo kurozumi/eccube-docker
+```
+
 ### 試し焼き
 
 `workflow_dispatch` で系列を指定して実行する。**追跡タグ（`4.3` など）は動かず**、
