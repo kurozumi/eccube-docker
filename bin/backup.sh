@@ -49,21 +49,42 @@ mkdir -p "$dest"
 # （SHOW ROUTINE 等の権限が無いと落ちる。EC-CUBE はどちらも使わない）。
 # **対応は MariaDB / MySQL のみ。** イメージに pdo_mysql しか入っておらず、EC-CUBE が
 # 対応する PostgreSQL はこの環境では動かない（dump も pg_dump になる）。
+db_engine="$(env_get DB_ENGINE)"; db_engine="${db_engine:-mysql}"
 db_host="$(env_get DB_HOST)"; db_host="${db_host:-db}"
-db_port="$(env_get DB_PORT)"; db_port="${db_port:-3306}"
-if [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null)" ]; then
-    echo "[backup] DB をダンプしています（手元の db サービス）..."
-    docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump \
-        --single-transaction --routines --triggers --events \
-        -u root "$MYSQL_DATABASE"' | gzip > "${dest}/db.sql.gz"
-else
-    echo "[backup] DB をダンプしています（外部: ${db_host}:${db_port}）..."
-    docker run --rm --network "${proj}_default" \
-        -e MYSQL_PWD="$(env_get DB_PASSWORD)" mariadb:10.6 mysqldump \
-        --single-transaction --triggers --no-tablespaces \
-        -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)" \
-        | gzip > "${dest}/db.sql.gz"
-fi
+db_port="$(env_get DB_PORT)"
+local_db=0; [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null)" ] && local_db=1
+# ダンプの形式はエンジンで違う（restore.sh が同じ判定で読む）。db.sql.gz の名前は共通。
+case "$db_engine" in
+  postgresql)
+    db_port="${db_port:-5432}"
+    if [ "$local_db" = 1 ]; then
+        echo "[backup] DB をダンプしています（手元の db サービス / PostgreSQL）..."
+        docker compose exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" exec pg_dump --clean --if-exists -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+            | gzip > "${dest}/db.sql.gz"
+    else
+        echo "[backup] DB をダンプしています（外部 PostgreSQL: ${db_host}:${db_port}）..."
+        docker run --rm --network "${proj}_default" -e PGPASSWORD="$(env_get DB_PASSWORD)" postgres:16-alpine \
+            pg_dump --clean --if-exists -h "$db_host" -p "$db_port" -U "$(env_get DB_USER)" "$(env_get DB_NAME)" \
+            | gzip > "${dest}/db.sql.gz"
+    fi
+    ;;
+  *)
+    db_port="${db_port:-3306}"
+    if [ "$local_db" = 1 ]; then
+        echo "[backup] DB をダンプしています（手元の db サービス）..."
+        docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump \
+            --single-transaction --routines --triggers --events \
+            -u root "$MYSQL_DATABASE"' | gzip > "${dest}/db.sql.gz"
+    else
+        echo "[backup] DB をダンプしています（外部: ${db_host}:${db_port}）..."
+        docker run --rm --network "${proj}_default" \
+            -e MYSQL_PWD="$(env_get DB_PASSWORD)" mariadb:10.6 mysqldump \
+            --single-transaction --triggers --no-tablespaces \
+            -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)" \
+            | gzip > "${dest}/db.sql.gz"
+    fi
+    ;;
+esac
 
 # exec ではなく使い捨てコンテナで読む。exec は ec-cube が起動中でないと失敗し、
 # 「アップグレードに失敗してサイトが落ちている状態から復旧したい」ときに

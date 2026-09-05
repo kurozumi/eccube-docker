@@ -20,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libwebp-dev \
         libonig-dev \
         default-mysql-client \
+        # PostgreSQL（DB_ENGINE=postgresql）。pg_isready を entrypoint の起動待ちに使う
+        postgresql-client \
+        libpq-dev \
         openssh-client \
         gettext-base \
         libfcgi-bin \
@@ -30,6 +33,8 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_mysql \
         mysqli \
+        # PostgreSQL も同じイメージに同居させる（配布タグを DB ごとに増やさない）
+        pdo_pgsql \
         gd \
         intl \
         zip \

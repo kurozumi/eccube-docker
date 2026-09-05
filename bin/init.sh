@@ -18,6 +18,22 @@ set_env() { # set_env KEY VALUE
     sed "s|^${1}=.*|${1}=${2}|" .env > "$tmp" && mv "$tmp" .env
 }
 
+# DB_ENGINE に合わせて compose ファイルの並びを .env に固定する。
+# PostgreSQL は compose.postgresql.yaml を重ねる必要があり、それを COMPOSE_FILE に持たせて
+# おけば、素の `docker compose` も bin/*.sh も同じ並びで動く（bin/lib/compose.sh 参照）。
+engine="$(grep -E '^DB_ENGINE=' .env | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+case "${engine:-mysql}" in
+    postgresql) files="compose.yaml:compose.override.yaml:compose.postgresql.yaml" ;;
+    mysql|"")   files="compose.yaml:compose.override.yaml" ;;
+    *) echo "[init] エラー: DB_ENGINE は mysql か postgresql です（いま: ${engine}）" >&2; exit 1 ;;
+esac
+if grep -qE '^COMPOSE_FILE=' .env; then
+    set_env COMPOSE_FILE "$files"
+else
+    printf '\n# compose ファイルの並び（bin/init.sh が DB_ENGINE から組み立てた。手で -f を並べない）\nCOMPOSE_FILE=%s\n' "$files" >> .env
+fi
+echo "[init] DB: ${engine:-mysql}（COMPOSE_FILE=${files}）"
+
 # ECCUBE_AUTH_MAGIC が未設定/プレースホルダなら生成する
 current="$(grep -E '^ECCUBE_AUTH_MAGIC=' .env | head -1 | cut -d= -f2- || true)"
 case "$current" in

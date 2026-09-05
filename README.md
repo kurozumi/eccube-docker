@@ -68,6 +68,7 @@
 ## 必要環境
 
 - Docker Engine / Docker Compose v2.24 以上（`compose.prod.yaml` で `!override` を使用）
+- DB は MariaDB / MySQL（既定）か PostgreSQL（`.env` の `DB_ENGINE`）。どちらも同梱、外部 DB も可
 - amd64 / arm64 どちらも可
 
 ## クイックスタート（開発）

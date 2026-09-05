@@ -432,12 +432,15 @@ $enabled = [];
 $dsn = getenv('DATABASE_URL');
 if ($dsn && ($u = parse_url($dsn))) {
     try {
+        // DB の種類は DATABASE_URL のスキームから（mysql / postgresql）
+        $pg = in_array($u['scheme'] ?? '', ['postgresql', 'postgres', 'pgsql'], true);
         $pdo = new PDO(
-            sprintf('mysql:host=%s;port=%d;dbname=%s', $u['host'], $u['port'] ?? 3306, ltrim($u['path'] ?? '', '/')),
+            sprintf('%s:host=%s;port=%d;dbname=%s', $pg ? 'pgsql' : 'mysql', $u['host'], $u['port'] ?? ($pg ? 5432 : 3306), ltrim($u['path'] ?? '', '/')),
             urldecode($u['user'] ?? ''),
             urldecode($u['pass'] ?? '')
         );
-        $enabled = $pdo->query('SELECT code FROM dtb_plugin WHERE enabled = 1')
+        // PostgreSQL では enabled が boolean なので `= 1` は型エラーになる。TRUE は両方で通る
+        $enabled = $pdo->query('SELECT code FROM dtb_plugin WHERE enabled = TRUE')
             ->fetchAll(PDO::FETCH_COLUMN);
     } catch (Throwable $e) {
         // DB を読めないときは判定しない（誤検知よりは黙るほうがまし）

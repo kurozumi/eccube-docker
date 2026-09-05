@@ -1,0 +1,57 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# PostgreSQL で動かすときの上書き。**DB_ENGINE=postgresql のとき、bin/init.sh が .env の
+# COMPOSE_FILE にこのファイルを足す。** 手で -f を並べる必要は無いし、並べてはいけない
+# （bin/lib/compose.sh が .env から並びを組み立てる。-f を直書きすると本番だけ MariaDB が立つ）。
+#
+# db サービスを丸ごと postgres に差し替える。MariaDB 用の command / volumes / healthcheck は
+# !override で捨てる（残ると postgres が知らない引数で落ちる）。
+# アプリ側は DATABASE_URL のポート・serverVersion・charset だけ変わる（compose.yaml 参照）。
+# serverVersion は **PG_SERVER_VERSION**（既定 16）。DATABASE_SERVER_VERSION は .env.example が
+# MariaDB 用の値で持っているので、同じ名前を使うとそれが混ざる（実際に混ざった）。
+services:
+  ec-cube:
+    environment:
+      DB_PORT: ${DB_PORT:-5432}
+      DATABASE_SERVER_VERSION: ${PG_SERVER_VERSION:-16}
+      DB_CHARSET: ${DB_CHARSET:-utf8}
+      DATABASE_URL: "postgresql://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@db:${DB_PORT:-5432}/${DB_NAME:-eccube_db}?serverVersion=${PG_SERVER_VERSION:-16}&charset=${DB_CHARSET:-utf8}"
+
+  worker:
+    environment:
+      DB_PORT: ${DB_PORT:-5432}
+      DATABASE_SERVER_VERSION: ${PG_SERVER_VERSION:-16}
+      DB_CHARSET: ${DB_CHARSET:-utf8}
+      DATABASE_URL: "postgresql://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@db:${DB_PORT:-5432}/${DB_NAME:-eccube_db}?serverVersion=${PG_SERVER_VERSION:-16}&charset=${DB_CHARSET:-utf8}"
+
+  db:
+    logging: *default-logging
+    image: postgres:16-alpine
+    environment: !override
+      POSTGRES_DB: ${DB_NAME:-eccube_db}
+      POSTGRES_USER: ${DB_USER:-eccube}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-eccube_pass}
+      TZ: Asia/Tokyo
+    command: !override []
+    volumes: !override
+      - pg_data:/var/lib/postgresql/data
+    healthcheck: !override
+      # 認証まで確かめる（MariaDB 側と同じ理由）。pg_isready は接続できるかしか見ないので、
+      # アプリと同じ経路で 1 クエリ流す。
+      test: ["CMD", "sh", "-c", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" psql -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -c 'SELECT 1' >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # phpMyAdmin は MySQL 専用。開発の override が起動するので、ここで無効にする
+  phpmyadmin:
+    profiles: ["never"]
+
+volumes:
+  pg_data:

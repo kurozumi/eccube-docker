@@ -30,6 +30,8 @@ cd "$(dirname "$0")/.."
 . "$(dirname "$0")/lib/guard.sh"
 # shellcheck source=lib/image.sh
 . "$(dirname "$0")/lib/image.sh"
+# shellcheck source=lib/compose.sh
+. "$(dirname "$0")/lib/compose.sh"
 
 log() { echo "[deploy] $*"; }
 die() { echo "[deploy] エラー: $*" >&2; exit 1; }
@@ -63,9 +65,10 @@ cid="$(docker compose ps -q ec-cube 2>/dev/null | head -1 || true)"
        別名のスタックで動いているなら .env に COMPOSE_PROJECT_NAME=<名前> を書いてください。"
 
 # 本番構成で動いていれば本番構成のまま扱う（開発構成に落として公開しないため。upgrade.sh と同じ）
-dc=(docker compose)
+# shellcheck disable=SC2046  # compose_files は -f の並びを単語分割させる
+dc=(docker compose $(compose_files))
 if guard_is_prod_stack; then
-    dc=(docker compose -f compose.yaml -f compose.prod.yaml)
+    dc=(docker compose $(compose_files --prod))
 fi
 
 MAINT=/var/www/html/.maintenance

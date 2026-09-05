@@ -20,6 +20,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/image.sh
 . "$(dirname "$0")/lib/image.sh"
+# shellcheck source=lib/compose.sh
+. "$(dirname "$0")/lib/compose.sh"
 
 # --prod は本番構成（compose.prod.yaml）で上げる指定。位置は問わない。
 want_prod=0
@@ -53,7 +55,11 @@ if [ -z "$proj" ]; then
     exit 1
 fi
 app_vol="${proj}_eccube_app"
-db_vol="${proj}_db_data"
+# DB ボリュームは種類で名前が違う（MariaDB: db_data / PostgreSQL: pg_data、compose.postgresql.yaml）
+case "$(grep -E '^DB_ENGINE=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')" in
+    postgresql) db_vol="${proj}_pg_data" ;;
+    *)          db_vol="${proj}_db_data" ;;
+esac
 
 # 本番構成で起動するかどうか。**ここを外すと本番が開発構成で上がる。**
 # publish.sh は compose.prod.yaml を重ねて起動するが、このスクリプトが素の
@@ -62,7 +68,8 @@ db_vol="${proj}_db_data"
 #
 # --prod が無くても、いま動いているスタックが本番構成なら本番構成のまま上げる。
 # 本番のサーバーで打つときに付け忘れても事故らないようにするため。
-dc=(docker compose)
+# shellcheck disable=SC2046
+dc=(docker compose $(compose_files))
 
 # **稼働中のコンテナのラベルを見る。** compose は起動に使ったファイルの一覧を
 # com.docker.compose.project.config_files に残す。`docker compose ls` の JSON は
@@ -84,7 +91,7 @@ if [ "$want_prod" = "0" ]; then
 fi
 
 if [ "$want_prod" = "1" ]; then
-    dc=(docker compose -f compose.yaml -f compose.prod.yaml)
+    dc=(docker compose $(compose_files --prod))
 fi
 
 # ec-cube サービスのイメージ名（事前確認で compose を介さず直接起動するのに使う）。

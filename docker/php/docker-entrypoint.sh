@@ -156,7 +156,16 @@ done
 # 2) DB 待ち（compose の healthcheck の保険）
 log "DB 起動待ち..."
 i=0
-until php -r 'exit(@mysqli_connect(getenv("DB_HOST"), getenv("DB_USER"), getenv("DB_PASSWORD"), getenv("DB_NAME")) ? 0 : 1);' 2>/dev/null; do
+# DB_ENGINE（mysql / postgresql）で待ち方を変える。どちらも「認証まで通る」ことを見る
+db_ready() {
+    case "${DB_ENGINE:-mysql}" in
+        postgresql)
+            PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -c 'SELECT 1' >/dev/null 2>&1 ;;
+        *)
+            php -r 'exit(@mysqli_connect(getenv("DB_HOST"), getenv("DB_USER"), getenv("DB_PASSWORD"), getenv("DB_NAME"), (int) (getenv("DB_PORT") ?: 3306)) ? 0 : 1);' 2>/dev/null ;;
+    esac
+}
+until db_ready; do
     i=$((i + 1))
     if [ "$i" -ge 60 ]; then
         log "警告: DB に接続できませんでした。処理を続行します。"
