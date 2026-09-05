@@ -138,9 +138,31 @@
       <div class="step"><div class="num">1</div><h3>環境を新しくする</h3><pre>bin/self-update.sh</pre><p>PHP・拡張・compose・スクリプトが新しいリリースに揃う。差分は git で見えるので、何が変わるか分かってから進める。</p></div>
       <div class="step"><div class="num">2</div><h3>本体を上げる</h3><pre>bin/upgrade.sh ~4.3.0 --prod</pre><p>退避 → 新しい本体でプラグインが読めるかを稼働中に触る前に確認 → メンテナンス表示 → migration → 疎通。<strong>途中で失敗したら何も変えずに止まる。</strong></p></div>
     </div>
+    <h3 style="font-family:var(--f-display);font-size:20px;margin:36px 0 6px">速い理由は 1 つ。<em class="k">あなたが直したものと本体が、別々に更新される</em></h3>
+    <p class="sub">EC-CUBE の中身を直接編集した環境は、上げるたびに「どこを直したか」の調査から始まります。ここでは置き場所が最初から分かれています。</p>
+    <div class="two">
+      <div class="box ok">
+        <h3>あなたのもの — git で持つ</h3>
+        <ul>
+          <li>カスタマイズした PHP（<code>app/Customize/</code>）</li>
+          <li>直したテンプレート・テーマ（<code>app/template/</code>）</li>
+          <li>独自の CSS / JS（<code>html/user_data/</code>）</li>
+          <li>プラグイン、migration、設定（<code>app/Plugin/</code> ほか）</li>
+        </ul>
+        <p>パッチを当てても<strong>1 ファイルも触られない</strong>。上書きされる心配がないので、当てる前に「どこを直したか」を思い出す必要がない。</p>
+      </div>
+      <div class="box no">
+        <h3>本体 — イメージで入れ替える</h3>
+        <ul>
+          <li>EC-CUBE 本体、vendor</li>
+          <li>PHP、拡張、php-fpm、nginx</li>
+        </ul>
+        <p>手で編集しないので、新しいイメージを引き直すだけで新しくなる。<strong>だからパッチが出たその日に当てられる。</strong>本体を編集した環境ではこれができない。</p>
+      </div>
+    </div>
     <div class="note">
-      <b>なぜ速いか</b>
-      <span>本体を手で触っていないから。EC-CUBE の中身を直接編集した環境は、上げるたびに「どこを直したか」の調査から始まります。ここでは直した場所が <code>app/</code> と <code>html/user_data</code> に閉じていて、本体はイメージごと入れ替わる。</span>
+      <b>丸ごと写さない、が守られる</b>
+      <span>テンプレートは「直すファイルだけ」を置く決まり。丸ごと写すと、上げたときに古いほうが勝ち続けて直したはずの不具合が戻ります。<code>bin/theme.sh diff</code> と <code>bin/plugin.sh template diff</code> が、本体側で変わったファイルを上げたあとに挙げます。</span>
     </div>
   </div>
 </section>
