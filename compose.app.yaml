@@ -54,6 +54,8 @@ services:
       ECCUBE_TEMPLATE_CODE: ${ECCUBE_TEMPLATE_CODE:-default}
       # 任意機能のスイッチ（compose.yaml と同じ。外部 Redis を使うなら redis を足す）
       ECCUBE_PROFILES: ${COMPOSE_PROFILES:-}
+      PUID: ${PUID:-}
+      PGID: ${PGID:-}
       ECCUBE_LOCALE: ${ECCUBE_LOCALE:-ja}
       # 前段 LB の IP/サブネットを信頼して X-Forwarded-* を honor（HTTPS 判定に必須）
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
@@ -77,7 +79,8 @@ services:
     volumes:
       - eccube_app:/var/www/html
       - ./app/Customize:/var/www/html/app/Customize:ro
-      - ./app/template:/var/www/html/app/template:ro
+      # 管理画面が書くので本番でも rw（compose.yaml と同じ理由）
+      - ./app/template:/var/www/html/app/template
       - ./app/DoctrineMigrations:/var/www/html/app/CustomizeMigrations:ro
       - ./app/Plugin:/var/www/html/app/Plugin:ro
       - ./html/user_data:/var/www/html/html/user_data:ro

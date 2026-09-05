@@ -76,6 +76,13 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `4.4` 固定で、足さないと新版で一度も検証されない）。**黙って壊れる型が3つある**
   （目印による差し込み・本体の処理への割り込み・本体の副作用への対処）。
   詳細は `docs/upgrade.md`。
+- **`app/template` は本番でも rw。** 管理画面（ページ管理・ブロック管理・メール設定の本文）が
+  ここに書く。ro だとブロックと新規ページの保存が 500、メール本文は保存エラー（本体は
+  `dumpFile` を捕まえていない）。開発では override が rw にしていたので気づかなかった。
+  コードの側（`app/Customize` 等）は ro のまま。
+- **Linux の本番は `.env` に `PUID` / `PGID`。** entrypoint が www-data の uid を揃える。
+  揃えないと、管理画面が書いたファイルを `git pull` が上書きできず、ホストが置いた
+  ファイルを管理画面が書けない（欄が空に見える）。macOS は透過なので不要。
 - **ディスクに残る状態は、git か backup のどちらかに必ず入る。** 管理画面は DB
   だけでなくファイルにも書く（CSS/JS 管理 → `html/user_data/assets/{css,js}`、
   ページ管理 → `app/template/user_data/`、ブロック管理 → `app/template/<テーマ>/Block/`、
