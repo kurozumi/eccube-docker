@@ -188,6 +188,20 @@
 
       <div class="pain">
         <div>
+          <p class="who">初めて自分で公開する人</p>
+          <p class="voice">「サーバーは借りた。でも<em class="k">ドメインと SSL の設定</em>で止まっている。ポートを開けるのも怖い」
+            <small>A レコード、証明書の更新、ファイアウォール。どれか 1 つ間違えると、サイトが出ないか、危ない状態で出る。</small></p>
+        </div>
+        <div class="fix">
+          <h3>ドメインは Cloudflare Tunnel で。ポートを 1 つも開けない</h3>
+          <p>Cloudflare の画面でトンネルを作り、公開ホスト名に <code>shop.example.com → http://nginx:80</code> と書く。あとは発行されたトークンを <code>.env</code> に 1 行。<strong>サーバー側はポートを開けず、A レコードも証明書も触らない</strong>（HTTPS は Cloudflare が終端し、更新も向こうがやる）。既定の公開方式なので、追加の設定はこれだけです。</p>
+          <pre>COMPOSE_PROFILES=tunnel
+TUNNEL_TOKEN=eyJhIjoi...   <span class="c"># Cloudflare Zero Trust で発行</span></pre>
+        </div>
+      </div>
+
+      <div class="pain">
+        <div>
           <p class="who">引き継いだ人</p>
           <p class="voice">「前の会社が作ったサイト。<em class="k">直したのに反映されない</em>。何がどこにあるか分からない」
             <small>キャッシュを消しても変わらない。エラーも出ない。触るのが怖い。</small></p>
@@ -267,6 +281,7 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
         <h3>向いている</h3>
         <ul>
           <li>Docker が動く VPS かクラウドで EC-CUBE 4 を運用する（これから移る人も）</li>
+          <li>ドメインと HTTPS を <strong>Cloudflare Tunnel で済ませたい</strong>（ポートを開けず、証明書の更新から解放される）</li>
           <li>制作会社・フリーランスで、複数の案件を同じ手順で回したい</li>
           <li>前任者のいないサイトを引き継いで、まず状況を把握したい</li>
           <li>プラグインやテーマを作っていて、本番と同じ環境で試したい</li>
