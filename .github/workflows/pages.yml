@@ -8,6 +8,12 @@
 # __TAG__ / __VER__ は配る直前に置き換える。JS で API を叩かせない（静的なまま）。
 #   __TAG__ … v1.0.0
 #   __VER__ … 1.0.0（tarball の展開先ディレクトリ名に使う）
+# **github-pages 環境の deployment branch policy に `v*`（tag）が要る。** release で動く
+# 実行の ref は `refs/tags/vX.Y.Z` で、環境の既定は `main` しか許さない。無いと
+# 「Tag "v1.0.2" is not allowed to deploy to github-pages due to environment protection
+# rules」でステップが 1 つも走らずに落ちる（v1.0.2 で実際に落ちた）。設定は
+# Settings → Environments → github-pages → Deployment branches and tags、または
+#   gh api -X POST repos/<owner>/<repo>/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag
 name: pages
 
 on:
