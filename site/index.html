@@ -115,11 +115,12 @@
 <header class="hero">
   <div class="wrap">
     <p class="eyebrow">eccube-docker · __TAG__ · Apache-2.0</p>
-    <h1>EC-CUBE 4 の <em class="k">インストール・バージョンアップ・サーバー移転</em>を、いつもの <em class="k">1 コマンド</em>にする。</h1>
+    <h1>EC-CUBE 4 の<em class="k">セキュリティパッチを、出たその日に当てる。</em><br>本体も PHP も、<em class="k">1 コマンド</em>で。</h1>
     <p class="lede">
-      「直したのに反映されない」「上げるのが怖い」「引っ越しが大仕事」。EC-CUBE 4 を本番で
-      回すと必ず当たるところを、手順書ではなくコマンドにしました。本体はイメージに焼き、
-      あなたのコードだけを git で持つ。直して、push して、1 コマンドで反映する。
+      脆弱性の告知が来ても、当てるのが怖くて何か月も放置される。原因は「上げると壊れるかもしれない」
+      「戻し方が分からない」の 2 つです。ここでは本体をイメージに焼き、あなたのコードだけを git で
+      持つ。だから上げるのは<strong>イメージを引き直すだけ</strong>で、退避してから確かめ、
+      ダメなら何も変えずに止まる。インストールもサーバー移転も同じ考え方で 1 コマンドにしました。
     </p>
     <div class="cta">
       <a class="btn" href="#start">始め方</a>
@@ -128,6 +129,21 @@
     </div>
   </div>
 </header>
+
+<section id="patch">
+  <div class="wrap">
+    <h2>パッチは<em class="k">その日のうちに</em></h2>
+    <p class="sub">EC-CUBE 本体のパッチ（4.3.1 → 4.3.2 など）も、PHP や拡張の更新も、やることは同じ 2 つ。プラグインの移植が要るのはメジャー・マイナー（4.3 → 4.4）だけです。</p>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><h3>環境を新しくする</h3><pre>bin/self-update.sh</pre><p>PHP・拡張・compose・スクリプトが新しいリリースに揃う。差分は git で見えるので、何が変わるか分かってから進める。</p></div>
+      <div class="step"><div class="num">2</div><h3>本体を上げる</h3><pre>bin/upgrade.sh ~4.3.0 --prod</pre><p>退避 → 新しい本体でプラグインが読めるかを稼働中に触る前に確認 → メンテナンス表示 → migration → 疎通。<strong>途中で失敗したら何も変えずに止まる。</strong></p></div>
+    </div>
+    <div class="note">
+      <b>なぜ速いか</b>
+      <span>本体を手で触っていないから。EC-CUBE の中身を直接編集した環境は、上げるたびに「どこを直したか」の調査から始まります。ここでは直した場所が <code>app/</code> と <code>html/user_data</code> に閉じていて、本体はイメージごと入れ替わる。</span>
+    </div>
+  </div>
+</section>
 
 <section id="pains" class="band">
   <div class="wrap">
@@ -138,11 +154,11 @@
       <div class="pain">
         <div>
           <p class="who">店の担当者 / 引き継いだ人</p>
-          <p class="voice">「バージョンアップの<em class="k">見積もりが高すぎる</em>。でも PHP が古いと言われた」
-            <small>制作会社に頼むと数十万。自分でやると壊れそうで、戻し方も分からない。</small></p>
+          <p class="voice">「脆弱性の案内が来たけど、<em class="k">上げるのが怖くて</em>そのまま。PHP も古いと言われた」
+            <small>制作会社に頼むと数十万で数週間。自分でやると壊れそうで、戻し方も分からない。</small></p>
         </div>
         <div class="fix">
-          <h3>上げる前に止まる。壊してからではなく</h3>
+          <h3>その日に当てる。上げる前に止まる</h3>
           <p>バックアップを取り、新しい本体でプラグインが読めるかを<strong>稼働中の環境に触る前に</strong>確かめ、ダメなら何も変えずに止まります。スキーマの差分に「列の削除」が混じっていれば、それも止まる。</p>
           <pre>bin/upgrade.sh ~4.3.2 --prod</pre>
         </div>
