@@ -350,7 +350,9 @@ for i in $(seq 1 60); do
         bin/healthcheck.sh
         # オリジナルテーマを写してあるなら、本体側で変わった静的物を挙げる。
         # 写しはフォールバック無しで勝ち続けるので、**ここで見せないと誰も気づかない**。
-        if [ -f html/template/original/.base ]; then
+        # **.base があるだけでは出さない。** テーマを default のまま使っている店にも
+        # 写しが残っていることがあり（試しに init した、など）、無関係な差分で驚かせる。
+        if [ -f html/template/original/.base ] && [ "$(env_get ECCUBE_TEMPLATE_CODE)" = "original" ]; then
             echo "[upgrade] オリジナルテーマの写しと、新しい本体との差分:"
             bin/theme.sh diff || true
         fi

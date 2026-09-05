@@ -108,7 +108,17 @@ git tag v1.1.0 && git push origin v1.1.0
 ```
 
 `.github/workflows/build-image.yml` が動き、**対応する全系列**のイメージを焼いて
-GHCR へ push する。系列ごとに PHP と phpredis が違う（phpredis は EC-CUBE 側の
+GHCR へ push する。
+
+**初回だけ、GHCR のパッケージを公開にする。** GHCR の新規パッケージは**既定が非公開**で、
+そのままだと利用者が pull できない。
+
+```
+Packages → ec-cube → Package settings → Danger Zone → Change visibility → Public
+```
+
+**エラーは「認証しろ」の形で出る**ので原因にたどり着きにくい。パッケージを消して
+作り直したときも、この設定は一緒に消えているので再設定が要る。系列ごとに PHP と phpredis が違う（phpredis は EC-CUBE 側の
 Symfony Cache と両立しないバージョンがあり、間違えると起動時に落ちる）。対応表は
 2 か所にあり、**必ず揃えること**:
 

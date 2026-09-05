@@ -1,0 +1,11 @@
+# 配布物（GitHub が tag から自動生成する tar.gz）に含めないもの。
+# bin/self-update.sh はその tar.gz を取ってくるので、ここで落としたものは
+# 利用者に届かない。
+#
+# **すでに配ったファイルを後から足さないこと。** self-update は「旧版にあって
+# 新版に無い」ファイルを削除するので、利用者の手元から消える。
+#
+# git clone には効かない（開発時は全部見える）。
+
+/.gitattributes  export-ignore
+/.github         export-ignore

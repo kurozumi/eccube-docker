@@ -31,10 +31,14 @@
 /app/Plugin/*
 !/app/Plugin/.gitkeep
 
-# プラグイン有効化時に本体が Resource/template/ からコピーしてくる生成物。
-# 中身はプラグイン側と同一で、そちらの repo が持つべきもの。
-# 自分で書いた上書きテンプレートは app/template/default/ 直下に置くので影響しない。
-/app/template/default/CustomerGroup*/
+# 以前ここに /app/template/default/CustomerGroup*/ があった。プラグインが有効化のときに
+# テーマへ写していた頃の名残で、**いまはどのプラグインも写さない**（2026-09）。
+# 隠すものが無いうえ、作者のプラグイン名を名指しした行は配布物にふさわしくない。
+#
+# **同じ形の写しが app/template/<テーマ>/<コード>/Resource/template/ に現れたら、隠さずに消すこと。**
+# それは本体のページ管理・メール設定が保存時に書いたもので、名前空間なしの名前
+# （dtb_page.file_name など）ではその写しが勝ち続け、プラグインを更新しても届かなくなる。
+# PluginTemplateEditor が入っていればその場で消される。
 /backups/
 
 # **プラグインはもうテーマへ何も写さない**（2026-09、11プラグイン）。

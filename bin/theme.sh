@@ -105,6 +105,9 @@ case "$cmd" in
 
   diff)
     [ -f "$base" ] || die "まだ写していません。bin/theme.sh init"
+    if [ "$(grep -E '^ECCUBE_TEMPLATE_CODE=' .env 2>/dev/null | cut -d= -f2-)" != "$code" ]; then
+        log "注意: 写しはありますが、.env の ECCUBE_TEMPLATE_CODE が ${code} ではないので使われていません"
+    fi
     base_ver="$(head -1 "$base" | cut -d= -f2-)"
     cur_ver="$(core_version)"
     log "写した版: EC-CUBE ${base_ver}   いまの本体: EC-CUBE ${cur_ver:-?}"

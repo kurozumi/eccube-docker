@@ -20,7 +20,11 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
     黙って消える**。`customize.css` 先頭の `@import` がテーマを読み込む。
     **その `@import` を消さない／上に何も書かない**（先頭以外の `@import` は
     CSS の仕様で無効になり、テーマが丸ごと効かなくなる）。
-  - **オリジナルテーマ（コード `original` 固定）は twig と静的物で正反対。** twig は
+  - **`html/template/original/assets` と `.base` は eccube-docker では追跡しない。** 店ごとの
+  成果物で、tag からの tarball（＝配布物）にそのまま入るため。一度コミットして
+  6MB・125 ファイルの 4.4-dev の写しを全利用者に配りかけた。手元の無視は
+  `.git/info/exclude`（`.gitignore` に書くと利用者の `git add` まで黙って落ちる）。
+- **オリジナルテーマ（コード `original` 固定）は twig と静的物で正反対。** twig は
     `app/template/original/` に直すファイルだけ（フォールバックあり）。静的物は
     `html/template/original/assets/` に**丸ごと**（`asset()` の base_path は 1 本で
     フォールバック無し。1 ファイル欠けると 404）。`bin/theme.sh init` が本体から写し、
@@ -52,6 +56,11 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   ただし **`.env` に `ECCUBE_IMAGE` があるときは build しないので、この値は使われない。**
   動くのはタグに焼かれたバージョンで、両者は簡単にずれる。`bin/upgrade.sh` は pull した
   イメージの実バージョンを表示して確認を求める。
+- **`bin/self-update.sh` の更新対象は `.eccube-docker-paths`。** スクリプト内の配列は控えで、
+  **正は「これから入れる版」の一覧**。スクリプト側だけ見ると、新しい版で足したパスが
+  初回の更新で届かない（`LICENSE` を足したときに実際にそうなった）。
+  **`mapfile` を使わないこと。** bash 4 以降の組み込みで、**macOS の bash は 3.2**。
+  `command not found` で `set -e` が働き、何も出さずに死ぬ。
 - **「更新」は 3 つあり、別物。** 自分のコードは `bin/deploy.sh`（毎日）、環境（`bin/` や
   compose）は `bin/self-update.sh`、EC-CUBE 本体は `bin/upgrade.sh`。順番は
   self-update → upgrade。逆にすると新しい本体を古いスクリプトで扱うことになる。
