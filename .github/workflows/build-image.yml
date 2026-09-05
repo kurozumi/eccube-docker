@@ -163,7 +163,9 @@ jobs:
         run: |
           mode=build
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            prev="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+            # 「このタグから辿れる、自分以外でいちばん新しいタグ」。`git describe <tag>^` だと親コミットを
+            # 見るので、同じコミットに打った 1 つ前のタグ（リリース直後の再タグ）を飛ばしてしまう
+            prev="$(git tag --merged "${GITHUB_REF_NAME}" --sort=-creatordate | grep -vx "${GITHUB_REF_NAME}" | head -1 || true)"
             if [ -n "$prev" ]; then
               changed="$(git diff --name-only "$prev" "$GITHUB_REF_NAME" -- docker/php .github/workflows/build-image.yml | wc -l)"
               if [ "$changed" = 0 ]; then
