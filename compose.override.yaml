@@ -78,7 +78,7 @@ services:
     environment:
       PMA_HOST: db
       PMA_USER: ${DB_USER:-eccube}
-      PMA_PASSWORD: ${DB_PASSWORD:-eccube_pass}
+      PMA_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}
       UPLOAD_LIMIT: 64M
     ports:
       - "${PMA_PORT:-8081}:80"            # DB 管理

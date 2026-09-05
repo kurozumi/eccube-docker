@@ -143,6 +143,8 @@ fi
 # ここに置く危険は増えない。読める人を絞る。
 if [ -f .env ]; then
     cp .env "${dest}/host.env" && chmod 600 "${dest}/host.env"
+    # EC-CUBE に渡す任意設定（.env.app、あれば）。秘密が入りうるので同じ扱い
+    if [ -f .env.app ]; then cp .env.app "${dest}/host.app.env" && chmod 600 "${dest}/host.app.env"; fi
 fi
 
 # git 管理下なら、コミットされていない「管理画面が書いた分」を見せておく。

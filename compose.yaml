@@ -21,7 +21,7 @@ x-eccube-environment: &eccube-environment
   # スキーム・ポート・serverVersion・charset をそれぞれ変数から引いて 1 本の URL にする。
   # postgresql のときは compose.postgresql.yaml が db サービスを差し替え、これらの既定を
   # 5432 / 16 / utf8 に上書きする（bin/init.sh が COMPOSE_FILE に足す）。
-  DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@db:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}&charset=${DB_CHARSET:-utf8mb4}"
+  DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}@db:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}&charset=${DB_CHARSET:-utf8mb4}"
   # MariaDB の版は MARIADB_VERSION（db サービスの image と serverVersion の両方に効く）
   DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}
   DB_ENGINE: ${DB_ENGINE:-mysql}
@@ -58,12 +58,14 @@ x-eccube-environment: &eccube-environment
   # 事故が起きない。`docker compose --profile redis up` の CLI 指定はここへ届かないので、
   # **.env の COMPOSE_PROFILES に書くこと。**
   ECCUBE_PROFILES: ${COMPOSE_PROFILES:-}
-  # ECCUBE_AUTH_MAGIC はここ（environment）では渡さない。空文字を注入すると
-  # Symfony Dotenv が「設定済み」とみなし、secret が空で bin/console が落ちるため。
-  # 値は .env（env_file）で渡す。bin/init.sh が未設定なら自動生成する。
+  # ECCUBE_AUTH_MAGIC は必須。空文字を注入すると Symfony Dotenv が「設定済み」とみなして
+  # secret が空のまま bin/console が落ちるので、無い・空なら :? で起動を止める
+  # （bin/init.sh が生成する）。以前は env_file: .env で流し込んでいたが、.env 全体を
+  # アプリに渡すのをやめたので明示する（#107）。
+  ECCUBE_AUTH_MAGIC: ${ECCUBE_AUTH_MAGIC:?ECCUBE_AUTH_MAGIC が .env に無い（全パスワードの鍵。bin/init.sh が生成する）}
   DB_HOST: db
   DB_USER: ${DB_USER:-eccube}
-  DB_PASSWORD: ${DB_PASSWORD:-eccube_pass}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}
   DB_NAME: ${DB_NAME:-eccube_db}
   # Symfony アプリキャッシュの Redis 共有（optional/redis/redis_cache.yaml が参照。redis プロファイルのときだけ）
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
@@ -152,7 +154,14 @@ services:
         ECCUBE_VERSION: ${ECCUBE_VERSION:-~4.3.0}
         PHP_VERSION: ${PHP_VERSION:-8.2}
         PHPREDIS_VERSION: ${PHPREDIS_VERSION:-6.0.2}
-    env_file: .env
+    # .env は丸ごと渡さない（#107）。渡すのは上の environment に列挙したものだけ。
+    # DB_ROOT_PASSWORD / TUNNEL_TOKEN / BACKUP_SYNC のような、アプリに要らない秘密が
+    # アプリのコンテナに乗らないようにする。EC-CUBE の任意の設定（ECCUBE_COOKIE_LIFETIME、
+    # ECCUBE_ADMIN_ALLOW_HOSTS 等）を渡したいときは .env.app に書く（無ければ無視される。
+    # 空文字を environment で注入すると本体の既定値を潰すので、あえて別ファイルにしている）。
+    env_file:
+      - path: .env.app
+        required: false
     environment: *eccube-environment
     volumes: *eccube-volumes
     depends_on:
@@ -194,7 +203,14 @@ services:
         ECCUBE_VERSION: ${ECCUBE_VERSION:-~4.3.0}
         PHP_VERSION: ${PHP_VERSION:-8.2}
         PHPREDIS_VERSION: ${PHPREDIS_VERSION:-6.0.2}
-    env_file: .env
+    # .env は丸ごと渡さない（#107）。渡すのは上の environment に列挙したものだけ。
+    # DB_ROOT_PASSWORD / TUNNEL_TOKEN / BACKUP_SYNC のような、アプリに要らない秘密が
+    # アプリのコンテナに乗らないようにする。EC-CUBE の任意の設定（ECCUBE_COOKIE_LIFETIME、
+    # ECCUBE_ADMIN_ALLOW_HOSTS 等）を渡したいときは .env.app に書く（無ければ無視される。
+    # 空文字を environment で注入すると本体の既定値を潰すので、あえて別ファイルにしている）。
+    env_file:
+      - path: .env.app
+        required: false
     environment:
       <<: *eccube-environment
       # 共有 var/cache と DB スキーマには触らない（ec-cube が起動時に整えている）
@@ -239,10 +255,10 @@ services:
     # 版は .env の MARIADB_VERSION（10.6 / 10.11 / 11.4 …。MySQL なら mysql:8.4 のように image ごと変える）
     image: ${MARIADB_IMAGE:-mariadb}:${MARIADB_VERSION:-10.6}
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change_me_root}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD が .env に無い（bin/init.sh が生成する）}
       MYSQL_DATABASE: ${DB_NAME:-eccube_db}
       MYSQL_USER: ${DB_USER:-eccube}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-eccube_pass}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}
       TZ: Asia/Tokyo
     command: >
       --character-set-server=utf8mb4

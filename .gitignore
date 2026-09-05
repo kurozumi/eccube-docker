@@ -1,5 +1,6 @@
 # 環境ごとの秘密・生成物
 /.env
+/.env.app
 /.env.bak
 
 # Claude Code の個人設定（共有しない。共有は .claude/settings.json）
