@@ -6,6 +6,10 @@
 #
 # トリガ:
 #   - タグ push（v*）… リリース。**これが配布の実体**で、利用者が追うタグが動く。
+#                     **Dockerfile（docker/php/**）とこのワークフローが前のタグから変わっていなければ
+#                     焼かない。** いまの追跡タグ（<系列>-php<版>。直近の焼き直し＝同じ Dockerfile）に
+#                     -vX.Y.Z の名前を足すだけ（imagetools create。来歴と SBOM もそのまま付く）。
+#                     文書や bin/ だけのリリースで 9 通り × 4 分を回さないため。
 #   - 定期（毎週月曜 03:00 JST）… **PHP と Debian のパッチを取り込むため**の焼き直し。
 #                     Dockerfile は**最新リリースのタグ**のものを使う（main の未リリース分を
 #                     配らない）。追跡タグ（4.3 / 4.3-php8.2）と日付タグを動かす。
@@ -94,6 +98,7 @@ jobs:
       matrix: ${{ steps.build.outputs.matrix }}
       ref: ${{ steps.ref.outputs.ref }}
       refresh: ${{ steps.ref.outputs.refresh }}
+      mode: ${{ steps.mode.outputs.mode }}
     steps:
       - id: ref
         env:
@@ -146,8 +151,36 @@ jobs:
           fi
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
+      # リリース（タグ push）で、イメージの中身に関わるファイルが前のタグから変わっていなければ
+      # 焼かずに名前だけ足す（retag）。それ以外は build。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: github.ref_type == 'tag'
+        with:
+          fetch-depth: 0
+      - id: mode
+        env:
+          MATRIX: ${{ steps.build.outputs.matrix }}
+        run: |
+          mode=build
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            prev="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+            if [ -n "$prev" ]; then
+              changed="$(git diff --name-only "$prev" "$GITHUB_REF_NAME" -- docker/php .github/workflows/build-image.yml | wc -l)"
+              if [ "$changed" = 0 ]; then
+                mode=retag
+                # 名前を足す元（追跡タグ）が全部あることを確かめる。無ければ焼く
+                for pair in $(printf '%s' "$MATRIX" | jq -r '.[] | "\(.series)-php\(.php)"'); do
+                  docker buildx imagetools inspect "ghcr.io/${{ github.repository }}/ec-cube:${pair}" >/dev/null 2>&1 || { echo "追跡タグ ${pair} が無いので焼く"; mode=build; break; }
+                done
+              fi
+              echo "前のタグ: $prev  変更ファイル: $changed  → $mode"
+            fi
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
   build-and-push:
     needs: setup
+    if: needs.setup.outputs.mode != 'retag'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -256,3 +289,34 @@ jobs:
         with:
           sarif_file: trivy.sarif
           category: trivy-${{ matrix.target.series }}-php${{ matrix.target.php }}
+
+  # Dockerfile が変わっていないリリース: 追跡タグに -vX.Y.Z の名前を足すだけ。
+  # 元は <系列>-php<版>（直近の焼き直し）。追跡タグ自体は動かさない（もっと新しいパッチが
+  # 入った焼き直しを、リリース時点の古いビルドで上書きしないため）。
+  retag:
+    needs: setup
+    if: needs.setup.outputs.mode == 'retag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: 名前を足す
+        run: |
+          img="${REGISTRY}/${IMAGE_NAME}"
+          series='${{ matrix.target.series }}'; php='${{ matrix.target.php }}'
+          src="${img}:${series}-php${php}"
+          tags=(-t "${img}:${series}-php${php}-${GITHUB_REF_NAME}")
+          [ '${{ matrix.target.default }}' = 'true' ] && tags+=(-t "${img}:${series}-${GITHUB_REF_NAME}")
+          echo "${src} → ${tags[*]}"
+          docker buildx imagetools create "${tags[@]}" "$src"

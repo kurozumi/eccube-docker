@@ -68,6 +68,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   upgrade 無しだと Debian の修正済み CVE が数百件残ったまま毎週配ることになる（v1.0.3 の Trivy）。
   vendor の advisories（twig / composer / symfony、4.2・4.3 で 31 件）は EC-CUBE 側の lock で、
   こちらでは触らない（本体無改造の原則）。
+- **Dockerfile が変わっていないリリースは焼かない**（`build-image.yml` の `retag`）。前のタグから
+  `docker/php/**` とワークフローに差分が無ければ、追跡タグ `<系列>-php<版>` に `-vX.Y.Z` を足すだけ
+  （`imagetools create`。来歴・SBOM も付いたまま）。追跡タグ自体は動かさない。
 - **PHP は系列ごとに複数焼く**（4.2: 8.1/8.2、4.3: 8.1/8.2/8.3、4.4: 8.2〜8.5。上流 README の
   対応一覧）。`-php` 無しの短いタグは系列の既定（`image_php_for_series`）。phpredis は系列で
   決まる（4.2/4.3: 6.0.2、4.4: 6.3.0）。**matrix と `bin/lib/image.sh` を揃える。**
