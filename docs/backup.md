@@ -72,6 +72,24 @@ MariaDB では `--routines` / `--events` は付けない（EC-CUBE はどちら�
 **DB の種類は途中で変えない。** ダンプの形式が違うので、`mysql` で取った `db.sql.gz` は
 `postgresql` の環境には戻らない（逆も）。引っ越し先も同じ `DB_ENGINE` にする。
 
+## 暗号化する（外へ送るなら必ず）
+
+DB ダンプは会員の氏名・住所・メール・電話・注文そのもの。**`BACKUP_SYNC` で外へ置くなら、
+その先が漏れたときに読めない形にしておく。** `.env` に 1 行:
+
+```bash
+BACKUP_ENCRYPT_KEY=$(openssl rand -base64 32)   # これを .env に書く
+```
+
+これで `bin/backup.sh` は全ファイル（`db.sql.gz` → `db.sql.gz.enc` など）を AES-256-CBC +
+PBKDF2 で暗号化し、平文を残さない。`bin/restore.sh` は `.enc` を見つけると `.env` の同じ鍵で
+復号しながら戻す（引っ越し先では **`restore.sh` の前に鍵を `.env` に写す**。無ければ止まる）。
+
+- **鍵を無くすと全世代が読めなくなる。** `host.env`（鍵が入っている）も暗号化される側なので、
+  バックアップの中からは取り出せない。パスワードマネージャに控える
+- 改ざん検知は無い。運搬中の壊れは `SHA256SUMS`（暗号化後のハッシュ）で `restore.sh` が見る
+- 鍵無しで `BACKUP_SYNC` を使うと、backup.sh が毎回「平文のまま外に置かれます」と出す
+
 ## サーバーの外へ出す
 
 `backups/` は**同じディスク**にできる。サーバーごと失うと一緒に消える。`.env` の `BACKUP_SYNC` に

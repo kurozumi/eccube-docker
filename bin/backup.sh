@@ -166,6 +166,30 @@ if [ "$db_size" -lt 1024 ]; then
     exit 1
 fi
 
+# ── 暗号化（.env の BACKUP_ENCRYPT_KEY があれば）──
+# DB ダンプは会員の個人情報（氏名・住所・メール・電話・注文）そのもの。外へ送る前に
+# 暗号化し、平文は残さない。鍵は .env に置くが、**鍵を無くすと全世代が読めなくなる**ので
+# パスワードマネージャにも控える（host.env は暗号化された中に入るので、そこからは取れない）。
+# openssl enc（AES-256-CBC + PBKDF2）は macOS / Linux のどこにでもある。改ざん検知は無いので、
+# 運搬中の壊れは SHA256SUMS（暗号化後のハッシュ）で見る。
+enc_key="$(env_get BACKUP_ENCRYPT_KEY)"
+if [ -n "$enc_key" ]; then
+    echo "[backup] 暗号化しています（BACKUP_ENCRYPT_KEY）..."
+    for f in db.sql.gz upload.tar.gz admin-files.tar.gz container.env host.env host.app.env plugins.txt; do
+        [ -f "${dest}/${f}" ] || continue
+        BACKUP_ENCRYPT_KEY="$enc_key" openssl enc -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -salt \
+            -pass env:BACKUP_ENCRYPT_KEY -in "${dest}/${f}" -out "${dest}/${f}.enc" \
+            || { echo "[backup] エラー: ${f} の暗号化に失敗しました" >&2; exit 1; }
+        rm -f "${dest}/${f}"
+    done
+    printf 'encrypted\n' > "${dest}/ENCRYPTED"
+elif [ -n "$(env_get BACKUP_SYNC)" ]; then
+    echo "[backup] 注意: BACKUP_SYNC で外へ送りますが、暗号化していません（会員の個人情報が平文のまま外に置かれます）。"
+    echo "           .env に BACKUP_ENCRYPT_KEY を書くと暗号化します（docs/backup.md）。"
+fi
+# 運搬中の壊れを見るためのハッシュ（暗号化後のファイルに対して）
+( cd "$dest" && for f in *; do [ "$f" = SHA256SUMS ] && continue; printf '%s  %s\n' "$(openssl dgst -sha256 -r "$f" | cut -d' ' -f1)" "$f"; done ) > "${dest}/SHA256SUMS"
+
 echo "[backup] 完了: ${dest}"
 ls -lh "$dest"
 
