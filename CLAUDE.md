@@ -286,8 +286,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `APP_ENV` で切替、Redis 共有キャッシュは `optional/redis/redis_cache.yaml`（任意）、DB は
   `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は `docs/scale.md`。
 - **セッション Redis 共有（Tier 2）**: 専用 `redis-session` に保存し複数ホストで共有。
-  本体の SameSite ハンドラは維持し内側だけ `Customize\Session\RawRedisSessionHandler` に
-  差し替え（`optional/redis/redis_session.yaml`、`SESSION_REDIS_URL`）。
+  `optional/redis/redis_session.yaml` が **`framework.session.handler_id`** を
+  `Customize\Session\RawRedisSessionHandler` に上書きする（`SESSION_REDIS_URL`）。
+  **サービスを定義するだけでは使われない。** 本体の framework.yaml が `native_file` を指すので、
+  以前の「SameSite ラッパの内側を差し替える」やり方は 4.4 ではどこからも参照されず、
+  **セッションはずっとファイルに書かれていた**（#117 の検証で判明。`debug:config framework session`
+  の `handler_id` で確かめる）。
 - **アップロード画像（Tier 2）**: `html/upload` は専用ボリューム `eccube_upload` に分離。
   複数ホストは NFS/EFS ドライバに差し替えて共有。`down -v`（reset/switch-version）で
   ローカルデータは消えるので事前バックアップ。詳細は `docs/scale.md`。
