@@ -8,10 +8,13 @@ FROM php:${PHP_VERSION}-fpm-bookworm
 ARG ECCUBE_VERSION=~4.3.0
 
 # ---- システム依存パッケージ ----
+# 本番イメージに載せるのは動かすのに要るものだけ。vim と openssh-client は外した（#111。
+# コンテナの中で ssh を使う処理は無く、プラグインの clone はホスト側の bin/plugin.sh がやる）。
+# git と composer は残す: 4.4 は `4.4.x-dev` を composer が git で取るのと、古いボリュームに
+# messenger を足す経路（docker-entrypoint.sh）が composer を使うため。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         unzip \
-        vim \
         libicu-dev \
         libzip-dev \
         libpng-dev \
@@ -23,7 +26,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         # PostgreSQL（DB_ENGINE=postgresql）。pg_isready を entrypoint の起動待ちに使う
         postgresql-client \
         libpq-dev \
-        openssh-client \
         gettext-base \
         libfcgi-bin \
     && rm -rf /var/lib/apt/lists/*

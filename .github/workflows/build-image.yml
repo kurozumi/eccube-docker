@@ -152,6 +152,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Trivy の結果を Security → Code scanning に載せる
+      security-events: write
     strategy:
       # 1 系列が落ちても他は焼く。**片方だけ古いまま**にならないよう、
       # 失敗した系列は次のリリースまで前のタグが残る（追跡タグは動かない）。
@@ -159,17 +161,17 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.setup.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ needs.setup.outputs.ref }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to GHCR
         # pull_request では push しないので認証も要らない（fork からの PR で
         # トークンが読み取り専用になり、login 自体が失敗するため）
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -209,7 +211,7 @@ jobs:
           echo "$tags" | tr ',' '\n'
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: docker/php/Dockerfile
@@ -229,3 +231,28 @@ jobs:
           # 引き当てて、違う系列の vendor が混ざる。
           cache-from: type=gha,scope=${{ matrix.target.series }}-php${{ matrix.target.php }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target.series }}-php${{ matrix.target.php }}
+          # 来歴（どのコミットからどのワークフローが焼いたか）と SBOM をイメージに添付する。
+          # `docker buildx imagetools inspect <ref> --format '{{ json .Provenance }}'` で読める
+          provenance: mode=max
+          sbom: true
+
+      # 脆弱性スキャン。push したイメージを Trivy で見て、結果を Code scanning に載せる。
+      # **落とさない**（exit-code 0）。落とすと、土台の Debian に未修正の CVE が 1 つあるだけで
+      # 毎週の焼き直し（= PHP のパッチ配布）が止まる。修正済み（fixed）の CRITICAL / HIGH だけを
+      # 数え、Security タブで追う。PR（push しない）では走らない。
+      - name: Trivy で脆弱性スキャン
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.target.series }}-php${{ matrix.target.php }}-${{ needs.setup.outputs.ref == github.sha && github.sha || needs.setup.outputs.ref }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+      - name: 結果を Code scanning へ
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-${{ matrix.target.series }}-php${{ matrix.target.php }}
