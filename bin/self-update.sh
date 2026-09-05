@@ -13,10 +13,11 @@
 # ことになる（本体の作法が変わったときに、その差分を知らないスクリプトが動く）。
 #
 # 触るもの・触らないもの:
-#   上書きする … bin/ docker/ docs/ .github/ compose*.yaml phpunit*.xml
-#                 .env.example .gitignore LICENSE README.md CLAUDE.md VERSION
-#                 app/config/eccube/{packages,optional}（環境側の設定）
-#                 LICENSE も配る（利用条件が変わったときに手元へ届くように）。
+#   上書きする … .eccube-docker-paths に列挙してあるもの
+#                 （bin/ docker/ docs/ compose*.yaml phpunit*.xml .env.example
+#                   .gitignore LICENSE README.md CLAUDE.md VERSION
+#                   app/config/eccube/{packages,optional}）
+#                 **正はスクリプト内の配列ではなく、これから入れる版の一覧。**
 #                 ただし**その中で配布元が変えたファイルだけ**。あなたが
 #                 bin/ に置いた独自スクリプトなどは触らない。
 #   触らない   … .env / app/ / html/user_data / frontend/ / var/ / backups/ / .ide/
@@ -51,11 +52,15 @@ work=""
 DEFAULT_REPO="kurozumi/eccube-docker"
 
 # 環境側のパス。**ここに無いものは絶対に触らない。**
+#
+# **これは控えで、正は取得した新版の .eccube-docker-paths。** この一覧は
+# 置き換えられる側に書いてあるので、新しい版でパスを足しても初回の更新では
+# 届かない（LICENSE を足したときに実際にそうなった）。新版が一覧を持っていれば
+# そちらを使う（下の load_paths）。持っていない古い版へ戻すときだけこれを使う。
 ENV_PATHS=(
     bin
     docker
     docs
-    .github
     # framework 級設定と任意機能の設定。app/ の下だが**環境側**のもので、
     # entrypoint が参照する（optional/ が無いと redis / messenger を有効にできない）。
     # 店が logging.yaml などを直していれば、衝突として止まる。
@@ -68,6 +73,7 @@ ENV_PATHS=(
     phpunit.xml
     phpunit.11.xml
     .env.example
+    .eccube-docker-paths
     .gitignore
     LICENSE
     README.md
@@ -164,6 +170,25 @@ new_tree="$(fetch_release "$target" "$work/new")" || die "リリース ${target}
 
 log "いま入っている ${cur_tag} を取得します（あなたの変更を見分けるため）..."
 base_tree="$(fetch_release "$cur_tag" "$work/base" || true)"
+
+# **更新対象の一覧は、これから入れる版のものを正とする。**
+# 実行中のスクリプトの一覧は置き換えられる側なので、新しい版で足したパスが
+# 初回の更新で届かない。新版が一覧を持っていればそれに従う。
+# **mapfile を使わないこと。** bash 4 以降の組み込みで、**macOS の bash は 3.2**。
+# `mapfile: command not found` で set -e が働き、何も出さずに死ぬ（実際に踏んだ）。
+paths_file="${new_tree}/.eccube-docker-paths"
+if [ -f "$paths_file" ]; then
+    declared=()
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        line="$(printf '%s' "$line" | tr -d '[:blank:]')"
+        [ -n "$line" ] && declared+=("$line")
+    done < "$paths_file"
+    if [ "${#declared[@]}" -gt 0 ]; then
+        ENV_PATHS=("${declared[@]}")
+        log "更新対象は ${target} の一覧に従います（${#ENV_PATHS[@]} 件）"
+    fi
+fi
 
 # ── 差分を出す ──
 tree_files() { # tree_files <ルート>

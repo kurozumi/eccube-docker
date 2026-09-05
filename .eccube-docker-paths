@@ -1,0 +1,30 @@
+# 更新で置き換える「環境側」のパス。bin/self-update.sh が読む。
+#
+# **この一覧は、これから入れる版のものが使われる。** 実行中のスクリプトに書いてある
+# 一覧では足りない。そちらは置き換えられる側なので、新しい版でパスを足しても
+# 初回の更新では届かない（LICENSE を足したときに実際にそうなった）。
+#
+# ここに無いものは触らない。**利用者の成果物と設定は絶対に入れないこと**
+# （.env / app/Customize / app/template / app/Plugin / html/user_data / frontend / var）。
+#
+# 一覧から外すと「もう管理しない」の意味になり、利用者の手元のファイルはそのまま残る。
+# ファイル自体を配布物から消したいときは、リポジトリから消す（更新で削除される）。
+
+bin
+docker
+docs
+app/config/eccube/packages
+app/config/eccube/optional
+compose.yaml
+compose.override.yaml
+compose.prod.yaml
+compose.app.yaml
+phpunit.xml
+phpunit.11.xml
+.env.example
+.eccube-docker-paths
+.gitignore
+LICENSE
+README.md
+CLAUDE.md
+VERSION

@@ -52,6 +52,11 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   ただし **`.env` に `ECCUBE_IMAGE` があるときは build しないので、この値は使われない。**
   動くのはタグに焼かれたバージョンで、両者は簡単にずれる。`bin/upgrade.sh` は pull した
   イメージの実バージョンを表示して確認を求める。
+- **`bin/self-update.sh` の更新対象は `.eccube-docker-paths`。** スクリプト内の配列は控えで、
+  **正は「これから入れる版」の一覧**。スクリプト側だけ見ると、新しい版で足したパスが
+  初回の更新で届かない（`LICENSE` を足したときに実際にそうなった）。
+  **`mapfile` を使わないこと。** bash 4 以降の組み込みで、**macOS の bash は 3.2**。
+  `command not found` で `set -e` が働き、何も出さずに死ぬ。
 - **「更新」は 3 つあり、別物。** 自分のコードは `bin/deploy.sh`（毎日）、環境（`bin/` や
   compose）は `bin/self-update.sh`、EC-CUBE 本体は `bin/upgrade.sh`。順番は
   self-update → upgrade。逆にすると新しい本体を古いスクリプトで扱うことになる。
