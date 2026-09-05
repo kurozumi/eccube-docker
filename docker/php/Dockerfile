@@ -41,7 +41,10 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
         mbstring \
         bcmath \
         exif \
-        opcache
+    # opcache は **PHP 8.5 から本体に組み込み**で、shared では作れない。8.5 で
+    # docker-php-ext-install に渡すと「Build complete」の直後に modules/ が無くて落ちる
+    # （cp: cannot stat 'modules/*'）。すでに載っていれば飛ばす
+    && if ! php -m | grep -qi '^Zend OPcache'; then docker-php-ext-install -j"$(nproc)" opcache; fi
 
 # ---- phpredis（セッション/キャッシュの Redis 共有用）----
 # バージョンは EC-CUBE 側の Symfony Cache に合わせる必要があり、両立しない。

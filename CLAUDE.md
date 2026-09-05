@@ -56,6 +56,19 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   ただし **`.env` に `ECCUBE_IMAGE` があるときは build しないので、この値は使われない。**
   動くのはタグに焼かれたバージョンで、両者は簡単にずれる。`bin/upgrade.sh` は pull した
   イメージの実バージョンを表示して確認を求める。
+- **配布イメージは毎週月曜に焼き直される**（`build-image.yml` の `schedule`）。土台の
+  `php:8.x-fpm-bookworm` は浮動タグなので、**焼き直すだけで PHP と Debian のパッチが入る。**
+  焼くのは**最新リリースのタグ**の Dockerfile（main を焼くと未リリースの変更が配られる）、
+  **キャッシュ無し**（apt の layer が当たるとパッチが入らず、焼いた意味が無い）。
+  追跡タグ（`4.3` / `4.3-php8.3`）と日付タグ（`4.3-20260907`）だけ動かし、`-vX.Y.Z` は
+  「そのリリースの時点」として不変。**本番の推奨は追跡タグ + `bin/deploy.sh`**
+  （PHP のパッチに `upgrade.sh` は要らない。PHP は `eccube_app` ボリュームの外）。
+  緊急は `workflow_dispatch` の `refresh: true` で当日焼く。
+- **PHP は系列ごとに複数焼く**（4.2: 8.1/8.2、4.3: 8.1/8.2/8.3、4.4: 8.2〜8.5。上流 README の
+  対応一覧）。`-php` 無しの短いタグは系列の既定（`image_php_for_series`）。phpredis は系列で
+  決まる（4.2/4.3: 6.0.2、4.4: 6.3.0）。**matrix と `bin/lib/image.sh` を揃える。**
+  DB の版は `.env` の `MARIADB_VERSION` / `PG_VERSION`（image と Doctrine の `serverVersion` の
+  両方に効く。`DATABASE_SERVER_VERSION` は外部 DB で版が違うときだけ）。
 - **`bin/self-update.sh` の更新対象は `.eccube-docker-paths`。** スクリプト内の配列は控えで、
   **正は「これから入れる版」の一覧**。スクリプト側だけ見ると、新しい版で足したパスが
   初回の更新で届かない（`LICENSE` を足したときに実際にそうなった）。

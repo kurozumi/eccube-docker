@@ -6,8 +6,15 @@
 #
 # トリガ:
 #   - タグ push（v*）… リリース。**これが配布の実体**で、利用者が追うタグが動く。
+#   - 定期（毎週月曜 03:00 JST）… **PHP と Debian のパッチを取り込むため**の焼き直し。
+#                     Dockerfile は**最新リリースのタグ**のものを使う（main の未リリース分を
+#                     配らない）。追跡タグ（4.3 / 4.3-php8.2）と日付タグを動かす。
+#                     -vX.Y.Z は動かさない（あれは「そのリリースの時点」の固定）。
+#                     **キャッシュを使わない**（apt の layer が当たると Debian のパッチが
+#                     入らず、焼き直した意味が無い）。緊急のパッチは手動実行で当日焼く。
 #   - pull_request  … Dockerfile を壊していないか確かめるだけ（push しない）。
 #   - 手動実行      … 系列を指定して試し焼き。**追跡タグは動かさない**（sha だけ）。
+#                     `refresh: true` を付けると定期と同じ扱い（追跡タグと日付タグを動かす）。
 #
 #   ブランチへの push では動かさない。main で動かすと利用者が引くものが予告なく
 #   変わり、保守ブランチで動かすと直接 push のたびに回る。
@@ -20,10 +27,15 @@
 # チェックの結果は最新コミットのものとは限らない。確かめ直したいときは
 # 手動実行（workflow_dispatch）を使う。
 #
-# 生成タグ（<owner>/<repo> は GitHub の所有者とリポジトリ名）:
-#   ghcr.io/<owner>/<repo>/ec-cube:4.3-v1.2.0  … 固定。**利用者はこれを指定する**
-#   ghcr.io/<owner>/<repo>/ec-cube:4.3         … 系列の最新リリース（追跡用）
-#   ghcr.io/<owner>/<repo>/ec-cube:4.3-<sha>   … ロールバック・試し焼き用
+# 生成タグ（<owner>/<repo> は GitHub の所有者とリポジトリ名）。系列ごとに PHP を
+# 複数焼き、**系列の既定 PHP には `-php` 無しの短いタグも打つ**:
+#   ghcr.io/<owner>/<repo>/ec-cube:4.3               … 追跡。**本番はこれ**（毎週の焼き直しで
+#                                                      PHP / Debian のパッチが入る。bin/deploy.sh が引き直す）
+#   ghcr.io/<owner>/<repo>/ec-cube:4.3-php8.3        … PHP を選ぶとき（追跡）
+#   ghcr.io/<owner>/<repo>/ec-cube:4.3-20260907      … 日付固定。「同じものを何度も立てる」人向け
+#   ghcr.io/<owner>/<repo>/ec-cube:4.3-v1.2.0        … リリース時点の固定
+#   ghcr.io/<owner>/<repo>/ec-cube:4.3-php8.3-v1.2.0 … 同上、PHP 指定
+#   ghcr.io/<owner>/<repo>/ec-cube:4.3-<sha>         … ロールバック・試し焼き用
 #
 #   **`latest` は作らない。** EC-CUBE は 4.2 / 4.3 / 4.4 が並行して現役で、
 #   単一の「最新」は存在しない。作ると、利用者は自分がどの系列を引くのか
@@ -35,6 +47,9 @@ name: build-image
 on:
   push:
     tags: ["v*"]
+  schedule:
+    # 毎週月曜 03:00 JST（= 日曜 18:00 UTC）。PHP の月例パッチ（木曜）を翌週頭に取り込む
+    - cron: "0 18 * * 0"
   pull_request:
     types: [opened, reopened]
     paths:
@@ -46,6 +61,11 @@ on:
         description: "対象の系列（空なら全系列）。例: 4.4"
         required: false
         default: ""
+      refresh:
+        description: "定期と同じ焼き直し（最新リリースの Dockerfile・キャッシュ無し・追跡タグと日付タグを動かす）"
+        type: boolean
+        required: false
+        default: false
 
 # 同じ ref で走っているものは、新しいほうだけ残す（実行時間ぶん課金されるため）。
 # **リリース（タグ）は止めない。** タグごとに ref が違うので group も別になるが、
@@ -61,15 +81,38 @@ env:
 jobs:
   # 焼く対象の一覧を作る。
   #
-  # **系列ごとに PHP と phpredis が決まる。** phpredis は EC-CUBE 側の
-  # Symfony Cache と両立しないバージョンがあり、間違えると起動時に落ちる
-  # （docker/php/Dockerfile のコメント参照）。**bin/lib/image.sh の
+  # **系列ごとに焼く PHP の一覧と、phpredis が決まる。** PHP は上流の README の
+  # 対応一覧に従う（4.2: 7.4–8.1、4.3: 8.1–8.3、4.4: 8.2–8.5）。4.2 の既定 8.2 は
+  # 対応一覧の外だが composer の制約（^8.0）には入り、v1.0.0 からそれで配っている。
+  # phpredis は EC-CUBE 側の Symfony Cache と両立しないバージョンがあり、間違えると
+  # 起動時に落ちる（docker/php/Dockerfile のコメント参照）。**bin/lib/image.sh の
   # image_php_for_series / image_phpredis_for_series と揃えること。**
+  # `default: true` の 1 つに `-php` 無しの短いタグを打つ。
   setup:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
+      ref: ${{ steps.ref.outputs.ref }}
+      refresh: ${{ steps.ref.outputs.refresh }}
     steps:
+      - id: ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 定期（と refresh 指定の手動実行）は**最新リリースのタグ**の Dockerfile を焼く。
+          # main を焼くと、リリースしていない Dockerfile の変更が追跡タグで配られる。
+          refresh=false
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.refresh }}" = "true" ]; then
+            refresh=true
+          fi
+          ref="${{ github.sha }}"
+          if [ "$refresh" = true ]; then
+            ref="$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)"
+            [ -n "$ref" ] || { echo "リリースがまだ無いので焼き直せません" >&2; exit 1; }
+          fi
+          echo "refresh=$refresh" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref refresh=$refresh"
       - id: build
         run: |
           # **4.4 は `4.4.x-dev`。** Packagist に 4.4 のリリースはまだ 1 つも無く、
@@ -81,9 +124,15 @@ jobs:
           # `~4.4.0` へ変えること。それまで 4.4 のイメージは「その時点の
           # ブランチの写し」であって、再現しない。
           all='[
-            {"series":"4.2","eccube":"~4.2.0","php":"8.2","phpredis":"6.0.2"},
-            {"series":"4.3","eccube":"~4.3.0","php":"8.2","phpredis":"6.0.2"},
-            {"series":"4.4","eccube":"4.4.x-dev","php":"8.3","phpredis":"6.3.0"}
+            {"series":"4.2","eccube":"~4.2.0",  "php":"8.1","phpredis":"6.0.2","default":false},
+            {"series":"4.2","eccube":"~4.2.0",  "php":"8.2","phpredis":"6.0.2","default":true},
+            {"series":"4.3","eccube":"~4.3.0",  "php":"8.1","phpredis":"6.0.2","default":false},
+            {"series":"4.3","eccube":"~4.3.0",  "php":"8.2","phpredis":"6.0.2","default":true},
+            {"series":"4.3","eccube":"~4.3.0",  "php":"8.3","phpredis":"6.0.2","default":false},
+            {"series":"4.4","eccube":"4.4.x-dev","php":"8.2","phpredis":"6.3.0","default":false},
+            {"series":"4.4","eccube":"4.4.x-dev","php":"8.3","phpredis":"6.3.0","default":true},
+            {"series":"4.4","eccube":"4.4.x-dev","php":"8.4","phpredis":"6.3.0","default":false},
+            {"series":"4.4","eccube":"4.4.x-dev","php":"8.5","phpredis":"6.3.0","default":false}
           ]'
           want='${{ github.event.inputs.series }}'
           if [ -n "$want" ]; then
@@ -111,6 +160,8 @@ jobs:
         target: ${{ fromJSON(needs.setup.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.ref }}
 
       - uses: docker/setup-buildx-action@v3
 
@@ -129,15 +180,30 @@ jobs:
         run: |
           img="${REGISTRY}/${IMAGE_NAME}"
           series='${{ matrix.target.series }}'
+          php='${{ matrix.target.php }}'
+          is_default='${{ matrix.target.default }}'
+          refresh='${{ needs.setup.outputs.refresh }}'
+          sha='${{ needs.setup.outputs.ref }}'
+          case "$sha" in v*) sha="$(git rev-parse HEAD)" ;; esac
 
-          # 常に sha 付きを打つ（ロールバックの固定参照）
-          tags="${img}:${series}-${GITHUB_SHA}"
+          # 系列＋PHP を軸にし、既定 PHP には `-php` 無しの短い名前も打つ
+          bases="${series}-php${php}"
+          [ "$is_default" = "true" ] && bases="${bases} ${series}"
 
-          # **追跡タグを動かすのはリリース（タグ push）のときだけ。**
-          # 手動実行で動かすと、試し焼きが利用者に配られてしまう。
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            tags="${tags},${img}:${series}-${GITHUB_REF_NAME},${img}:${series}"
-          fi
+          tags=""
+          add() { tags="${tags}${tags:+,}${img}:$1"; }
+          for b in $bases; do
+            # 常に sha 付きを打つ（ロールバックの固定参照）
+            add "${b}-${sha}"
+            if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+              # リリース: 時点の固定 + 追跡
+              add "${b}-${GITHUB_REF_NAME}"; add "$b"
+            elif [ "$refresh" = "true" ]; then
+              # 定期の焼き直し: 日付の固定 + 追跡（-vX.Y.Z は動かさない）
+              add "${b}-$(date -u +%Y%m%d)"; add "$b"
+            fi
+            # 手動の試し焼きは sha だけ。追跡タグを動かすと試し焼きが利用者に配られる
+          done
 
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "$tags" | tr ',' '\n'
@@ -155,7 +221,11 @@ jobs:
             PHP_VERSION=${{ matrix.target.php }}
             PHPREDIS_VERSION=${{ matrix.target.phpredis }}
           tags: ${{ steps.tags.outputs.tags }}
-          # 系列ごとにキャッシュを分ける。共有すると 4.3 の layer を 4.4 が
+          # 焼き直しのときは土台を引き直し、キャッシュを使わない。apt の layer が
+          # 当たると Debian のパッチが入らず、焼き直した意味が無い
+          pull: true
+          no-cache: ${{ needs.setup.outputs.refresh == 'true' }}
+          # 系列 × PHP ごとにキャッシュを分ける。共有すると 4.3 の layer を 4.4 が
           # 引き当てて、違う系列の vendor が混ざる。
-          cache-from: type=gha,scope=${{ matrix.target.series }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target.series }}
+          cache-from: type=gha,scope=${{ matrix.target.series }}-php${{ matrix.target.php }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target.series }}-php${{ matrix.target.php }}

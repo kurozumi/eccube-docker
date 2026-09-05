@@ -73,6 +73,10 @@ read -r -p "続行しますか? [y/N] " ans
 
 # DB は手元の db サービスか外部か（bin/backup.sh と同じ判定）
 db_engine="$(env_get DB_ENGINE)"; db_engine="${db_engine:-mysql}"
+# 外部 DB に繋ぐクライアントの版は、手元の db サービスと同じ変数から（.env の MARIADB_VERSION / PG_VERSION）
+mariadb_img="$(env_get MARIADB_IMAGE)"; mariadb_img="${mariadb_img:-mariadb}"
+mariadb_ver="$(env_get MARIADB_VERSION)"; mariadb_ver="${mariadb_ver:-10.6}"
+pg_ver="$(env_get PG_VERSION)"; pg_ver="${pg_ver:-16}"
 db_host="$(env_get DB_HOST)"; db_host="${db_host:-db}"
 db_port="$(env_get DB_PORT)"
 local_db=0; [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null)" ] && local_db=1
@@ -86,7 +90,7 @@ case "$db_engine" in
             'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -q -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null
     else
         echo "[restore] DB を復元しています（外部 PostgreSQL: ${db_host}:${db_port}）..."
-        gunzip -c "${src}/db.sql.gz" | docker run --rm -i --network "${proj}_default" -e PGPASSWORD="$(env_get DB_PASSWORD)" postgres:16-alpine \
+        gunzip -c "${src}/db.sql.gz" | docker run --rm -i --network "${proj}_default" -e PGPASSWORD="$(env_get DB_PASSWORD)" "postgres:${pg_ver}-alpine" \
             psql -q -v ON_ERROR_STOP=0 -h "$db_host" -p "$db_port" -U "$(env_get DB_USER)" -d "$(env_get DB_NAME)" >/dev/null
     fi
     ;;
@@ -99,7 +103,7 @@ case "$db_engine" in
     else
         echo "[restore] DB を復元しています（外部: ${db_host}:${db_port}）..."
         gunzip -c "${src}/db.sql.gz" | docker run --rm -i --network "${proj}_default" \
-            -e MYSQL_PWD="$(env_get DB_PASSWORD)" mariadb:10.6 \
+            -e MYSQL_PWD="$(env_get DB_PASSWORD)" "${mariadb_img}:${mariadb_ver}" \
             mysql -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)"
     fi
     ;;

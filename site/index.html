@@ -317,15 +317,16 @@ bin/init.sh</pre>
     <p class="sub">配布イメージを使うと、手元でビルドせずに数十秒で立ち上がります。<code>.env</code> に 1 行書くだけ。</p>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>系列</th><th>イメージ</th><th>備考</th></tr></thead>
+        <thead><tr><th>系列</th><th>イメージ（本番はこれ）</th><th>選べる PHP</th><th>備考</th></tr></thead>
         <tbody>
-          <tr><td>4.3</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-__TAG__</code></td><td>推奨</td></tr>
-          <tr><td>4.2</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.2-__TAG__</code></td><td></td></tr>
-          <tr><td>4.4</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.4-__TAG__</code></td><td>上流の開発ブランチから焼いている。本番なら <code>4.4-&lt;sha&gt;</code> で固定</td></tr>
+          <tr><td>4.3</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.3</code></td><td>8.1 / <strong>8.2</strong> / 8.3</td><td>推奨</td></tr>
+          <tr><td>4.2</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.2</code></td><td>8.1 / <strong>8.2</strong></td><td></td></tr>
+          <tr><td>4.4</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.4</code></td><td>8.2 / <strong>8.3</strong> / 8.4 / 8.5</td><td>上流の開発ブランチから焼いている。同じものを立てたいなら日付タグで固定</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="sub">DB は <strong>MariaDB / MySQL</strong>（既定）か <strong>PostgreSQL</strong>。<code>.env</code> の <code>DB_ENGINE</code> で選び、バックアップも引っ越しも同じコマンドで通ります。手元の DB でも、クラウドのマネージド DB でも。</p>
+    <p class="sub"><strong>イメージは毎週月曜に焼き直され、PHP と OS のセキュリティパッチが入ります。</strong>太字は <code>-php</code> 無しの既定。PHP を選ぶなら <code>4.4-php8.5</code> のように書く。同じものを何度も立てたい人は日付タグ <code>4.3-20260907</code>、リリース時点なら <code>4.3-__TAG__</code>。</p>
+    <p class="sub">DB は <strong>MariaDB / MySQL</strong>（既定）か <strong>PostgreSQL</strong>。版は <code>.env</code> の <code>MARIADB_VERSION</code> / <code>PG_VERSION</code>。<code>.env</code> の <code>DB_ENGINE</code> で選び、バックアップも引っ越しも同じコマンドで通ります。手元の DB でも、クラウドのマネージド DB でも。</p>
   </div>
 </section>
 

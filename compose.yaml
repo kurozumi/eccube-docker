@@ -21,8 +21,9 @@ x-eccube-environment: &eccube-environment
   # スキーム・ポート・serverVersion・charset をそれぞれ変数から引いて 1 本の URL にする。
   # postgresql のときは compose.postgresql.yaml が db サービスを差し替え、これらの既定を
   # 5432 / 16 / utf8 に上書きする（bin/init.sh が COMPOSE_FILE に足す）。
-  DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@db:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-10.6.0}&charset=${DB_CHARSET:-utf8mb4}"
-  DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-10.6.0}
+  DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:-eccube_pass}@db:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}&charset=${DB_CHARSET:-utf8mb4}"
+  # MariaDB の版は MARIADB_VERSION（db サービスの image と serverVersion の両方に効く）
+  DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}
   DB_ENGINE: ${DB_ENGINE:-mysql}
   DB_PORT: ${DB_PORT:-3306}
   # 本番は実メールサービスの DSN を .env で設定する。未設定なら送信は破棄（null）。
@@ -235,7 +236,8 @@ services:
 
   db:
     logging: *default-logging
-    image: mariadb:10.6
+    # 版は .env の MARIADB_VERSION（10.6 / 10.11 / 11.4 …。MySQL なら mysql:8.4 のように image ごと変える）
+    image: ${MARIADB_IMAGE:-mariadb}:${MARIADB_VERSION:-10.6}
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change_me_root}
       MYSQL_DATABASE: ${DB_NAME:-eccube_db}
