@@ -13,100 +13,98 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
   :root {
-    --ground: #F2F4F6;
+    --ground: #FFFFFF;
+    --band: #F6F7F9;
     --surface: #FFFFFF;
-    --sunk: #E6EAEE;
-    --ink: #171C22;
-    --ink-soft: #46525E;
-    --ink-mute: #6F7C89;
-    --line: #D2D9E0;
-    --accent: #0E6B6B;
+    --sunk: #F1F3F6;
+    --ink: #0B1F33;
+    --ink-soft: #3E4F61;
+    --ink-mute: #6B7A8A;
+    --line: #E1E6EC;
+    --accent: #E8621C;
+    --accent-deep: #C24E10;
+    --accent-soft: #FFF1E8;
     --accent-ink: #FFFFFF;
-    --accent-bg: #DCEDED;
-    --warn: #A2481B;
-    --warn-bg: #F6E7DD;
+    --warn: #B3421B;
+    --warn-bg: #FFF4EC;
     --f-display: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
     --f-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
     --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    color-scheme: light dark;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --ground: #0F1418; --surface: #171D23; --sunk: #1E262E;
-      --ink: #E4E9EE; --ink-soft: #AAB6C2; --ink-mute: #7E8B98; --line: #2B353F;
-      --accent: #5FC3C3; --accent-ink: #0F1418; --accent-bg: #163030;
-      --warn: #E39C66; --warn-bg: #2E2017;
-    }
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.85; -webkit-font-smoothing: antialiased; }
-  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  a { color: var(--accent-deep); text-decoration-thickness: 1px; text-underline-offset: 3px; }
   a:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
-  code { font-family: var(--f-mono); font-size: .9em; background: var(--sunk); padding: 1px 6px; border-radius: 3px; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+  code { font-family: var(--f-mono); font-size: .9em; background: var(--sunk); padding: 1px 6px; border-radius: 4px; color: var(--ink); }
+
+  /* 主張したい語だけ浮かせる（Cloudflare の見出しのやり方） */
+  em.k { font-style: normal; color: var(--accent); }
+  .voice em.k { color: var(--accent-deep); }
 
   /* ── 冒頭 ── */
-  header.hero { padding: 72px 0 52px; border-bottom: 1px solid var(--line); }
-  .eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .12em; color: var(--ink-mute); margin: 0 0 18px; }
-  h1 { font-family: var(--f-display); font-weight: 900; font-size: clamp(30px, 5.8vw, 48px); line-height: 1.28; letter-spacing: .005em; margin: 0 0 20px; text-wrap: balance; }
-  .lede { font-size: 17px; color: var(--ink-soft); max-width: 40em; margin: 0 0 30px; }
+  header.hero { padding: 88px 0 64px; background: linear-gradient(180deg, #FFF7F1 0%, #FFFFFF 70%); border-bottom: 1px solid var(--line); }
+  .eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .12em; color: var(--ink-mute); margin: 0 0 20px; }
+  h1 { font-family: var(--f-display); font-weight: 900; font-size: clamp(32px, 5.6vw, 52px); line-height: 1.28; word-break: keep-all; overflow-wrap: anywhere; letter-spacing: -.005em; margin: 0 0 22px; text-wrap: balance; }
+  .lede { font-size: 18px; color: var(--ink-soft); max-width: 40em; margin: 0 0 32px; }
   .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-  .btn { display: inline-block; padding: 11px 20px; border-radius: 4px; font-family: var(--f-display); font-weight: 700; font-size: 15px; text-decoration: none; background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); }
-  .btn.ghost { background: transparent; color: var(--accent); }
-  .meta { font-family: var(--f-mono); font-size: 12px; color: var(--ink-mute); }
+  .btn { display: inline-block; padding: 13px 24px; border-radius: 6px; font-family: var(--f-display); font-weight: 700; font-size: 15px; text-decoration: none; background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); box-shadow: 0 2px 0 var(--accent-deep); }
+  .btn.ghost { background: #FFFFFF; color: var(--ink); border-color: var(--line); box-shadow: none; }
 
   /* ── 節 ── */
-  section { padding: 56px 0; border-bottom: 1px solid var(--line); }
-  section:last-of-type { border-bottom: 0; }
-  h2 { font-family: var(--f-display); font-weight: 700; font-size: 25px; line-height: 1.45; margin: 0 0 8px; text-wrap: balance; }
-  .sub { color: var(--ink-mute); margin: 0 0 30px; max-width: 44em; }
+  section { padding: 64px 0; }
+  section.band { background: var(--band); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  h2 { font-family: var(--f-display); font-weight: 900; font-size: clamp(26px, 3.6vw, 34px); line-height: 1.35; margin: 0 0 10px; text-wrap: balance; }
+  .sub { color: var(--ink-soft); margin: 0 0 32px; max-width: 44em; font-size: 16.5px; }
   p { max-width: 44em; }
 
   /* ── 症状 → この環境では ── */
   .pains { display: flex; flex-direction: column; gap: 18px; }
-  .pain { background: var(--surface); border: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
-  .pain > div { padding: 22px 22px 24px; min-width: 0; }
+  .pain { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); overflow: hidden; box-shadow: 0 1px 2px rgba(11,31,51,.04); }
+  .pain > div { padding: 24px 24px 26px; min-width: 0; }
   .pain .who { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-mute); margin: 0 0 10px; }
-  .pain .voice { font-family: var(--f-display); font-weight: 700; font-size: 17px; line-height: 1.55; margin: 0; text-wrap: balance; }
+  .pain .voice { font-family: var(--f-display); font-weight: 700; font-size: 18px; line-height: 1.55; margin: 0; text-wrap: balance; }
   .pain .voice small { display: block; font-family: var(--f-body); font-weight: 400; font-size: 14px; color: var(--ink-soft); margin-top: 8px; }
-  .pain .fix { border-left: 1px solid var(--line); background: color-mix(in srgb, var(--accent-bg) 45%, var(--surface)); }
-  .pain .fix h3 { font-family: var(--f-display); font-size: 15px; font-weight: 700; margin: 0 0 8px; color: var(--accent); }
+  .pain .fix { border-left: 1px solid var(--line); background: var(--accent-soft); }
+  .pain .fix h3 { font-family: var(--f-display); font-size: 16px; font-weight: 900; margin: 0 0 8px; color: var(--accent-deep); }
   .pain .fix p { margin: 0 0 10px; font-size: 14.5px; color: var(--ink-soft); }
   .pain .fix p:last-child { margin: 0; }
   @media (max-width: 640px) { .pain { grid-template-columns: 1fr; } .pain .fix { border-left: 0; border-top: 1px solid var(--line); } }
 
-  pre { margin: 0; padding: 14px 16px; background: var(--sunk); border: 1px solid var(--line); border-left: 3px solid var(--accent); font-family: var(--f-mono); font-size: 13px; line-height: 1.8; color: var(--ink); overflow-x: auto; }
-  pre .c { color: var(--ink-mute); }
-  .pain pre { font-size: 12.5px; padding: 10px 14px; }
+  pre { margin: 0; padding: 14px 16px; background: #0B1F33; color: #E9EEF4; border-radius: 8px; font-family: var(--f-mono); font-size: 13px; line-height: 1.8; overflow-x: auto; }
+  pre .c { color: #8FA3B8; }
+  .pain pre { font-size: 12.5px; padding: 12px 14px; }
 
-  .steps { display: flex; flex-direction: column; gap: 20px; }
-  .step { display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: start; }
-  .num { font-family: var(--f-mono); font-weight: 600; font-size: 13px; text-align: center; color: var(--accent); background: var(--accent-bg); border: 1px solid var(--line); height: 30px; line-height: 28px; margin-top: 2px; }
-  .step h3 { font-family: var(--f-display); font-size: 16px; font-weight: 700; margin: 0 0 8px; }
-  .step p { margin: 8px 0 0; font-size: 14.5px; color: var(--ink-soft); }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px; display: flex; flex-direction: column; gap: 10px; }
+  .num { font-family: var(--f-display); font-weight: 900; font-size: 28px; line-height: 1; color: var(--accent); }
+  .step h3 { font-family: var(--f-display); font-size: 17px; font-weight: 700; margin: 0; }
+  .step p { margin: 0; font-size: 14px; color: var(--ink-soft); }
 
   .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-  .box { background: var(--surface); border: 1px solid var(--line); padding: 20px 22px; }
-  .box h3 { font-family: var(--f-display); font-size: 16px; font-weight: 700; margin: 0 0 10px; }
+  .box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; }
+  .box h3 { font-family: var(--f-display); font-size: 17px; font-weight: 900; margin: 0 0 10px; }
   .box ul { margin: 0; padding-left: 1.2em; font-size: 14.5px; color: var(--ink-soft); }
-  .box li { margin: 4px 0; }
-  .box.no { border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
-  .box.no h3 { color: var(--warn); }
+  .box li { margin: 5px 0; }
+  .box.ok h3 { color: var(--accent-deep); }
+  .box.no { background: var(--band); }
+  .box.no h3 { color: var(--ink-mute); }
 
-  .note { display: flex; gap: 12px; align-items: baseline; padding: 12px 16px; margin-top: 18px; font-size: 14px; color: var(--ink-soft); background: var(--warn-bg); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+  .note { display: flex; gap: 12px; align-items: baseline; padding: 12px 16px; margin-top: 18px; font-size: 14px; color: var(--ink-soft); background: var(--warn-bg); border: 1px solid #F3D3BE; border-radius: 8px; }
   .note b { color: var(--warn); font-size: 11px; letter-spacing: .1em; white-space: nowrap; }
 
   table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
   th, td { text-align: left; padding: 10px 14px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 700; }
-  td:first-child { white-space: nowrap; font-weight: 500; }
+  td:first-child { white-space: nowrap; font-weight: 700; }
   .tablewrap { overflow-x: auto; }
 
   .docs { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
   .docs .box p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
 
-  footer { padding: 36px 0 56px; color: var(--ink-mute); font-size: 13.5px; }
+  footer { padding: 40px 0 64px; color: var(--ink-mute); font-size: 13.5px; border-top: 1px solid var(--line); }
   footer p { margin: 6px 0; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 </style>
@@ -116,7 +114,7 @@
 <header class="hero">
   <div class="wrap">
     <p class="eyebrow">eccube-docker · __TAG__ · Apache-2.0</p>
-    <h1>EC-CUBE 4 の<br>インストール・バージョンアップ・サーバー移転を、<br>いつもの 1 コマンドにする。</h1>
+    <h1>EC-CUBE 4 の <em class="k">インストール・バージョンアップ・サーバー移転</em>を、いつもの <em class="k">1 コマンド</em>にする。</h1>
     <p class="lede">
       「直したのに反映されない」「上げるのが怖い」「引っ越しが大仕事」。EC-CUBE 4 を本番で
       回すと必ず当たるところを、手順書ではなくコマンドにしました。本体はイメージに焼き、
@@ -130,16 +128,16 @@
   </div>
 </header>
 
-<section id="pains">
+<section id="pains" class="band">
   <div class="wrap">
-    <h2>こんなところで止まっていませんか</h2>
+    <h2>こんなところで<em class="k">止まって</em>いませんか</h2>
     <p class="sub">左は実際によく聞く声、右はこの環境がどう片付けるか。ひとつでも当たれば、続きを読む価値があります。</p>
     <div class="pains">
 
       <div class="pain">
         <div>
           <p class="who">店の担当者 / 引き継いだ人</p>
-          <p class="voice">「バージョンアップの見積もりが高すぎる。でも PHP が古いと言われた」
+          <p class="voice">「バージョンアップの<em class="k">見積もりが高すぎる</em>。でも PHP が古いと言われた」
             <small>制作会社に頼むと数十万。自分でやると壊れそうで、戻し方も分からない。</small></p>
         </div>
         <div class="fix">
@@ -152,7 +150,7 @@
       <div class="pain">
         <div>
           <p class="who">引き継いだ人</p>
-          <p class="voice">「前の会社が作ったサイト。直したのに反映されない。何がどこにあるか分からない」
+          <p class="voice">「前の会社が作ったサイト。<em class="k">直したのに反映されない</em>。何がどこにあるか分からない」
             <small>キャッシュを消しても変わらない。エラーも出ない。触るのが怖い。</small></p>
         </div>
         <div class="fix">
@@ -166,7 +164,7 @@
       <div class="pain">
         <div>
           <p class="who">レンタルサーバーから出たい人</p>
-          <p class="voice">「共用サーバーで始めたけど、もう上げられない。VPS に移したい。でも画像と DB とテンプレが散らばっている」
+          <p class="voice">「共用サーバーで始めたけど、もう上げられない。<em class="k">VPS に移したい</em>。でも画像と DB とテンプレが散らばっている」
             <small>移転の手順を検索すると、人によって言うことが違う。</small></p>
         </div>
         <div class="fix">
@@ -181,7 +179,7 @@ bin/init.sh &amp;&amp; bin/restore.sh backups/&lt;日時&gt;</pre>
       <div class="pain">
         <div>
           <p class="who">制作会社 / フリーランス</p>
-          <p class="voice">「案件ごとにサーバーの手順が違う。前と同じにならない。保守が赤字」
+          <p class="voice">「案件ごとにサーバーの手順が違う。前と同じにならない。<em class="k">保守が赤字</em>」
             <small>本番の反映で毎回ひやひやする。メンテナンス表示を出し忘れる。</small></p>
         </div>
         <div class="fix">
@@ -194,7 +192,7 @@ bin/init.sh &amp;&amp; bin/restore.sh backups/&lt;日時&gt;</pre>
       <div class="pain">
         <div>
           <p class="who">プラグイン開発者</p>
-          <p class="voice">「本番と同じ環境で試したい。テンプレの上書きと更新で毎回悩む」
+          <p class="voice">「本番と同じ環境で試したい。<em class="k">テンプレの上書き</em>と更新で毎回悩む」
             <small>写しを置いたら、プラグインを更新しても古いほうが勝ち続けた。</small></p>
         </div>
         <div class="fix">
@@ -211,22 +209,22 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
 
 <section>
   <div class="wrap">
-    <h2>毎日はこれだけ</h2>
+    <h2>毎日は<em class="k">これだけ</em></h2>
     <p class="sub">直す場所（手元）と動かす場所（サーバー）を分ける。この環境の全部です。</p>
     <div class="steps">
-      <div class="step"><div class="num">1</div><div><h3>手元で直す</h3><pre>bin/init.sh                <span class="c"># 初回だけ。http://localhost:8080/ で動く</span></pre></div></div>
-      <div class="step"><div class="num">2</div><div><h3>控えを送る</h3><pre>git add -A &amp;&amp; git commit -m "何を直したか" &amp;&amp; git push</pre></div></div>
-      <div class="step"><div class="num">3</div><div><h3>サーバーに反映する</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop</pre><p>数分かかります。途中で止めないでください。終わったらお店を開いて目で確かめる。</p></div></div>
+      <div class="step"><div class="num">1</div><h3>手元で直す</h3><pre>bin/init.sh                <span class="c"># 初回だけ。http://localhost:8080/ で動く</span></pre></div>
+      <div class="step"><div class="num">2</div><h3>控えを送る</h3><pre>git add -A &amp;&amp; git commit -m "何を直したか" &amp;&amp; git push</pre></div>
+      <div class="step"><div class="num">3</div><h3>サーバーに反映する</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop</pre><p>数分かかります。途中で止めないでください。終わったらお店を開いて目で確かめる。</p></div>
     </div>
   </div>
 </section>
 
-<section>
+<section class="band">
   <div class="wrap">
-    <h2>向いている人・向いていない人</h2>
+    <h2>向いている人・<em class="k">向いていない人</em></h2>
     <p class="sub">正直に書きます。合わない人が使うと、お互いに時間を失うので。</p>
     <div class="two">
-      <div class="box">
+      <div class="box ok">
         <h3>向いている</h3>
         <ul>
           <li>Docker が動く VPS かクラウドで EC-CUBE 4 を運用する（これから移る人も）</li>
@@ -254,7 +252,7 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
 
 <section id="start">
   <div class="wrap">
-    <h2>始め方</h2>
+    <h2><em class="k">git clone しない</em>始め方</h2>
     <p class="sub"><strong>git clone しません。</strong> リリースの中身をもらって、自分専用の非公開リポジトリとして始めます。</p>
     <pre><span class="c"># 配布元の最新リリースの中身をもらう（git の履歴は付いてこない）</span>
 curl -fsSL https://github.com/kurozumi/eccube-docker/archive/refs/tags/__TAG__.tar.gz | tar -xz
@@ -290,7 +288,7 @@ bin/init.sh</pre>
   </div>
 </section>
 
-<section>
+<section class="band">
   <div class="wrap">
     <h2>文書</h2>
     <p class="sub">理由を書かない手引きと、理由を書いた文書の 2 段構えです。</p>
