@@ -142,6 +142,12 @@ Symfony Cache と両立しないバージョンがあり、間違えると起動
 
 利用者は `bin/self-update.sh` の最後に出るリンクからここへ来る。
 
+### 紹介ページ
+
+`site/index.html` を GitHub Pages に配る（`.github/workflows/pages.yml`）。**Release を出したときに
+自動で更新される**（手動実行も可）。ページ内の `__TAG__` / `__VER__` は配る直前に最新 Release の
+番号で置き換わるので、版を書き換えて回る必要は無い。`site/` は配布物から外してある。
+
 ### 試し焼き
 
 `workflow_dispatch` で系列を指定して実行する。**追跡タグ（`4.3` など）は動かず**、

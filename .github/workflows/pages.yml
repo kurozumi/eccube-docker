@@ -1,0 +1,57 @@
+# 紹介ページ（site/）を GitHub Pages に配る。
+#
+# 動くのは **Release を出したとき**と手動実行だけ。紹介ページは最新リリースを指すもので、
+# main への push で動かすと、まだ出していない版の番号がページに載る。
+#
+# site/ は .gitattributes で配布物（tag の tarball）から外してある。利用者に要らない。
+#
+# __TAG__ / __VER__ は配る直前に置き換える。JS で API を叩かせない（静的なまま）。
+#   __TAG__ … v1.0.0
+#   __VER__ … 1.0.0（tarball の展開先ディレクトリ名に使う）
+name: pages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 版を埋める
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # release で起動したときはそのタグ。手動なら最新の Release を引く
+          tag='${{ github.event.release.tag_name }}'
+          if [ -z "$tag" ]; then
+            tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          fi
+          [ -n "$tag" ] || { echo "Release がありません。先に Release を出してください" >&2; exit 1; }
+          ver="${tag#v}"
+          sed -i "s/__TAG__/${tag}/g; s/__VER__/${ver}/g" site/index.html
+          echo "tag=${tag} ver=${ver}"
+          grep -c '__TAG__\|__VER__' site/index.html && { echo "置き換え漏れ" >&2; exit 1; } || true
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
