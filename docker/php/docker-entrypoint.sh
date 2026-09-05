@@ -197,6 +197,10 @@ elif [ ! -f "$MARKER" ]; then
         runuser -u www-data -- php bin/console cache:clear --no-interaction || true
         touch "$MARKER"
         log "セットアップ完了"
+        log "管理画面: /${ECCUBE_ADMIN_ROUTE:-admin}/  ログイン ID: ${ECCUBE_ADMIN_USER:-admin}  パスワード: .env の ECCUBE_ADMIN_PASS"
+        if [ -z "${ECCUBE_ADMIN_PASS:-}" ] || [ "${ECCUBE_ADMIN_PASS:-}" = "password" ]; then
+            log "警告: 管理者が既定の admin / password です。公開前に必ず変えてください（bin/publish.sh は止まります）"
+        fi
     else
         log "eccube:install が失敗しました。ログを確認してください。"
     fi

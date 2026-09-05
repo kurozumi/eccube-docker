@@ -30,6 +30,9 @@ x-eccube-environment: &eccube-environment
   # 開発は compose.override.yaml が Mailpit 宛てに上書きする。
   MAILER_DSN: ${MAILER_DSN:-null://null}
   ECCUBE_ADMIN_ROUTE: ${ECCUBE_ADMIN_ROUTE:-admin}
+  # 初期管理者。fixtures を入れる瞬間にだけ効く（bin/init.sh が生成。#108）
+  ECCUBE_ADMIN_USER: ${ECCUBE_ADMIN_USER:-admin}
+  ECCUBE_ADMIN_PASS: ${ECCUBE_ADMIN_PASS:-password}
   ECCUBE_LOCALE: ${ECCUBE_LOCALE:-ja}
   # テーマ。**ここで渡すのは意図的。** 管理画面（オーナーズストア → テンプレート管理）
   # で選ぶと本体はコンテナ内の /var/www/html/.env に書くが、そこは eccube_app

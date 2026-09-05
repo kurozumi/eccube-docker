@@ -49,6 +49,12 @@ if [ "$fresh_env" = "1" ]; then
     set_env DB_PASSWORD "$(openssl rand -hex 16)"
     set_env DB_ROOT_PASSWORD "$(openssl rand -hex 16)"
     echo "[init] DB_PASSWORD / DB_ROOT_PASSWORD を生成しました"
+    # 初期管理者。本体の fixtures が ECCUBE_ADMIN_USER / ECCUBE_ADMIN_PASS を読む（既定 admin / password）。
+    # 既定のままだと bin/publish.sh が止める（#108）。管理画面の URL も推測されにくくする
+    admin_pass="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-20)"
+    set_env ECCUBE_ADMIN_PASS "$admin_pass"
+    set_env ECCUBE_ADMIN_ROUTE "admin-$(openssl rand -hex 3)"
+    echo "[init] 管理者のパスワードと管理画面の URL を生成しました（.env の ECCUBE_ADMIN_PASS / ECCUBE_ADMIN_ROUTE）"
 else
     for pair in "DB_PASSWORD=eccube_pass" "DB_ROOT_PASSWORD=change_me_root"; do
         if grep -qE "^${pair}$" .env 2>/dev/null; then

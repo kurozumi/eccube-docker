@@ -89,7 +89,7 @@ docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数�
 | 用途 | URL |
 |------|-----|
 | フロント | http://localhost:8080/ |
-| 管理画面 | http://localhost:8080/admin/ |
+| 管理画面 | http://localhost:8080/<ECCUBE_ADMIN_ROUTE>/ （`bin/init.sh` が `admin-<乱数>` にして表示。ログイン ID `admin`、パスワードは `.env` の `ECCUBE_ADMIN_PASS`） |
 | Mailpit UI | http://localhost:8025/ |
 | phpMyAdmin | http://localhost:8081/ |
 

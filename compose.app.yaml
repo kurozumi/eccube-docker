@@ -62,6 +62,8 @@ services:
       DB_PORT: ${DB_PORT:-3306}
       MAILER_DSN: ${MAILER_DSN:-null://null}
       ECCUBE_ADMIN_ROUTE: ${ECCUBE_ADMIN_ROUTE:-admin}
+      ECCUBE_ADMIN_USER: ${ECCUBE_ADMIN_USER:-admin}
+      ECCUBE_ADMIN_PASS: ${ECCUBE_ADMIN_PASS:-password}
       ECCUBE_TEMPLATE_CODE: ${ECCUBE_TEMPLATE_CODE:-default}
       # 任意機能のスイッチ（compose.yaml と同じ。外部 Redis を使うなら redis を足す）
       ECCUBE_PROFILES: ${COMPOSE_PROFILES:-}
