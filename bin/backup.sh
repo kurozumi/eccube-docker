@@ -50,6 +50,10 @@ mkdir -p "$dest"
 # **対応は MariaDB / MySQL のみ。** イメージに pdo_mysql しか入っておらず、EC-CUBE が
 # 対応する PostgreSQL はこの環境では動かない（dump も pg_dump になる）。
 db_engine="$(env_get DB_ENGINE)"; db_engine="${db_engine:-mysql}"
+# 外部 DB に繋ぐクライアントの版は、手元の db サービスと同じ変数から（.env の MARIADB_VERSION / PG_VERSION）
+mariadb_img="$(env_get MARIADB_IMAGE)"; mariadb_img="${mariadb_img:-mariadb}"
+mariadb_ver="$(env_get MARIADB_VERSION)"; mariadb_ver="${mariadb_ver:-10.6}"
+pg_ver="$(env_get PG_VERSION)"; pg_ver="${pg_ver:-16}"
 db_host="$(env_get DB_HOST)"; db_host="${db_host:-db}"
 db_port="$(env_get DB_PORT)"
 local_db=0; [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null)" ] && local_db=1
@@ -63,7 +67,7 @@ case "$db_engine" in
             | gzip > "${dest}/db.sql.gz"
     else
         echo "[backup] DB をダンプしています（外部 PostgreSQL: ${db_host}:${db_port}）..."
-        docker run --rm --network "${proj}_default" -e PGPASSWORD="$(env_get DB_PASSWORD)" postgres:16-alpine \
+        docker run --rm --network "${proj}_default" -e PGPASSWORD="$(env_get DB_PASSWORD)" "postgres:${pg_ver}-alpine" \
             pg_dump --clean --if-exists -h "$db_host" -p "$db_port" -U "$(env_get DB_USER)" "$(env_get DB_NAME)" \
             | gzip > "${dest}/db.sql.gz"
     fi
@@ -78,7 +82,7 @@ case "$db_engine" in
     else
         echo "[backup] DB をダンプしています（外部: ${db_host}:${db_port}）..."
         docker run --rm --network "${proj}_default" \
-            -e MYSQL_PWD="$(env_get DB_PASSWORD)" mariadb:10.6 mysqldump \
+            -e MYSQL_PWD="$(env_get DB_PASSWORD)" "${mariadb_img}:${mariadb_ver}" mysqldump \
             --single-transaction --triggers --no-tablespaces \
             -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)" \
             | gzip > "${dest}/db.sql.gz"

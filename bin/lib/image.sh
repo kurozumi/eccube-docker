@@ -91,8 +91,9 @@ image_phpredis_for_series() { # image_phpredis_for_series <系列>
     esac
 }
 
-# 系列ごとの PHP。4.4 は土台が Symfony 7.4 なので 8.2 以上が要る。
-# **.github/workflows/build-image.yml の matrix と揃えること。**
+# 系列ごとの**既定の** PHP（`-php` 無しの短いタグが指すもの）。4.4 は土台が Symfony 7.4
+# なので 8.2 以上が要る。他の PHP は配布タグの `-php8.x` で選ぶ（4.2: 8.1/8.2、
+# 4.3: 8.1/8.2/8.3、4.4: 8.2〜8.5）。**.github/workflows/build-image.yml の matrix と揃えること。**
 image_php_for_series() { # image_php_for_series <系列>
     case "$1" in
         4.4) printf '8.3' ;;
@@ -103,6 +104,8 @@ image_php_for_series() { # image_php_for_series <系列>
 # 参照のタグに入っている系列だけを差し替える。
 #   ghcr.io/o/r/ec-cube:4.3-v1.0.0 + 4.4 → ghcr.io/o/r/ec-cube:4.4-v1.0.0
 #   ghcr.io/o/r/ec-cube:4.3        + 4.4 → ghcr.io/o/r/ec-cube:4.4
+#   ghcr.io/o/r/ec-cube:4.3-php8.1 + 4.4 → ghcr.io/o/r/ec-cube:4.4-php8.1（**無いタグになりうる。**
+#     新しい系列にその PHP が無ければ pull で止まるので、.env の -php を新しい系列にあるものへ）
 # 系列で始まらないタグ（latest など）は**触らない**。何を指しているか分からない
 # ものを機械的に書き換えると、別系列のイメージを黙って掴ませることになる。
 image_retag_series() { # image_retag_series <参照> <系列>
