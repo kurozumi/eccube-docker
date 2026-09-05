@@ -23,8 +23,32 @@ x-logging: &default-logging
 #   （下部 volumes 参照。ローカルボリュームのままだとホストごとに別物になる）。
 name: eccube-app
 
+# ── コンテナ強化（#112）──
+# no-new-privileges: setuid バイナリ等で権限を上げられない。cap_drop ALL: 既定で全 capability を
+# 落とし、各サービスに要るものだけ cap_add で戻す（root で起動して自分のユーザーへ落ちる
+# 公式イメージが多いので、SETUID / SETGID / CHOWN は要る。ポート 80/443 を root で bind するにも
+# cap を落とした後は NET_BIND_SERVICE が要る）。pids_limit はフォーク爆弾の上限。
+# read_only は EC-CUBE が var/ 等へ書くので付けない。メモリ上限は運用ごとに違うので付けない
+# （付けるなら mem_limit。キャッシュの組み立ては 1G 使う）。
+x-hardened: &hardened
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
 services:
   ec-cube:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - KILL
+    pids_limit: 512
+    networks:
+      - backend
     logging: *default-logging
     # 本番は CI（.github/workflows/build-image.yml）が push した GHCR イメージを使う。
     #   .env で ECCUBE_IMAGE=ghcr.io/<owner>/<repo>/ec-cube:<系列>-<リリース> を指定し、
@@ -73,8 +97,8 @@ services:
       # 前段 LB の IP/サブネットを信頼して X-Forwarded-* を honor（HTTPS 判定に必須）
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       # 外部の共有 Redis（キャッシュ / セッション）
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      SESSION_REDIS_URL: ${SESSION_REDIS_URL:-redis://redis-session:6379}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-}@redis:6379}
+      SESSION_REDIS_URL: ${SESSION_REDIS_URL:-redis://:${REDIS_PASSWORD:-}@redis-session:6379}
       # DB 起動待ち用（外部 DB を指す）
       DB_HOST: ${DB_HOST:-db}
       DB_USER: ${DB_USER:-eccube}
@@ -128,6 +152,16 @@ services:
     restart: unless-stopped
 
   nginx:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+    pids_limit: 256
+    networks:
+      - backend
     logging: *default-logging
     image: nginx:1.27-alpine
     # 複数ホスト構成では LB がここへ来るので、既定は全インターフェイス。
@@ -147,6 +181,9 @@ services:
       ec-cube:
         condition: service_healthy
     restart: unless-stopped
+
+networks:
+  backend:
 
 volumes:
   # コードは各ホストのローカル（イメージから展開＝全ホスト同一）

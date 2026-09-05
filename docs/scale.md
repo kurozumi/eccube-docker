@@ -141,6 +141,18 @@ DB=外部）になっているので、**アプリホストを N 台並べて前
         共有: DB / Redis(cache) / Redis(session) / アップロード画像(NFS/EFS)
 ```
 
+## ネットワークと権限
+
+- `frontend`（公開層と nginx）と `backend`（nginx・アプリ・DB・Redis）の 2 つ。公開層
+  （cloudflared / caddy）から DB や Redis には直接届かない。`docker run` で DB に繋ぐときは
+  `--network <project>_backend`（`bin/backup.sh` がそうしている）
+- 全コンテナが `no-new-privileges` と `cap_drop: ALL`。要るものだけ `cap_add`。新しいサービスを
+  足したら `<<: *hardened` と `networks:` を書く（compose.yaml のコメント参照）
+- Redis は `REDIS_PASSWORD` で認証（`bin/init.sh` が生成して URL に埋める）。古い `.env` で空なら
+  認証なしのまま動く。足すなら `.env` に `REDIS_PASSWORD` を書き、`REDIS_URL` /
+  `SESSION_REDIS_URL` を `redis://:<pass>@redis:6379` の形にして `docker compose up -d`
+  （**全員ログアウトになる**）
+
 ## 管理画面が書くファイルは 1 台にしか無い
 
 管理画面は DB だけでなくファイルにも書く（ページ管理 → `app/template/user_data/`、ブロック管理 →

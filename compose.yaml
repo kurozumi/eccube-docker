@@ -10,6 +10,19 @@ x-logging: &default-logging
 
 # ec-cube と worker（メール consumer）で共有する環境変数。
 # worker 側は SKIP フラグだけ上書きする（下記 worker サービス参照）。
+# ── コンテナ強化（#112）──
+# no-new-privileges: setuid バイナリ等で権限を上げられない。cap_drop ALL: 既定で全 capability を
+# 落とし、各サービスに要るものだけ cap_add で戻す（root で起動して自分のユーザーへ落ちる
+# 公式イメージが多いので、SETUID / SETGID / CHOWN は要る。ポート 80/443 を root で bind するにも
+# cap を落とした後は NET_BIND_SERVICE が要る）。pids_limit はフォーク爆弾の上限。
+# read_only は EC-CUBE が var/ 等へ書くので付けない。メモリ上限は運用ごとに違うので付けない
+# （付けるなら mem_limit。キャッシュの組み立ては 1G 使う）。
+x-hardened: &hardened
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
 x-eccube-environment: &eccube-environment
   # .env の値を EC-CUBE / エントリポイントへ明示的に渡す
   APP_ENV: ${APP_ENV:-prod}
@@ -140,6 +153,17 @@ x-eccube-volumes: &eccube-volumes
 
 services:
   ec-cube:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - KILL
+    pids_limit: 512
+    networks:
+      - backend
     logging: *default-logging
     # 配布イメージを使うなら .env に ECCUBE_IMAGE を書く（例:
     # ghcr.io/<owner>/<repo>/ec-cube:4.3-v1.0.0）。未設定ならローカル build。
@@ -193,6 +217,17 @@ services:
   # SMTP 停止中もメッセージは DB に残り、復旧後に送信される。
   # --time-limit で定期的に終了し restart で再起動（コードやキャッシュの鮮度維持）。
   worker:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - KILL
+    pids_limit: 256
+    networks:
+      - backend
     logging: *default-logging
     # プロファイル messenger のときだけ起動（.env の COMPOSE_PROFILES）。
     # 設定側（optional/messenger）も同じスイッチで入る。
@@ -235,6 +270,17 @@ services:
     restart: unless-stopped
 
   nginx:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+    pids_limit: 256
+    networks:
+      - frontend
+      - backend
     logging: *default-logging
     image: nginx:1.27-alpine
     # 既定は手元（127.0.0.1）にだけ開く。VPS で quick start しても外に出ない。
@@ -257,6 +303,17 @@ services:
     restart: unless-stopped
 
   db:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - SYS_NICE
+    pids_limit: 512
+    networks:
+      - backend
     logging: *default-logging
     # 版は .env の MARIADB_VERSION（10.6 / 10.11 / 11.4 …。MySQL なら mysql:8.4 のように image ごと変える）
     image: ${MARIADB_IMAGE:-mariadb}:${MARIADB_VERSION:-10.6}
@@ -294,12 +351,23 @@ services:
   # 共有キャッシュ（Symfony アプリキャッシュ）。将来のセッション共有・複数ホスト化の土台。
   # cache 用途なので永続化は無効（--save "" / appendonly no）。maxmemory 到達時は LRU で破棄。
   redis:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    pids_limit: 128
+    networks:
+      - backend
     logging: *default-logging
     # プロファイル redis のときだけ起動（.env の COMPOSE_PROFILES）。初回は無効。
     profiles: ["redis"]
     image: redis:7-alpine
     command:
       - "redis-server"
+      # 認証。.env の REDIS_PASSWORD（bin/init.sh が生成）。空なら認証なし（古い .env のまま動く）
+      - "--requirepass"
+      - "${REDIS_PASSWORD:-}"
       - "--maxmemory"
       - "${REDIS_MAXMEMORY:-256mb}"
       - "--maxmemory-policy"
@@ -321,12 +389,23 @@ services:
   # ホストの RAM を圧迫し OOM killer が他コンテナを道連れにする。上限到達時は
   # 「新規セッションの書込エラー」で済み、既存ユーザーのカート/ログインは守られる。
   redis-session:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    pids_limit: 128
+    networks:
+      - backend
     logging: *default-logging
     # redis と同じプロファイルで起動する（セッション共有はキャッシュ共有とセット）
     profiles: ["redis"]
     image: redis:7-alpine
     command:
       - "redis-server"
+      # 認証。.env の REDIS_PASSWORD（bin/init.sh が生成）。空なら認証なし（古い .env のまま動く）
+      - "--requirepass"
+      - "${REDIS_PASSWORD:-}"
       - "--maxmemory"
       - "${SESSION_REDIS_MAXMEMORY:-256mb}"
       - "--maxmemory-policy"
@@ -344,6 +423,14 @@ services:
 
   # Mailpit は開発専用（送信メールの確認用）。dev だけで起動するため
   # compose.override.yaml に定義している。本番では使わない。
+
+# ── ネットワーク分離（#117）──
+# frontend: 公開層（cloudflared / caddy）と nginx。backend: nginx とアプリ・DB・Redis。
+# 公開層から DB や Redis に直接は届かない。既定の `default` ネットワークは作らない
+# （bin/backup.sh / restore.sh の使い捨てコンテナは <project>_backend に入る）。
+networks:
+  frontend:
+  backend:
 
 volumes:
   eccube_app:
