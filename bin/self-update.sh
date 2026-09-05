@@ -120,6 +120,7 @@ done
 
 command -v curl >/dev/null 2>&1 || die "curl が必要です。"
 command -v tar  >/dev/null 2>&1 || die "tar が必要です。"
+command -v openssl >/dev/null 2>&1 || die "openssl が必要です（添付の sha256 を確かめるため）。"
 
 repo="$(env_get ECCUBE_DOCKER_REPO)"
 repo="${repo:-$DEFAULT_REPO}"
@@ -154,12 +155,48 @@ fi
 # ── 2 つのリリースを取ってくる ──
 work="$(mktemp -d)"
 
-fetch_release() { # fetch_release <タグ> <展開先> → 展開されたディレクトリを出力
-    local tag="$1" dest="$2" inner
+# ── 取得と検証 ──
+# リリースには release-assets.yml が付けた eccube-docker-<ver>.tar.gz と SHA256SUMS と
+# 署名（attestation）がある。入れるのは docker-entrypoint.sh や deploy.sh のような、
+# ホストで root 相当の権限で動くスクリプトなので、
+#   1. SHA256SUMS と突き合わせる（運搬中の壊れ・差し替え）
+#   2. gh があれば `gh attestation verify`（「このリポジトリのワークフローが作った」の署名）
+# を通してから展開する。添付が無いリリース（v1.0.2 以前、または publish 直後の数十秒）は
+# GitHub 自動生成の tar.gz に落ちるが、そのときは**検証なし**だと明示する。
+# ECCUBE_DOCKER_ASSET_BASE は試験用（file:///… を指すと手元の添付で同じ経路を通せる）。
+asset_base="${ECCUBE_DOCKER_ASSET_BASE:-https://github.com/${repo}/releases/download}"
+# fetch_release は $( ) の中で呼ばれる（サブシェル）ので、検証の結果は変数ではなくファイルで返す
+verify_note() { printf '%s' "$1" > "$work/verify_note"; }
+fetch_release() { # fetch_release <タグ> <展開先> [strict] → 展開されたディレクトリを出力
+    local tag="$1" dest="$2" strict="${3:-0}" inner ver tgz want got
     mkdir -p "$dest"
-    if ! "${api[@]}" "https://codeload.github.com/${repo}/tar.gz/refs/tags/${tag}" \
-            | tar -xzf - -C "$dest" 2>/dev/null; then
-        return 1
+    ver="${tag#v}"
+    tgz="$dest/eccube-docker-${ver}.tar.gz"
+    if "${api[@]}" -o "$tgz" "${asset_base}/${tag}/eccube-docker-${ver}.tar.gz" 2>/dev/null \
+       && "${api[@]}" -o "$dest/SHA256SUMS" "${asset_base}/${tag}/SHA256SUMS" 2>/dev/null; then
+        want="$(grep " eccube-docker-${ver}.tar.gz\$" "$dest/SHA256SUMS" | head -1 | cut -d' ' -f1)"
+        got="$(openssl dgst -sha256 -r "$tgz" | cut -d' ' -f1)"
+        if [ -z "$want" ] || [ "$want" != "$got" ]; then
+            die "${tag} の tarball が SHA256SUMS と合いません（運搬中に壊れたか、差し替えられています）。展開しません。"
+        fi
+        if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+            if gh attestation verify "$tgz" --repo "$repo" >/dev/null 2>&1; then
+                [ "$strict" = 1 ] && verify_note "sha256 と署名（attestation）を確認"
+            else
+                die "${tag} の tarball の署名を確認できません（${repo} のワークフローが作ったものではない可能性）。展開しません。"
+            fi
+        else
+            [ "$strict" = 1 ] && verify_note "sha256 を確認（署名は gh が無いか未ログインのため未確認。gh auth login で確認できます）"
+        fi
+        tar -xzf "$tgz" -C "$dest" 2>/dev/null || return 1
+        rm -f "$tgz" "$dest/SHA256SUMS"
+    else
+        # 添付の無いリリース。GitHub 自動生成の tar.gz（検証手段なし）
+        [ "$strict" = 1 ] && verify_note "**検証なし**（このリリースには添付が無い。publish 直後なら数十秒後にやり直す）"
+        if ! "${api[@]}" "https://codeload.github.com/${repo}/tar.gz/refs/tags/${tag}" \
+                | tar -xzf - -C "$dest" 2>/dev/null; then
+            return 1
+        fi
     fi
     # tarball は <repo>-<バージョン>/ という 1 階層に入っている
     inner="$(find "$dest" -mindepth 1 -maxdepth 1 -type d | head -1)"
@@ -168,8 +205,9 @@ fetch_release() { # fetch_release <タグ> <展開先> → 展開されたディ
 }
 
 log "更新先 ${target} を取得します..."
-new_tree="$(fetch_release "$target" "$work/new")" || die "リリース ${target} を取得できませんでした。タグ名を確認してください。"
+new_tree="$(fetch_release "$target" "$work/new" 1)" || die "リリース ${target} を取得できませんでした。タグ名を確認してください。"
 
+log "検証: $(cat "$work/verify_note" 2>/dev/null)"
 log "いま入っている ${cur_tag} を取得します（あなたの変更を見分けるため）..."
 base_tree="$(fetch_release "$cur_tag" "$work/base" || true)"
 

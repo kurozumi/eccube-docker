@@ -72,6 +72,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **`bin/self-update.sh` の更新対象は `.eccube-docker-paths`。** スクリプト内の配列は控えで、
   **正は「これから入れる版」の一覧**。スクリプト側だけ見ると、新しい版で足したパスが
   初回の更新で届かない（`LICENSE` を足したときに実際にそうなった）。
+  **リリースの添付（`eccube-docker-<ver>.tar.gz` / `SHA256SUMS` / attestation）を取り、sha256 と
+  署名を確かめてから展開する**（`release-assets.yml` が publish 時に付ける。#120）。添付の
+  無いリリースは codeload に落ちて「検証なし」と出す。
   **`mapfile` を使わないこと。** bash 4 以降の組み込みで、**macOS の bash は 3.2**。
   `command not found` で `set -e` が働き、何も出さずに死ぬ。
 - **「更新」は 3 つあり、別物。** 自分のコードは `bin/deploy.sh`（毎日）、環境（`bin/` や
