@@ -266,8 +266,15 @@ bin/restore.sh backups/20260904-040000 # 戻す（確認プロンプトあり）
 | `host.env` | ホストの `.env`。**`ECCUBE_AUTH_MAGIC` が全パスワードの鍵**。違う値で DB を戻すと誰もログインできないので、`restore.sh` が突き合わせて止める |
 
 **本番で管理画面が書いたファイルは、そのサーバーの作業ツリーにしか無い。**
-git にも入れるならコミットする（`bin/plugin.sh doctor` が未コミット分を挙げる）。
-入れなくても `admin-files.tar.gz` に入る。**どちらにも入っていない状態を作らないこと。**
+`admin-files.tar.gz` には入る。git にも入れるには、あなたのパソコンで取り込んでコミットする:
+
+```bash
+bin/pull-admin-files.sh shop:/srv/myshop   # app/template と html/user_data を取り込む
+git add app/template html/user_data && git commit -m "管理画面で直した分を取り込む" && git push
+```
+
+`bin/deploy.sh` と `bin/plugin.sh doctor` が、取り込まれていない分を挙げる。
+**git にも backup にも入っていない状態を作らないこと。**
 
 引っ越しの順番:
 
