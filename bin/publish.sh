@@ -39,5 +39,25 @@ if ! image_provision "${dc[@]}"; then
     exit 1
 fi
 
+# ── 初期管理者が admin / password のままなら公開しない（#108）──
+# .env の ECCUBE_ADMIN_PASS はインストールの瞬間にしか効かないので、いまの DB を見る。
+# DB だけ先に上げ、使い捨てのコンテナで判定してから公開層を含む全体を起動する
+# （全部上げてから判定すると、止めた時点でもう公開されている）。判定スクリプトは
+# 標準入力で php に渡す（イメージに焼かない。配布済みの古いイメージでも動くように）。
+if [ "${FORCE_PUBLISH:-0}" != "1" ] && "${dc[@]}" config --services 2>/dev/null | grep -qx db; then
+    "${dc[@]}" up -d --wait db >/dev/null 2>&1 || true
+    verdict="$("${dc[@]}" run --rm --no-deps -T --entrypoint php ec-cube < "$(dirname "$0")/lib/admin-password-check.php" 2>/dev/null | tail -1 || true)"
+    case "$verdict" in
+        DEFAULT)
+            echo "[publish] エラー: 管理者 admin のパスワードが既定の「password」のままです。公開を中止しました。" >&2
+            echo "          管理画面 → 設定 → システム設定 → メンバー管理 で変えてから、もう一度実行してください。" >&2
+            echo "          （新規環境なら .env の ECCUBE_ADMIN_PASS を変えて docker compose down -v で作り直し）" >&2
+            echo "          それでも公開する場合: FORCE_PUBLISH=1 bin/publish.sh" >&2
+            exit 1 ;;
+        OK)   echo "[publish] 管理者パスワード: 既定値ではない" ;;
+        *)    echo "[publish] 管理者パスワード: 判定できませんでした（未インストールなら install 時に .env の ECCUBE_ADMIN_PASS が使われます）" ;;
+    esac
+fi
+
 "${dc[@]}" up -d
 "${dc[@]}" ps
