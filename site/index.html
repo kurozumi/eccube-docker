@@ -233,6 +233,7 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
           <li>前任者のいないサイトを引き継いで、まず状況を把握したい</li>
           <li>プラグインやテーマを作っていて、本番と同じ環境で試したい</li>
           <li>ターミナルでコマンドを打つことに抵抗がない</li>
+          <li>DB は MariaDB 派でも <em class="k">PostgreSQL 派</em>でも（<code>.env</code> に 1 行。どちらも同梱、外部のマネージド DB も可）</li>
         </ul>
       </div>
       <div class="box no">
@@ -286,6 +287,7 @@ bin/init.sh</pre>
         </tbody>
       </table>
     </div>
+    <p class="sub">DB は <strong>MariaDB / MySQL</strong>（既定）か <strong>PostgreSQL</strong>。<code>.env</code> の <code>DB_ENGINE</code> で選び、バックアップも引っ越しも同じコマンドで通ります。手元の DB でも、クラウドのマネージド DB でも。</p>
   </div>
 </section>
 
