@@ -261,15 +261,27 @@ bin/restore.sh backups/20260904-040000 # 戻す（確認プロンプトあり）
 |---|---|
 | `db.sql.gz` | DB |
 | `upload.tar.gz` | アップロード画像 |
-| `admin-files.tar.gz` | **管理画面がディスクに書いたもの**（CSS/JS 管理・ページ管理・ブロック管理） |
+| `admin-files.tar.gz` | **管理画面がディスクに書いたもの**（CSS/JS・メール本文・ページ・ブロック）と、**git に入らない資産**（favicon・納品書ロゴ・買ったプラグイン） |
 | `container.env` | コンテナ内 `.env`（テーマ切替・セキュリティ設定の書き先）。**自動では戻さない** |
+| `host.env` | ホストの `.env`。**`ECCUBE_AUTH_MAGIC` が全パスワードの鍵**。違う値で DB を戻すと誰もログインできないので、`restore.sh` が突き合わせて止める |
 
 **本番で管理画面が書いたファイルは、そのサーバーの作業ツリーにしか無い。**
 git にも入れるならコミットする（`bin/plugin.sh doctor` が未コミット分を挙げる）。
 入れなくても `admin-files.tar.gz` に入る。**どちらにも入っていない状態を作らないこと。**
 
-引っ越しは「clone → `bin/init.sh` → `bin/restore.sh <退避先>`」で完結する。
-`container.env` の差分は `restore.sh` が出すので、必要なものはホストの `.env` に書く。
+引っ越しの順番:
+
+```bash
+git clone <あなたのリポジトリ> myshop && cd myshop
+bin/init.sh                                  # .env ができる
+# **ここで .env の ECCUBE_AUTH_MAGIC を、退避先の host.env の値に合わせる**
+docker compose up -d
+bin/restore.sh <退避先>                       # DB・画像・管理画面が書いたもの・プラグイン
+```
+
+`ECCUBE_AUTH_MAGIC` を合わせないと `restore.sh` が止まる（合わせずに戻すと、会員も
+管理者も誰もログインできない）。`container.env` の差分は `restore.sh` が出すので、
+必要なものはホストの `.env` に書く。
 
 ### 更新を自分のリポジトリに残す
 

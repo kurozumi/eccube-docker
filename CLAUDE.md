@@ -82,8 +82,13 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   テーマ切替・セキュリティ設定 → **コンテナ内** `/var/www/html/.env`）。
   `app/template/user_data/` は以前 .gitignore していたが、`dtb_page` の行と対なので
   **DB だけ持って引っ越すとそのページが 500 になる**。追跡に戻した。
-  `bin/backup.sh` は 4 点セット（DB / 画像 / 管理画面が書いたファイル / コンテナ内 .env）。
-  引っ越しは「clone → `bin/init.sh` → `bin/restore.sh`」。
+  `bin/backup.sh` は 5 点セット（DB / 画像 / 管理画面が書いたファイル＋git に入らない資産 /
+  コンテナ内 .env / **ホストの .env**）。`admin-files.tar.gz` は `html/user_data` 全体と
+  `app/Plugin`（`.git` 抜き。remote は `plugins.txt`）を含む。favicon・納品書ロゴ・買った
+  プラグインは git に無いので、ここでしか運ばれない。
+  **`ECCUBE_AUTH_MAGIC` は全パスワードのハッシュの鍵。** 違う値で DB を戻すと誰も
+  ログインできず、エラーも出ない。`restore.sh` が DB を戻す前に突き合わせて止める。
+  引っ越しは「clone → `bin/init.sh` → AUTH_MAGIC を合わせる → `bin/restore.sh`」。
   **本番で管理画面が書いたファイルはそのサーバーにしか無い。** `doctor` と `backup.sh` が
   未コミット分を挙げる。
 - **`bin/reset.sh` と `bin/switch-version.sh` は `down -v` する。** DB・画像・

@@ -8,8 +8,11 @@
 #
 # - DB は mysqldump --single-transaction（InnoDB 前提・サービス無停止で整合ダンプ）
 # - 画像は html/upload を tar.gz（eccube_upload ボリュームの実体）
-# - **管理画面がディスクに書いたもの**を admin-files.tar.gz に（下の説明）
+# - **管理画面がディスクに書いたもの・git に入らない店の資産**を admin-files.tar.gz に（下の説明）
 # - コンテナ内の .env を container.env に（テーマ切替とセキュリティ設定の書き先）
+# - **ホストの .env を host.env に。** ECCUBE_AUTH_MAGIC が入っている。これは全パスワードの
+#   ハッシュの鍵（PasswordHasher の salt / HMAC 鍵）で、**失うと会員も管理者も全員ログイン
+#   できなくなる。** DB を持っていっても、これが違えば意味が無い。
 # - パスワードは MYSQL_PWD で渡し、プロセスリストに露出させない
 #
 # 原則: **ディスクに残る状態は、git か backup のどちらかに必ず入る。**
@@ -56,10 +59,26 @@ vol eccube_upload /upload tar -C / -czf - upload > "${dest}/upload.tar.gz"
 # どれも bind mount なのでホストにはあるが、**git 管理下のパスでも、本番で
 # 書かれた分はコミットされていない**。DB と画像だけで引っ越すと、dtb_page には
 # 行があるのに twig が無い、という壊れ方をする。ホスト側で直接 tar する。
-echo "[backup] 管理画面が書いたファイルを退避しています..."
+# 範囲は「git に入らないが、無いと店が壊れるもの」まで広げる:
+#   html/user_data 全体 … css/js だけでなく、差し替えた favicon（assets/img）と
+#                        納品書のロゴ（assets/pdf）。.gitignore で外してあるので git には無い
+#   app/Plugin          … オーナーズストアで買ったプラグインは git に無い。DB は「有効」と
+#                        言っているのにファイルが無い、という壊れ方になる
+# プラグインの .git は外す。実測で 160MB のうち 112MB が .git で、毎日 7 世代残すと
+# それだけで 800MB になる。ソースは入るので店は壊れない。git で入れたものは remote を
+# plugins.txt に控えておき、必要なら clone し直せるようにする。
+echo "[backup] 管理画面が書いたファイルと、git に入らない資産を退避しています..."
 tar -czf "${dest}/admin-files.tar.gz" \
+    --exclude='app/Plugin/*/.git' \
     app/template \
-    html/user_data/assets/css html/user_data/assets/js
+    html/user_data \
+    app/Plugin
+for d in app/Plugin/*/; do
+    [ -d "$d" ] || continue
+    code="$(basename "$d")"
+    url="$(git -C "$d" remote get-url origin 2>/dev/null || echo '-')"
+    printf '%s\t%s\n' "$code" "$url"
+done > "${dest}/plugins.txt"
 
 # コンテナ内の .env。テーマ切替（オーナーズストア → テンプレート管理）と
 # セキュリティ設定の一部は、ホストの .env ではなく**コンテナ内の
@@ -70,6 +89,14 @@ tar -czf "${dest}/admin-files.tar.gz" \
 if ! vol eccube_app /app cat /app/.env > "${dest}/container.env" 2>/dev/null; then
     echo "[backup] 注意: コンテナ内の .env を読めませんでした（ボリュームが無い？）"
     rm -f "${dest}/container.env"
+fi
+
+# ホストの .env。**引っ越しで一番落としやすく、一番致命的。** ECCUBE_AUTH_MAGIC が
+# 全パスワードのハッシュの鍵なので、新しいサーバーで違う値にすると DB を戻しても
+# 誰もログインできない。バックアップは DB ダンプ（顧客データ）が入る場所なので、
+# ここに置く危険は増えない。読める人を絞る。
+if [ -f .env ]; then
+    cp .env "${dest}/host.env" && chmod 600 "${dest}/host.env"
 fi
 
 # git 管理下なら、コミットされていない「管理画面が書いた分」を見せておく。
