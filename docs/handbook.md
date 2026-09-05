@@ -115,6 +115,22 @@ bin/deploy.sh --remote=shop:/srv/myshop     # あなたのパソコンから
 
 ---
 
+## 管理画面で直したものは、サーバーにしか無い
+
+CSS 管理・メール設定の本文・ページ管理・ブロック管理は、**サーバーのファイルに書きます。**
+あなたのパソコンにも、あなたのリポジトリにも、自動では入りません。
+
+サーバーの `bin/backup.sh`（と `bin/deploy.sh` の最初）には入るので、消えはしません。
+ただし**リポジトリに残す**には、あなたのパソコンで取り込んで commit します。
+
+```bash
+bin/pull-admin-files.sh shop:/srv/myshop     # サーバーから取り込む
+git add app/template html/user_data
+git commit -m "管理画面で直した分を取り込む" && git push
+```
+
+`bin/deploy.sh` は、取り込まれていない管理画面の編集があると教えてくれます。
+
 ## この仕組み（eccube-docker）に更新があったとき
 
 配布元が `bin/` や `docker/` を直すことがあります。**サーバーではやりません。**
@@ -171,6 +187,7 @@ bin/plugin.sh doctor
 | お店が「メンテナンス中」のまま | `bin/plugin.sh doctor`（途中で止まった作業の後始末をします） |
 | デプロイが途中で止まった | 出ていた指示どおりに直して、もう一度 `bin/deploy.sh` |
 | 直したのに反映されない | サーバーで `bin/plugin.sh reload` |
+| 管理画面で直したものを手元にも残したい | `bin/pull-admin-files.sh shop:/srv/myshop` → commit |
 | 管理画面で CSS を編集したら消えた | [デザインを直す](install.md#6-デザインを直す) を読む。書く場所が 2 つある |
 | データを戻したい | `bin/restore.sh backups/<日時>`（[バックアップ](backup.md)） |
 
@@ -197,6 +214,7 @@ bin/plugin.sh doctor       # 困ったらこれ
 bin/plugin.sh reload       # 反映されないときこれ
 bin/backup.sh              # 退避
 bin/restore.sh <退避先>     # 戻す
+bin/pull-admin-files.sh <host:path>  # 管理画面で直した分を手元へ
 bin/self-update.sh --check # この仕組みの新しい版があるか
 bin/console.sh <cmd>       # EC-CUBE のコマンドを打つ
 bin/shell.sh               # コンテナの中に入る

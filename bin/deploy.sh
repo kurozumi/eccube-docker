@@ -107,7 +107,14 @@ on_fail() {
 # ── 1. 退避 ──
 if [ "$do_backup" = 1 ]; then
     log "退避します（DB・画像・管理画面が書いたファイル）..."
-    bin/backup.sh >/dev/null || die "退避に失敗しました。何も変えていません。bin/backup.sh を単体で打って原因を見てください。"
+    # **出力を捨てない。** backup.sh は「管理画面が書いたのにコミットされていないファイル」を
+    # 挙げる。deploy はそれを上書きしない（pull は同じファイルを触らない限り通る）が、
+    # サーバーにしか無い状態が続く。ここで見せて、手元へ取り込む導線を出す。
+    out="$(bin/backup.sh 2>&1)" || { printf '%s\n' "$out" | tail -5 >&2; die "退避に失敗しました。何も変えていません。bin/backup.sh を単体で打って原因を見てください。"; }
+    if printf '%s\n' "$out" | grep -q 'コミットされていない変更'; then
+        printf '%s\n' "$out" | sed -n '/コミットされていない変更/,/入っています/p'
+        log "  手元へ取り込むには（あなたのパソコンで）: bin/pull-admin-files.sh <host>:<path>"
+    fi
     log "退避先: $(ls -1d backups/*/ 2>/dev/null | sort | tail -1)"
 fi
 
