@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eccube-docker</title>
+<meta name="description" content="EC-CUBE 4 を、手元でも本番でも同じ構成で動かす Docker 環境。直して、push して、1 コマンドで反映する。">
+<meta property="og:title" content="eccube-docker">
+<meta property="og:description" content="EC-CUBE 4 を、手元でも本番でも同じ構成で動かす Docker 環境。">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --ground: #F2F4F6;
+    --surface: #FFFFFF;
+    --sunk: #E6EAEE;
+    --ink: #171C22;
+    --ink-soft: #46525E;
+    --ink-mute: #6F7C89;
+    --line: #D2D9E0;
+    --accent: #0E6B6B;
+    --accent-ink: #FFFFFF;
+    --accent-bg: #DCEDED;
+    --warn: #A2481B;
+    --warn-bg: #F6E7DD;
+    --f-display: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    --f-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0F1418;
+      --surface: #171D23;
+      --sunk: #1E262E;
+      --ink: #E4E9EE;
+      --ink-soft: #AAB6C2;
+      --ink-mute: #7E8B98;
+      --line: #2B353F;
+      --accent: #5FC3C3;
+      --accent-ink: #0F1418;
+      --accent-bg: #163030;
+      --warn: #E39C66;
+      --warn-bg: #2E2017;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16px;
+    line-height: 1.85;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  a:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── 冒頭 ── */
+  header.hero { padding: 72px 0 48px; border-bottom: 1px solid var(--line); }
+  .eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .12em; color: var(--ink-mute); margin: 0 0 18px; }
+  h1 {
+    font-family: var(--f-display); font-weight: 700;
+    font-size: clamp(30px, 5.6vw, 46px); line-height: 1.3; letter-spacing: .005em;
+    margin: 0 0 18px; text-wrap: balance;
+  }
+  .lede { font-size: 17px; color: var(--ink-soft); max-width: 40em; margin: 0 0 30px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn {
+    display: inline-block; padding: 11px 20px; border-radius: 4px;
+    font-family: var(--f-display); font-weight: 700; font-size: 15px; text-decoration: none;
+    background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent);
+  }
+  .btn.ghost { background: transparent; color: var(--accent); }
+  .meta { font-family: var(--f-mono); font-size: 12px; color: var(--ink-mute); }
+
+  /* ── 本文 ── */
+  section { padding: 52px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  h2 {
+    font-family: var(--f-display); font-weight: 700; font-size: 24px; line-height: 1.45;
+    margin: 0 0 8px; text-wrap: balance;
+  }
+  .sub { color: var(--ink-mute); margin: 0 0 28px; max-width: 44em; }
+  p { max-width: 44em; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--line); padding: 20px 20px 22px; display: flex; flex-direction: column; gap: 8px; }
+  .card h3 { font-family: var(--f-display); font-size: 16px; font-weight: 700; margin: 0; }
+  .card p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+  .card code { font-family: var(--f-mono); font-size: .9em; background: var(--sunk); padding: 1px 6px; border-radius: 3px; }
+
+  pre {
+    margin: 0; padding: 16px 18px;
+    background: var(--sunk); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    font-family: var(--f-mono); font-size: 13px; line-height: 1.8; color: var(--ink);
+    overflow-x: auto;
+  }
+  pre .c { color: var(--ink-mute); }
+  .steps { display: flex; flex-direction: column; gap: 22px; }
+  .step { display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: start; }
+  .num {
+    font-family: var(--f-mono); font-weight: 600; font-size: 13px; text-align: center;
+    color: var(--accent); background: var(--accent-bg); border: 1px solid var(--line);
+    height: 30px; line-height: 28px; margin-top: 2px;
+  }
+  .step h3 { font-family: var(--f-display); font-size: 16px; font-weight: 700; margin: 0 0 8px; }
+  .step p { margin: 8px 0 0; font-size: 14.5px; color: var(--ink-soft); }
+
+  .note {
+    display: flex; gap: 12px; align-items: baseline;
+    padding: 12px 16px; margin-top: 18px; font-size: 14px; color: var(--ink-soft);
+    background: var(--warn-bg); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  }
+  .note b { color: var(--warn); font-size: 11px; letter-spacing: .1em; white-space: nowrap; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; padding: 10px 14px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 700; }
+  td:first-child { white-space: nowrap; font-weight: 500; }
+  .tablewrap { overflow-x: auto; }
+
+  footer { padding: 36px 0 56px; color: var(--ink-mute); font-size: 13.5px; }
+  footer p { margin: 6px 0; }
+
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">eccube-docker · __TAG__</p>
+    <h1>EC-CUBE 4 を、手元でも本番でも<br>同じ構成で動かす。</h1>
+    <p class="lede">
+      本体はイメージに焼き、あなたのコードだけを git で持つ。直して、push して、
+      1 コマンドで反映する。データベースの更新もキャッシュも、メンテナンス表示の出し入れも、
+      そのコマンドの中に入っている。
+    </p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/kurozumi/eccube-docker/blob/main/docs/handbook.md">はじめての人のための手引き</a>
+      <a class="btn ghost" href="https://github.com/kurozumi/eccube-docker">GitHub</a>
+      <span class="meta">Apache-2.0 · EC-CUBE 4.2 / 4.3 / 4.4</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>毎日やることは 3 つ</h2>
+    <p class="sub">直す場所（手元）と動かす場所（サーバー）を分ける。それだけがこの環境の全部です。</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h3>手元で直す</h3>
+          <pre>bin/init.sh                <span class="c"># 初回だけ。http://localhost:8080/ で動く</span>
+bin/plugin.sh reload       <span class="c"># 反映されないとき</span></pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h3>控えを送る</h3>
+          <pre>git add -A &amp;&amp; git commit -m "何を直したか" &amp;&amp; git push</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div>
+          <h3>サーバーに反映する</h3>
+          <pre>bin/deploy.sh --remote=shop:/srv/myshop</pre>
+          <p>退避 → メンテナンス表示 → 取り込み → データベース更新 → キャッシュ → 確認 → 解除。
+          失敗したらメンテナンス表示のまま止まり、壊れた画面は出しません。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>何が入っているか</h2>
+    <p class="sub">EC-CUBE を本番で回して踏んだ穴を、コマンドと文書に落としてあります。</p>
+    <div class="grid">
+      <div class="card">
+        <h3>本体は触らない</h3>
+        <p>EC-CUBE 本体はイメージに焼き込み、<code>app/</code> と <code>html/user_data</code> だけを bind mount する。本体を上げても自分のコードは残る。</p>
+      </div>
+      <div class="card">
+        <h3>困ったら 1 コマンド</h3>
+        <p><code>bin/plugin.sh doctor</code> が、残骸の掃除・無効プラグインの検出・キャッシュの組み立て直し・疎通確認までやり、何が悪いかを日本語で出す。</p>
+      </div>
+      <div class="card">
+        <h3>引っ越しは 3 手順</h3>
+        <p><code>bin/backup.sh</code> が DB・画像・管理画面が書いたファイルを 4 点セットで退避。新しいサーバーでは clone → init → restore。</p>
+      </div>
+      <div class="card">
+        <h3>本体のバージョンアップ</h3>
+        <p><code>bin/upgrade.sh</code> がバックアップ・事前確認・スキーマ更新を順に。プラグインが新版で読めなければ、稼働中の環境に触る前に止まる。</p>
+      </div>
+      <div class="card">
+        <h3>環境そのものも更新できる</h3>
+        <p><code>bin/self-update.sh</code> が新しいリリースを取り込む。あなたのコードと <code>.env</code> には触らず、衝突すれば止まる。</p>
+      </div>
+      <div class="card">
+        <h3>Redis も Messenger も、要るときだけ</h3>
+        <p>初回は無効。<code>.env</code> の <code>COMPOSE_PROFILES</code> に足すと、サービスの起動と設定の投入が同じスイッチで決まる。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>始め方</h2>
+    <p class="sub"><strong>git clone しません。</strong> リリースの中身をもらって、自分専用の非公開リポジトリとして始めます。</p>
+    <pre><span class="c"># 配布元の最新リリースの中身をもらう（git の履歴は付いてこない）</span>
+curl -fsSL https://github.com/kurozumi/eccube-docker/archive/refs/tags/__TAG__.tar.gz | tar -xz
+mv eccube-docker-__VER__ myshop &amp;&amp; cd myshop
+
+<span class="c"># 自分のリポジトリとして始める</span>
+git init -b main &amp;&amp; git add -A &amp;&amp; git commit -m "eccube-docker __TAG__ から開始"
+gh repo create myshop --private --source=. --push
+
+<span class="c"># 動かす</span>
+bin/init.sh</pre>
+    <div class="note">
+      <b>なぜ clone しないか</b>
+      <span>clone だと origin が配布元のままで、あなたのコードを保存する場所が無い。fork は公開リポジトリだと非公開にできない。中身だけもらって自分のリポジトリにするのが、いちばん素直です。</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>対応する EC-CUBE</h2>
+    <p class="sub">配布イメージを使うと、手元でビルドせずに数十秒で立ち上がります。<code>.env</code> に 1 行書くだけ。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>系列</th><th>イメージ</th><th>備考</th></tr></thead>
+        <tbody>
+          <tr><td>4.3</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-__TAG__</code></td><td>推奨</td></tr>
+          <tr><td>4.2</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.2-__TAG__</code></td><td></td></tr>
+          <tr><td>4.4</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.4-__TAG__</code></td><td>上流の開発ブランチから焼いている。本番なら <code>4.4-&lt;sha&gt;</code> で固定</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre style="margin-top:18px"><span class="c"># .env</span>
+ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-__TAG__</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>文書</h2>
+    <p class="sub">理由を書かない手引きと、理由を書いた文書の 2 段構えです。</p>
+    <div class="grid">
+      <div class="card"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/handbook.md">はじめての人のための手引き</a></h3><p>登場するものは 5 つ、毎日やることは 3 つ、困ったときは 1 コマンド。理由は書きません。</p></div>
+      <div class="card"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/install.md">導入手順</a></h3><p>取得から公開まで。.env の中身、公開方式、プラグインの扱い、デザインを直す場所。</p></div>
+      <div class="card"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md">バージョンアップ</a></h3><p>運用中の店を上げる手順と切り戻し。マイナーをまたぐときに黙って壊れる 3 つの型。</p></div>
+      <div class="card"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/data-safety.md">データを失わないために</a></h3><p><code>down</code> と <code>down -v</code> の違い、消えるコマンド、消したときの復旧。</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Apache License 2.0。EC-CUBE 本体は対象外で、EC-CUBE 自身のライセンスがそのまま適用されます（本体は一切改変していません）。</p>
+    <p><a href="https://github.com/kurozumi/eccube-docker/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-docker/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-docker/blob/main/LICENSE">LICENSE</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
