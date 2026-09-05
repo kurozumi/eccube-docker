@@ -55,6 +55,12 @@ if [ "$fresh_env" = "1" ]; then
     set_env ECCUBE_ADMIN_PASS "$admin_pass"
     set_env ECCUBE_ADMIN_ROUTE "admin-$(openssl rand -hex 3)"
     echo "[init] 管理者のパスワードと管理画面の URL を生成しました（.env の ECCUBE_ADMIN_PASS / ECCUBE_ADMIN_ROUTE）"
+    # Redis の認証（redis プロファイルを使うときに効く。URL にも埋める。#117）
+    redis_pass="$(openssl rand -hex 16)"
+    set_env REDIS_PASSWORD "$redis_pass"
+    set_env REDIS_URL "redis://:${redis_pass}@redis:6379"
+    set_env SESSION_REDIS_URL "redis://:${redis_pass}@redis-session:6379"
+    echo "[init] REDIS_PASSWORD を生成しました"
 else
     for pair in "DB_PASSWORD=eccube_pass" "DB_ROOT_PASSWORD=change_me_root"; do
         if grep -qE "^${pair}$" .env 2>/dev/null; then

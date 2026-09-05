@@ -67,7 +67,7 @@ case "$db_engine" in
             | gzip > "${dest}/db.sql.gz"
     else
         echo "[backup] DB をダンプしています（外部 PostgreSQL: ${db_host}:${db_port}）..."
-        docker run --rm --network "${proj}_default" -e PGPASSWORD="$(env_get DB_PASSWORD)" "postgres:${pg_ver}-alpine" \
+        docker run --rm --network "${proj}_backend" -e PGPASSWORD="$(env_get DB_PASSWORD)" "postgres:${pg_ver}-alpine" \
             pg_dump --clean --if-exists -h "$db_host" -p "$db_port" -U "$(env_get DB_USER)" "$(env_get DB_NAME)" \
             | gzip > "${dest}/db.sql.gz"
     fi
@@ -81,7 +81,7 @@ case "$db_engine" in
             -u root "$MYSQL_DATABASE"' | gzip > "${dest}/db.sql.gz"
     else
         echo "[backup] DB をダンプしています（外部: ${db_host}:${db_port}）..."
-        docker run --rm --network "${proj}_default" \
+        docker run --rm --network "${proj}_backend" \
             -e MYSQL_PWD="$(env_get DB_PASSWORD)" "${mariadb_img}:${mariadb_ver}" mysqldump \
             --single-transaction --triggers --no-tablespaces \
             -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)" \

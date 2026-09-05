@@ -116,7 +116,7 @@ case "$db_engine" in
             'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -q -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null
     else
         echo "[restore] DB を復元しています（外部 PostgreSQL: ${db_host}:${db_port}）..."
-        rd db.sql.gz | gunzip -c | docker run --rm -i --network "${proj}_default" -e PGPASSWORD="$(env_get DB_PASSWORD)" "postgres:${pg_ver}-alpine" \
+        rd db.sql.gz | gunzip -c | docker run --rm -i --network "${proj}_backend" -e PGPASSWORD="$(env_get DB_PASSWORD)" "postgres:${pg_ver}-alpine" \
             psql -q -v ON_ERROR_STOP=0 -h "$db_host" -p "$db_port" -U "$(env_get DB_USER)" -d "$(env_get DB_NAME)" >/dev/null
     fi
     ;;
@@ -128,7 +128,7 @@ case "$db_engine" in
             'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root "$MYSQL_DATABASE"'
     else
         echo "[restore] DB を復元しています（外部: ${db_host}:${db_port}）..."
-        rd db.sql.gz | gunzip -c | docker run --rm -i --network "${proj}_default" \
+        rd db.sql.gz | gunzip -c | docker run --rm -i --network "${proj}_backend" \
             -e MYSQL_PWD="$(env_get DB_PASSWORD)" "${mariadb_img}:${mariadb_ver}" \
             mysql -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)"
     fi

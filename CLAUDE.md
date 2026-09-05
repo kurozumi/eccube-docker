@@ -275,6 +275,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   書き換えても inode が変わってコンテナ側へ反映されないことがある。中途半端な内容を
   掴んだまま「Premature end of data」等で落ちる。`bin/test.sh` がホストとコンテナの
   バイト数を突き合わせて検出する。
+- **コンテナは `no-new-privileges` + `cap_drop: ALL`**（`x-hardened`。#112）。要る capability だけ
+  各サービスで `cap_add`。root で起動して自分のユーザーへ落ちる公式イメージが多いので
+  SETUID / SETGID / CHOWN、80/443 を bind する nginx / caddy は NET_BIND_SERVICE。
+  **サービスを足すときは `<<: *hardened` と `networks:` を必ず書く**（`default` ネットワークは
+  無い）。`frontend` は公開層と nginx、`backend` はそれ以外。公開層から DB / Redis に届かない（#117）。
+  Redis は `REDIS_PASSWORD`（`init.sh` が生成、空なら認証なし）。
 - **Redis と Messenger は任意で、初回は無効。** スイッチは `.env` の `COMPOSE_PROFILES`
   一本（`redis` / `messenger`）。サービスの起動（profiles）と設定の投入
   （`app/config/eccube/optional/<名前>/` を entrypoint が `packages/` へ入れる／外す）が

@@ -32,6 +32,8 @@ services:
 
   # 送信メールを外部に出さず受け止め、Web UI で確認する（開発専用）。
   mailpit:
+    networks:
+      - backend
     logging: *default-logging
     image: axllent/mailpit:latest
     environment:
@@ -47,6 +49,8 @@ services:
   #   本体を汚さず、ソースは frontend/、成果物は html/user_data/ で Git 管理。
   # 手動ビルドは bin/assets.sh build を参照。
   node:
+    networks:
+      - backend
     logging: *default-logging
     image: node:20-bookworm-slim
     working_dir: /work
@@ -62,6 +66,8 @@ services:
   #   bin/assets.sh core-build   … npm ci && npm run build（一括ビルド）
   # 対象は named volume 内の本体テーマ（＝本体直編集・Git 管理外）である点に注意。
   assets-core:
+    networks:
+      - backend
     logging: *default-logging
     image: node:20-bookworm
     profiles: ["assets-core"]
@@ -73,6 +79,8 @@ services:
     command: ["echo 'use: bin/assets.sh core-build'"]
 
   phpmyadmin:
+    networks:
+      - backend
     logging: *default-logging
     image: phpmyadmin:5
     environment:
