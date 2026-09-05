@@ -130,6 +130,18 @@ root が要るのはパッケージの導入など限られた場面だけで、
 | [ユニットテスト](docs/testing.md) | `bin/test.sh` の使い方と、素の phpunit を使ってはいけない理由 |
 | [IDE の設定](docs/ide.md) | PhpStorm でコード補完を効かせる |
 
+## ライセンス
+
+**Apache License 2.0**（[LICENSE](LICENSE)）。商用・受託・再配布を含めて自由に使えます。
+
+### EC-CUBE 本体は対象外
+
+このライセンスが及ぶのは**このリポジトリのファイル**（`bin/` `docker/` `compose*.yaml`
+`docs/` など）だけです。EC-CUBE 本体はここには含まれず、ビルド時に Packagist から取得します。
+**本体は一切改変していない**ので、配布イメージに含まれる EC-CUBE は EC-CUBE 自身の
+ライセンス（GPL または商用のデュアルライセンス）がそのまま適用され、ソースもイメージの
+中にそのまま入っています。
+
 ## 注意
 
 - **`app/Customize/` と `app/template/` は空にできない**。EC-CUBE 本体の設定が

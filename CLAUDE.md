@@ -45,6 +45,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   直した内容はデータベースに残る。ページ管理とメール設定の本文欄は伏せてあり、
   本体がそれでもテーマへ書いた写しは、あちらがその場で消す（本体は読むのを
   ローダーに任せるが、**書くのは必ずテーマ配下**）。
+- **ライセンスは Apache-2.0**（`LICENSE`）。商用・受託・再配布とも自由。
+  **EC-CUBE 本体は対象外**（ここには含まれず、ビルド時に Packagist から取る。
+  本体を一切改変していないので、イメージ内の EC-CUBE は EC-CUBE 自身のライセンス）。
 - **バージョンは `.env` の `ECCUBE_VERSION`**（build-arg）。切替は `bin/switch-version.sh`。
   ただし **`.env` に `ECCUBE_IMAGE` があるときは build しないので、この値は使われない。**
   動くのはタグに焼かれたバージョンで、両者は簡単にずれる。`bin/upgrade.sh` は pull した
