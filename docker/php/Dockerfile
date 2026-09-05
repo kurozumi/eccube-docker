@@ -69,7 +69,9 @@ ARG PHPREDIS_VERSION=6.0.2
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends $PHPIZE_DEPS; \
-    pecl install "redis-${PHPREDIS_VERSION}"; \
+    # pecl.php.net は時々「No releases available」を返す（60 秒待って失敗）。それだけで
+    # リリースの 9 通りのビルドが 1 つ落ちるので、3 回まで待って試す
+    for i in 1 2 3; do pecl install "redis-${PHPREDIS_VERSION}" && break; [ "$i" = 3 ] && exit 1; sleep 15; done; \
     docker-php-ext-enable redis; \
     apt-get purge -y --auto-remove $PHPIZE_DEPS; \
     rm -rf /var/lib/apt/lists/* /tmp/pear
