@@ -53,13 +53,37 @@ bin/restore.sh backups/20260721-040000   # 復元（確認プロンプトあり�
 ものはホストの `.env` に書く。**テーマ（`ECCUBE_TEMPLATE_CODE`）は `.env` に書くのが正。**
 管理画面で選んだテーマはコンテナ内 `.env` に入り、`bin/upgrade.sh` でボリュームごと消える。
 
+## 対応する DB と、外部 DB
+
+**MariaDB / MySQL のみ。** イメージに入っている PHP 拡張が `pdo_mysql` だけなので、EC-CUBE が対応する
+PostgreSQL はこの環境では動かない（バックアップ以前に本体が繋げない）。
+
+DB が外部（`compose.app.yaml` の複数ホスト、マネージド DB）のときも、`bin/backup.sh` と `bin/restore.sh` は
+そのまま使える。`db` サービスが無ければ、**同じ `mariadb` イメージの使い捨てコンテナから `.env` の
+`DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` で繋ぐ**。compose のネットワークに入れるので、
+別スタックの DB 名でもマネージド DB のホスト名でも引ける。外部はアプリのユーザーで繋ぐので
+`--routines` / `--events` は付けない（EC-CUBE はどちらも使わない）。
+
+## サーバーの外へ出す
+
+`backups/` は**同じディスク**にできる。サーバーごと失うと一緒に消える。`.env` の `BACKUP_SYNC` に
+送り先を書くと、`bin/backup.sh` の最後に送る。**送れなければ失敗にする**（黙って飛ばすと
+「取れているつもり」になり、それが一番危ない）。
+
+```bash
+BACKUP_SYNC=rclone:r2:myshop-backups       # rclone（S3 / Cloudflare R2 / Google Drive / NAS）
+BACKUP_SYNC=backup@nas.local:/srv/eccube   # rsync over ssh
+BACKUP_SYNC=/mnt/nas/eccube                # rsync（マウント済みの NAS）
+```
+
+戻すときは、送り先から `backups/<日時>/` を丸ごと取ってきて `bin/restore.sh backups/<日時>`。
+
 - DB は `mysqldump --single-transaction`（InnoDB 前提・**無停止で整合ダンプ**）
 - cron 例（毎日 4:00）:
   ```
   0 4 * * * cd /path/to/eccube-docker && bin/backup.sh >> var/backup.log 2>&1
   ```
-- バックアップ先はサーバー外（NAS / オブジェクトストレージ）へ同期すること。
-  サーバー本体と同じディスクに置くだけでは障害時に共倒れになる。
+- サーバー外へは `BACKUP_SYNC` で送る（上）。同じディスクに置くだけでは障害時に共倒れになる。
 
 ---
 

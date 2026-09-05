@@ -17,6 +17,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/guard.sh
 . "$(dirname "$0")/lib/guard.sh"
+# shellcheck source=lib/image.sh
+. "$(dirname "$0")/lib/image.sh"
 
 # ボリュームは alpine で触る（bin/backup.sh と同じ理由: ec-cube のイメージが
 # 無いとフルビルドが始まる）。
@@ -69,9 +71,19 @@ echo "[restore] ${src} から復元します。現在の DB は上書きされ�
 read -r -p "続行しますか? [y/N] " ans
 [ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
 
-echo "[restore] DB を復元しています..."
-gunzip -c "${src}/db.sql.gz" | docker compose exec -T db sh -c \
-    'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root "$MYSQL_DATABASE"'
+# DB は手元の db サービスか外部か（bin/backup.sh と同じ判定）
+db_host="$(env_get DB_HOST)"; db_host="${db_host:-db}"
+db_port="$(env_get DB_PORT)"; db_port="${db_port:-3306}"
+if [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null)" ]; then
+    echo "[restore] DB を復元しています（手元の db サービス）..."
+    gunzip -c "${src}/db.sql.gz" | docker compose exec -T db sh -c \
+        'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root "$MYSQL_DATABASE"'
+else
+    echo "[restore] DB を復元しています（外部: ${db_host}:${db_port}）..."
+    gunzip -c "${src}/db.sql.gz" | docker run --rm -i --network "${proj}_default" \
+        -e MYSQL_PWD="$(env_get DB_PASSWORD)" mariadb:10.6 \
+        mysql -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)"
+fi
 
 if [ -f "${src}/upload.tar.gz" ]; then
     echo "[restore] アップロード画像を復元しています..."

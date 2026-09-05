@@ -89,6 +89,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **`ECCUBE_AUTH_MAGIC` は全パスワードのハッシュの鍵。** 違う値で DB を戻すと誰も
   ログインできず、エラーも出ない。`restore.sh` が DB を戻す前に突き合わせて止める。
   引っ越しは「clone → `bin/init.sh` → AUTH_MAGIC を合わせる → `bin/restore.sh`」。
+  **DB は MariaDB / MySQL のみ**（イメージは `pdo_mysql` だけ）。外部 DB でも backup / restore は
+  そのまま使える（`db` サービスが無ければ `mariadb` の使い捨てコンテナから `.env` の `DB_*` で繋ぐ）。
+  **`BACKUP_SYNC`** で外へ送る。送れなければ失敗にする（黙って飛ばすと「取れているつもり」になる）。
   **本番で管理画面が書いたファイルはそのサーバーにしか無い。** `doctor` と `backup.sh` が
   未コミット分を挙げる。
 - **`bin/reset.sh` と `bin/switch-version.sh` は `down -v` する。** DB・画像・

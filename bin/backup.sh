@@ -21,6 +21,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/guard.sh
 . "$(dirname "$0")/lib/guard.sh"
+# shellcheck source=lib/image.sh
+. "$(dirname "$0")/lib/image.sh"
 
 # ボリュームの中身は **alpine で読む。** ec-cube のイメージで `docker compose run`
 # すると、イメージが無いときにフルビルドが始まる（composer で本体取得、数分）。
@@ -39,10 +41,29 @@ stamp="$(date +%Y%m%d-%H%M%S)"
 dest="${BACKUP_DIR}/${stamp}"
 mkdir -p "$dest"
 
-echo "[backup] DB をダンプしています..."
-docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump \
-    --single-transaction --routines --triggers --events \
-    -u root "$MYSQL_DATABASE"' | gzip > "${dest}/db.sql.gz"
+# DB は 2 通り。手元の db サービス（単一ホスト）か、外部の DB（compose.app.yaml の
+# 複数ホスト、マネージド DB）。外部のときは db コンテナが無いので exec できない。
+# **同じ mariadb イメージの使い捨てコンテナから、.env の DB_* で繋ぐ。** compose の
+# ネットワークに入れておけば、別スタックの DB 名でもマネージド DB のホスト名でも引ける。
+# 外部は root ではなくアプリのユーザーなので --routines / --events は付けない
+# （SHOW ROUTINE 等の権限が無いと落ちる。EC-CUBE はどちらも使わない）。
+# **対応は MariaDB / MySQL のみ。** イメージに pdo_mysql しか入っておらず、EC-CUBE が
+# 対応する PostgreSQL はこの環境では動かない（dump も pg_dump になる）。
+db_host="$(env_get DB_HOST)"; db_host="${db_host:-db}"
+db_port="$(env_get DB_PORT)"; db_port="${db_port:-3306}"
+if [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null)" ]; then
+    echo "[backup] DB をダンプしています（手元の db サービス）..."
+    docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump \
+        --single-transaction --routines --triggers --events \
+        -u root "$MYSQL_DATABASE"' | gzip > "${dest}/db.sql.gz"
+else
+    echo "[backup] DB をダンプしています（外部: ${db_host}:${db_port}）..."
+    docker run --rm --network "${proj}_default" \
+        -e MYSQL_PWD="$(env_get DB_PASSWORD)" mariadb:10.6 mysqldump \
+        --single-transaction --triggers --no-tablespaces \
+        -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)" \
+        | gzip > "${dest}/db.sql.gz"
+fi
 
 # exec ではなく使い捨てコンテナで読む。exec は ec-cube が起動中でないと失敗し、
 # 「アップグレードに失敗してサイトが落ちている状態から復旧したい」ときに
@@ -122,6 +143,29 @@ fi
 
 echo "[backup] 完了: ${dest}"
 ls -lh "$dest"
+
+# サーバーの外へ出す。**backups/ は同じディスクにあるので、サーバーごと失うと一緒に消える。**
+# .env の BACKUP_SYNC に送り先を書くと、ここで送る。送れなければ失敗にする
+# （黙って飛ばすと「取れているつもり」になる。それが一番危ない）。
+#   BACKUP_SYNC=rclone:<remote>:<bucket>/<path>   … rclone（S3 / R2 / Drive / NAS）
+#   BACKUP_SYNC=<user>@<host>:<path>               … rsync over ssh
+#   BACKUP_SYNC=/mnt/nas/eccube                    … rsync（マウント済みの NAS）
+sync_to="$(env_get BACKUP_SYNC)"
+if [ -n "$sync_to" ]; then
+    name="$(basename "$dest")"
+    case "$sync_to" in
+        rclone:*)
+            command -v rclone >/dev/null 2>&1 || { echo "[backup] エラー: BACKUP_SYNC が rclone ですが rclone がありません" >&2; exit 1; }
+            echo "[backup] サーバーの外へ送ります（rclone）: ${sync_to#rclone:}/${name}"
+            rclone copy "$dest" "${sync_to#rclone:}/${name}" || { echo "[backup] エラー: 外へ送れませんでした" >&2; exit 1; }
+            ;;
+        *)
+            command -v rsync >/dev/null 2>&1 || { echo "[backup] エラー: BACKUP_SYNC が rsync ですが rsync がありません" >&2; exit 1; }
+            echo "[backup] サーバーの外へ送ります（rsync）: ${sync_to}/${name}"
+            rsync -a "$dest" "${sync_to}/" || { echo "[backup] エラー: 外へ送れませんでした" >&2; exit 1; }
+            ;;
+    esac
+fi
 
 # 世代管理: 古いバックアップを削除（BACKUP_KEEP 世代残す）
 # head -n -N は BSD/macOS 非対応のため、削除数を計算して先頭から消す
