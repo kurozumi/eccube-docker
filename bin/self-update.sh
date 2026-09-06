@@ -71,6 +71,7 @@ ENV_PATHS=(
     compose.prod.yaml
     compose.app.yaml
     compose.postgresql.yaml
+    compose.externaldb.yaml
     phpunit.xml
     phpunit.11.xml
     .env.example

@@ -1,0 +1,13 @@
+# 外部 DB（マネージド DB）を使うときの上書き。**bin/setup.sh db が .env の COMPOSE_FILE に足す。**
+# 手元の db サービスと phpMyAdmin は起動せず、ec-cube は db を待たない（DB_HOST の先を entrypoint が
+# 自分で待つ）。db のボリューム（データ）は残る。戻すときは COMPOSE_FILE からこのファイルを外す。
+services:
+  db:
+    profiles: ["never"]
+  phpmyadmin:
+    profiles: ["never"]
+  ec-cube:
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false

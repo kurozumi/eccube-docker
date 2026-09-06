@@ -34,7 +34,7 @@ x-eccube-environment: &eccube-environment
   # スキーム・ポート・serverVersion・charset をそれぞれ変数から引いて 1 本の URL にする。
   # postgresql のときは compose.postgresql.yaml が db サービスを差し替え、これらの既定を
   # 5432 / 16 / utf8 に上書きする（bin/init.sh が COMPOSE_FILE に足す）。
-  DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}@db:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}&charset=${DB_CHARSET:-utf8mb4}"
+  DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}@${DB_HOST:-db}:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}&charset=${DB_CHARSET:-utf8mb4}"
   # MariaDB の版は MARIADB_VERSION（db サービスの image と serverVersion の両方に効く）
   DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}
   DB_ENGINE: ${DB_ENGINE:-mysql}
@@ -79,7 +79,8 @@ x-eccube-environment: &eccube-environment
   # （bin/init.sh が生成する）。以前は env_file: .env で流し込んでいたが、.env 全体を
   # アプリに渡すのをやめたので明示する（#107）。
   ECCUBE_AUTH_MAGIC: ${ECCUBE_AUTH_MAGIC:?ECCUBE_AUTH_MAGIC が .env に無い（全パスワードの鍵。bin/init.sh が生成する）}
-  DB_HOST: db
+  # 外部 DB（マネージド DB）なら .env の DB_HOST（bin/setup.sh db が書く）。既定は手元の db サービス
+  DB_HOST: ${DB_HOST:-db}
   DB_USER: ${DB_USER:-eccube}
   DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}
   DB_NAME: ${DB_NAME:-eccube_db}

@@ -31,7 +31,8 @@ bin/deploy.sh --remote=<host>:<path>     # サーバーに反映（退避 → �
 
 ## 公開（本番）
 
-`.env` に `MAILER_DSN`（実メールサービス）と `TUNNEL_TOKEN`（Cloudflare Tunnel）を書いてから
+メールは `bin/setup.sh mail`（質問に答える → 試しに送る → 通れば .env に書く。人に答えてもらう）、
+DB を外に出すなら `bin/setup.sh db`。`.env` に `TUNNEL_TOKEN`（Cloudflare Tunnel）を書いてから
 `bin/publish.sh`。既定のパスワード・管理者が `password` のまま・メール未設定なら**止まります**。
 それは正しい挙動です。無理に通さないでください（`FORCE_PUBLISH=1` は人が決めること）。
 

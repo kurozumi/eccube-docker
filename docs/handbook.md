@@ -71,6 +71,7 @@ gh repo create myshop --private --source=. --push
 ```bash
 git clone <あなたのリポジトリの URL> myshop && cd myshop
 bin/init.sh          # .env を作って起動（DB は MariaDB。PostgreSQL 派は先に .env の DB_ENGINE、docs/install.md）
+bin/setup.sh mail    # 送信メールを質問に答えて設定（先に 1 通試す）
 bin/publish.sh       # 公開する
 ```
 
