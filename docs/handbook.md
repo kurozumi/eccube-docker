@@ -70,7 +70,14 @@ gh repo create myshop --private --source=. --push
 `v1.0.0` の部分は、そのとき出ている最新のリリース番号にしてください
 （https://github.com/kurozumi/eccube-docker/releases）。
 
-このあと `bin/init.sh` で、あなたのパソコンでお店が動きます（終わると URL とログイン情報が表示されます）。
+このあと、あなたのパソコンでお店が動きます（終わると URL とログイン情報が表示されます）:
+
+```bash
+bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+```
+
+`--image` は「配布イメージを引く」指定で、数十秒で終わります（付けないと手元でビルドするので
+10 分以上かかる）。**PHP はタグの `php8.3` の部分で決まります。**
 
 ### 2. サーバーを整えて公開する（全部あなたのパソコンから打つ）
 

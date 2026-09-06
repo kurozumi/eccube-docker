@@ -108,8 +108,17 @@ EC-CUBE 本体はイメージの中にあり、このリポジトリには 1 フ
 cp .env.example .env
 ```
 
-引いて使うなら `ECCUBE_IMAGE` を書く。`ECCUBE_AUTH_MAGIC` と DB のパスワードは
-次の手順で自動生成されるので触らなくてよい。
+`ECCUBE_AUTH_MAGIC` と DB・管理者のパスワードは次の手順（`bin/init.sh`）が生成するので触らなくてよい
+（**まだ既定値のものだけ**が対象。DB がもう作られていれば書き換えない）。
+
+配布イメージを引くなら `ECCUBE_IMAGE` を書く……のでもよいが、`bin/init.sh --image=<タグ>` に渡せば
+`.env` を開かずに済む:
+
+```bash
+bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+```
+
+**PHP はこのタグで決まる**（`.env` の `PHP_VERSION` は手元でビルドするときにしか読まれない）。
 
 **DB の種類はここで決める。** `DB_ENGINE=mysql`（MariaDB、既定）か `DB_ENGINE=postgresql`。
 どちらも同梱で、PostgreSQL を選ぶと `db` サービスが `postgres:16` になり、`bin/init.sh` が
