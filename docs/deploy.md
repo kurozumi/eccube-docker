@@ -25,8 +25,9 @@ bin/publish.sh   # compose.prod.yaml を重ねて起動（配布イメージな�
 
 ## メール送信
 
-**Mailpit は開発専用**（`compose.override.yaml` にしか無く、本番構成には居ない）。本番は `.env` の
-`MAILER_DSN` に実メールサービスの SMTP を書く:
+**Mailpit は開発専用**（`compose.override.yaml` にしか無く、本番構成には居ない）。本番は
+**`bin/setup.sh mail`** で設定する（サービスを選んで質問に答える → 1 通試しに送る → 届けば `.env` に書く）。
+手で書くなら `.env` の `MAILER_DSN`:
 
 ```bash
 MAILER_DSN=smtp://user:pass@smtp.example.com:587      # SendGrid / Amazon SES / さくら 等

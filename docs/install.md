@@ -221,6 +221,21 @@ git add html/template/original && git commit -m "オリジナルテーマ"
   コンテナ内の `.env` に書くので `bin/upgrade.sh` で消える。環境変数で渡してあると、
   管理画面は「上書きされている」と表示して変更を拒否する。それでよい
 
+## 6.5 メールと DB を設定する（質問に答えるだけ）
+
+`.env` を手で書かなくてよい。**先に試してから書く**ので、間違った設定が残らない。
+
+```bash
+bin/setup.sh mail   # SendGrid / Amazon SES / Gmail / さくら等の SMTP / Resend から選ぶ → 1 通試しに送る → 届けば .env に書く
+bin/setup.sh db     # 外部の DB（マネージド DB）に切り替える → 繋がるか試す → いまのデータを写すか聞く → 切り替え
+```
+
+- メール: 開発は何もしなくてよい（Mailpit に届く）。**本番は必須**（未設定だと `bin/publish.sh` が止まる）。
+  ユーザー名・パスワードの URL エンコードはこちらでやる（`@` や `/` が入っていても壊れない）
+- DB: 「この環境の中の DB」が既定で、何もしなくてよい。マネージド DB にするときだけ。
+  種類（MariaDB / MySQL か PostgreSQL）が同じなら、商品・会員・注文をそのまま写せる。
+  手元の `db` は止まるがデータは残る（戻すなら `.env` の `COMPOSE_FILE` から `compose.externaldb.yaml` を外す）
+
 ## 7. 公開する（本番のみ）
 
 ```bash

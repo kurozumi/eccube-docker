@@ -141,6 +141,12 @@ DB=外部）になっているので、**アプリホストを N 台並べて前
         共有: DB / Redis(cache) / Redis(session) / アップロード画像(NFS/EFS)
 ```
 
+## DB を外に出す（マネージド DB）
+
+**`bin/setup.sh db`** で切り替える（繋がるか試す → いまのデータを写すか聞く → `.env` と `COMPOSE_FILE`
+を書き換えて起動し直す）。手元の `db` は止まるがボリュームは残る。`bin/backup.sh` / `restore.sh` は
+`.env` の `DB_*` を見て外部 DB に繋ぐので、そのまま使える。
+
 ## ネットワークと権限
 
 - `frontend`（公開層と nginx）と `backend`（nginx・アプリ・DB・Redis）の 2 つ。公開層
