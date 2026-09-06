@@ -25,7 +25,7 @@ bin/init.sh            # これだけ。.env を作り、パスワード類を�
 
 ```bash
 bin/plugin.sh doctor                     # おかしいときは、まずこれ（日本語で理由が出る）
-git add <直したファイル> && git commit && git push   # 控えを送る（git add -A は使わない: 店のデータが混ざる）
+git add -A && git commit -m "何を直したか" && git push   # 控えを送る（管理画面が作ったページや CSS も含めて全部。.env は .gitignore が除く）
 bin/deploy.sh --remote=<host>:<path>     # サーバーに反映（退避 → メンテ ON → pull → migration → 確認 → OFF）
 ```
 

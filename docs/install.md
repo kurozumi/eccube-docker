@@ -35,6 +35,12 @@ ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-v1.0.0
 
 ---
 
+## 0. 用意するもの
+
+- **Mac / Linux**: ターミナル。**Windows**: WSL2（Ubuntu）を入れて、その中で進める（`bin/` は bash）
+- Docker Desktop（Mac / Windows）または Docker Engine（Linux）。Compose 2.24 以上（`bin/init.sh` が確かめる）
+- git。公開までするなら GitHub のアカウント（非公開リポジトリは無料）
+
 ## 1. 自分のリポジトリを作る
 
 **`git clone` しない。** clone すると origin が配布元のままで、あなたのコードを

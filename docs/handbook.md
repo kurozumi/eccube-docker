@@ -9,6 +9,12 @@ Claude Code などの AI に運用を手伝わせるなら、このディレク�
 
 ---
 
+## 先に 1 つだけ
+
+Mac ならターミナル、Windows なら **WSL2（Ubuntu）** を入れて、その中で進めます
+（このリポジトリの `bin/` は bash のスクリプトで、PowerShell では動きません）。
+Docker Desktop は WSL2 の中からも使えます。
+
 ## 登場するものは 5 つ
 
 ```
