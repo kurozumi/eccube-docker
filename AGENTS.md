@@ -31,6 +31,9 @@ bin/deploy.sh --remote=<host>:<path>     # サーバーに反映（退避 → �
 
 ## 公開（本番）
 
+サーバーを整えるのは手元から: `bin/bootstrap-server.sh user@host /srv/myshop`（Docker を入れ、
+ファイルを送り、.env を作る）。サーバーに git は要らない。以後は `--remote=user@host:/srv/myshop` を
+付けて `setup.sh` / `publish.sh` / `deploy.sh` を手元から打つ。
 メールは `bin/setup.sh mail`（質問に答える → 試しに送る → 通れば .env に書く。人に答えてもらう）、
 DB を外に出すなら `bin/setup.sh db`。`.env` に `TUNNEL_TOKEN`（Cloudflare Tunnel）を書いてから
 `bin/publish.sh`。既定のパスワード・管理者が `password` のまま・メール未設定なら**止まります**。

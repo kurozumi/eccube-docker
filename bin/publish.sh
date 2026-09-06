@@ -2,6 +2,8 @@
 # 本番構成で起動する（compose.prod.yaml を使用）。
 # 公開方式は .env の COMPOSE_PROFILES で選ぶ（tunnel / caddy / 空=背後配置）。
 set -euo pipefail
+# --remote=host:/path なら、向こうで同じことをする（bin/deploy.sh と同じ形）
+for a in "$@"; do case "$a" in --remote=*) r="${a#--remote=}"; exec ssh -t "${r%%:*}" "cd '${r#*:}' && bin/publish.sh" ;; esac; done
 # -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
 case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."

@@ -329,7 +329,8 @@ git add app/template html/user_data && git commit -m "管理画面で直した�
 `bin/deploy.sh` と `bin/plugin.sh doctor` が、取り込まれていない分を挙げる。
 **git にも backup にも入っていない状態を作らないこと。**
 
-引っ越しの順番:
+引っ越しの順番（サーバーに git を置かない形なら、`git clone` の代わりに
+`bin/bootstrap-server.sh user@新サーバー /srv/myshop` を手元から。`.env` はそこでできる）:
 
 ```bash
 git clone <あなたのリポジトリ> myshop && cd myshop

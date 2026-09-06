@@ -6,6 +6,8 @@
 # .env の書き方（MAILER_DSN の URL エンコード、DB_* と COMPOSE_FILE の組み合わせ）を人に覚えさせない。
 # 試して通ったものだけ書き、書いたら起動し直す。
 set -euo pipefail
+# --remote=host:/path なら、向こうで同じ質問に答える（ssh -t で対話）
+for a in "$@"; do case "$a" in --remote=*) r="${a#--remote=}"; exec ssh -t "${r%%:*}" "cd '${r#*:}' && bin/setup.sh ${1:-}" ;; esac; done
 case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/image.sh

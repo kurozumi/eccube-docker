@@ -72,17 +72,20 @@ gh repo create myshop --private --source=. --push
 
 このあと `bin/init.sh` で、あなたのパソコンでお店が動きます（終わると URL とログイン情報が表示されます）。
 
-### 2. サーバーで、あなたのリポジトリから持ってきて動かす
+### 2. サーバーを整えて公開する（全部あなたのパソコンから打つ）
+
+サーバー（VPS）を借りて SSH で入れるようにしたら、**サーバーには何も入れに行きません。**
+手元から順番に打つだけです。
 
 ```bash
-git clone <あなたのリポジトリの URL> myshop && cd myshop
-bin/init.sh          # .env を作って起動（DB は MariaDB。PostgreSQL 派は先に .env の DB_ENGINE、docs/install.md）
-bin/setup.sh mail    # 送信メールを質問に答えて設定（先に 1 通試す）
-bin/publish.sh       # 公開する
+bin/bootstrap-server.sh user@サーバー /srv/myshop   # Docker を入れ、店のファイルを送り、.env を作る（1 分）
+bin/setup.sh mail --remote=user@サーバー:/srv/myshop  # 送信メールを質問に答えて設定（先に 1 通試す）
+# Cloudflare Tunnel のトークンをサーバーの .env に書く（bootstrap が最後に打ち方を表示します）
+bin/publish.sh --remote=user@サーバー:/srv/myshop    # 公開する
 ```
 
-サーバーは**あなたのリポジトリから持ってくるだけ**です。配布元（`eccube-docker`）とは
-直接つながりません。
+サーバーに git も GitHub の鍵も置きません。以後の反映も `bin/deploy.sh --remote=…` で
+**手元から送ります**。
 
 細かい判断（`.env` の中身、公開方式、プラグインの扱い）は [導入手順](install.md)。
 
