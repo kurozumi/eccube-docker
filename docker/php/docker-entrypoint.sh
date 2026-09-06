@@ -129,6 +129,35 @@ if [ ! -d vendor/symfony/messenger ]; then
         "symfony/messenger:*" "symfony/doctrine-messenger:*" \
         || log "警告: messenger の追加に失敗しました"
 fi
+# 1c) 追加ライブラリ（app/Customize/composer.extra.json）。
+#     **composer.json と vendor は eccube_app volume の中にあり、git にも backup にも入らない。**
+#     bin/upgrade.sh はこの volume を作り直すので、コンテナの中で `composer require` した
+#     ライブラリは黙って消える（それを使っている app/Customize のコードが「Class not found」で
+#     落ちるまで気づけない）。宣言を git 管理のファイルに置き、無ければここで入れ直す。
+#
+#     形は composer.json と同じ:
+#       { "require": { "league/csv": "^9.8" } }
+extra_json="$APP_DIR/app/Customize/composer.extra.json"
+if [ -f "$extra_json" ]; then
+    missing="$(php -r '
+        $f = $argv[1];
+        $j = json_decode(@file_get_contents($f), true);
+        if (!is_array($j) || empty($j["require"]) || !is_array($j["require"])) { exit(0); }
+        $out = [];
+        foreach ($j["require"] as $name => $ver) {
+            if (!preg_match("#^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$#", (string) $name)) { continue; }
+            if (!is_dir("/var/www/html/vendor/" . $name)) { $out[] = $name . ":" . $ver; }
+        }
+        echo implode(" ", $out);
+    ' "$extra_json" 2>/dev/null || true)"
+    if [ -n "$missing" ]; then
+        log "追加ライブラリを入れます（app/Customize/composer.extra.json）: ${missing}"
+        # shellcheck disable=SC2086  # 複数パッケージを個別の引数として渡す
+        runuser -u www-data -- composer require --no-interaction --no-scripts --no-plugins $missing \
+            || log "警告: 追加ライブラリの導入に失敗しました。app/Customize/composer.extra.json の指定を確認してください"
+    fi
+fi
+
 # フェイルセーフ: それでも messenger が無ければ、マージ済みの messenger.yaml を
 # 取り除く（設定だけ残るとコンテナのコンパイルが失敗し全ページ 500 になるため）。
 # この場合メールは従来どおり同期送信で動く。

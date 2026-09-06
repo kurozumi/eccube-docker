@@ -39,6 +39,12 @@ DB を外に出すなら `bin/setup.sh db`（どれも質問に答える → 先
 そのあと `bin/publish.sh`。既定のパスワード・管理者が `password` のまま・メール未設定なら**止まります**。
 それは正しい挙動です。無理に通さないでください（`FORCE_PUBLISH=1` は人が決めること）。
 
+## 外部ライブラリ
+
+`app/Customize/composer.extra.json` に書いてから `docker compose up -d`。
+**コンテナの中で `composer require` しただけにしない**（`vendor` はボリュームの中で、
+`bin/upgrade.sh` が作り直すと消える）。
+
 ## 絶対にやらないこと
 
 - **本番で `bin/reset.sh`・`bin/switch-version.sh`・`docker compose down -v` を打たない。**

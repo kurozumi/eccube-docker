@@ -157,6 +157,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   ホストには1ファイルも無い。`bin/ide-sync.sh` で `.ide/` へ写し、PhpStorm の
   **Include Path**（ソースルートではない）に足す。リモートインタプリタを設定しても
   解決しない。バージョンを切り替えたら写し直す。
+- **外部ライブラリは `app/Customize/composer.extra.json`（git 管理）に宣言する。**
+  `composer.json` と `vendor` は `eccube_app` ボリュームの中にあり、git にも backup にも
+  入らない。`bin/upgrade.sh` はこのボリュームを作り直すので、コンテナの中で
+  `composer require` しただけのライブラリは**黙って消える**（使っているコードが
+  「Class not found」で落ちるまで気づけない）。entrypoint が起動時に、宣言のうち
+  `vendor` に無いものだけを入れる。`upgrade.sh` は消える前に列挙して確認を求める。
 - **framework 級設定（monolog 等）は `app/config/eccube/packages/`**。entrypoint が起動時に
   本体の `app/config/eccube/packages/` へマージする（既定は消さない）。
   **切り替えたいものは `app/config/eccube/optional/<名前>/`** に置く。`packages/` は常に

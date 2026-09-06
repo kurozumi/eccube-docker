@@ -218,6 +218,24 @@ EC-CUBE 4.3 の `src/Eccube/Kernel.php::configureContainer()` は、
 > `app/Customize/Resource/config/services.yaml` にだけ書いた状態で
 > `bin/console debug:container monolog.logger.<channel>` がサービスを解決した。
 
+## 外部ライブラリを使う（composer）
+
+`app/Customize/` のコードから外部ライブラリを使うときは、**`app/Customize/composer.extra.json` に書く**:
+
+```json
+{ "require": { "league/csv": "^9.8" } }
+```
+
+`docker compose up -d` すると、`vendor` に無いものだけ入ります（あるときは何もしない）。
+
+**コンテナの中で `composer require` しただけにしない。** `composer.json` と `vendor` は
+`eccube_app` ボリュームの中にあり、**git にも backup にも入りません**。`bin/upgrade.sh` は
+このボリュームを作り直すので、入れたライブラリは黙って消え、それを使っているコードが
+「Class not found」で落ちるまで気づけません（`bin/upgrade.sh` は消える前に警告して確認を求めます）。
+
+試すときはコンテナの中で `composer require` して構いませんが、**残すなら
+`composer.extra.json` に書き写して git にコミットしてください。**
+
 ## コンテナの中に入る
 
 ```bash
