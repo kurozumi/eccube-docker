@@ -38,7 +38,9 @@ bin/publish.sh   # compose.prod.yaml を重ねて起動（配布イメージな�
 | `caddy` | Caddy 自動 HTTPS（Let's Encrypt） | 80 / 443 |
 | （未設定） | host nginx / AWS ALB の背後 | なし（127.0.0.1 束縛） |
 
-- **tunnel**: `.env` に `TUNNEL_TOKEN` を設定。ダッシュボードで公開ホスト名 → `http://nginx:80`。
+- **tunnel**: **`bin/setup.sh tunnel`**（トークンを貼る → 繋がるか試す → 通れば `.env` に書く。
+  Cloudflare の画面でやることも表示する）。手でやるなら `.env` に `TUNNEL_TOKEN`、ダッシュボードで
+  公開ホスト名 → `http://nginx:80`。
 - **caddy**: `.env` に `SITE_DOMAIN` を設定し、A レコードをこのサーバーへ向ける。
 - **背後配置**: `COMPOSE_PROFILES` を空にすると nginx は `127.0.0.1:8080` のみで待ち受ける。
 
