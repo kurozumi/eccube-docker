@@ -22,6 +22,8 @@
 # それを防ぐため、選択後に「中身が想定どおりか」「実行時に validation 警告が
 # 出ていないか」まで検証する。
 set -euo pipefail
+# -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
+case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
 
 fail() { echo "[test] エラー: $*" >&2; exit 1; }

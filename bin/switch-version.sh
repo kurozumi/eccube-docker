@@ -8,6 +8,8 @@
 # 破棄は必ずビルドが通ってから行う。先に down -v するとビルド失敗時にデータだけ消えて
 # 環境が残らない（新バージョンの取得は composer 依存解決に失敗しうる）。
 set -euo pipefail
+# -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
+case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/guard.sh
 . "$(dirname "$0")/lib/guard.sh"

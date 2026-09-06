@@ -29,6 +29,8 @@
 # Doctrine メタデータ）と OPcache も消す。cache:clear だけでは本番モードで
 # 変更が反映されない。
 set -euo pipefail
+# -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
+case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/guard.sh
 . bin/lib/guard.sh   # guard_is_prod_stack（doctor が本番かどうかを見る）

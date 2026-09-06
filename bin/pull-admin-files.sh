@@ -11,6 +11,8 @@
 # 取り込むのは app/template と html/user_data だけ（管理画面が書く場所）。
 # **app/Plugin は取らない。** 手元のプラグインはそれぞれ git 管理で、上書きすると壊す。
 set -euo pipefail
+# -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
+case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
 
 log() { echo "[pull-admin] $*"; }
