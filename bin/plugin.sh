@@ -30,6 +30,8 @@
 # 変更が反映されない。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=lib/guard.sh
+. bin/lib/guard.sh   # guard_is_prod_stack（doctor が本番かどうかを見る）
 
 ec()  { docker compose exec -T ec-cube runuser -u www-data -- php bin/console "$@"; }
 die() { echo "[plugin] エラー: $*" >&2; exit 1; }
@@ -572,6 +574,15 @@ PHP
         echo "[doctor] .env の COMPOSE_PROFILES（${hprof#,}）とコンテナが見ている値（${cprof#,}）が違います"
         echo "           docker compose up -d で作り直してください（設定の投入は起動時に決まります）"
         warn=1
+    fi
+    # 本番でメールが捨てられていないか。null:// は黙って破棄、mailpit は本番に居ない（開発専用）。
+    # どちらも画面は正常なので、注文が入ってから「メールが来ない」で気づく
+    if guard_is_prod_stack 2>/dev/null; then
+        mdsn="$(docker compose exec -T ec-cube sh -c 'printf %s "${MAILER_DSN:-}"' 2>/dev/null | tr -d '\r')"
+        case "$mdsn" in
+            ""|null://*) echo "[doctor] 本番なのに MAILER_DSN が未設定（null://）です。注文メール・会員登録メールが黙って破棄されています"; warn=1 ;;
+            *mailpit*)   echo "[doctor] 本番なのに MAILER_DSN が開発用の Mailpit を指しています。本番には居ないので送信が失敗します"; warn=1 ;;
+        esac
     fi
     running="$(docker compose ps --status running --format '{{.Service}}' 2>/dev/null | tr '\n' ' ')"
     case "$cprof" in *,redis,*)

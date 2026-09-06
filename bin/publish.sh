@@ -21,8 +21,18 @@ if [ "${FORCE_PUBLISH:-0}" != "1" ] && [ -f .env ]; then
             bad=1
         fi
     done
+    # メール送信（注文メール・会員登録・パスワード再発行）。本番で未設定だと null://null で
+    # **黙って破棄**され、開発の Mailpit 宛てだと本番には居ないホストへ送って失敗する。どちらも
+    # 画面は正常に見えるので気づけない。実メールサービスの DSN を .env に書く。
+    mail="$(grep -E '^MAILER_DSN=' .env | head -1 | cut -d= -f2- || true)"
+    case "$mail" in
+        "")          echo "[publish] エラー: MAILER_DSN が .env にありません。本番では注文メール等が黙って破棄されます。"; bad=1 ;;
+        null://*)    echo "[publish] エラー: MAILER_DSN が null:// です。本番では注文メール等が黙って破棄されます。"; bad=1 ;;
+        *mailpit*)   echo "[publish] エラー: MAILER_DSN が開発用の Mailpit を指しています。本番には居ないので送信が失敗します。"; bad=1 ;;
+    esac
     if [ "$bad" = "1" ]; then
-        echo "[publish] 本番公開を中止しました。.env のシークレットを固有の値にしてください。"
+        echo "[publish] 本番公開を中止しました。.env のシークレットを固有の値にし、MAILER_DSN に実メールサービスを書いてください。"
+        echo "          例: MAILER_DSN=smtp://user:pass@smtp.example.com:587（docs/deploy.md「メール送信」）"
         echo "          （新規環境なら rm .env && bin/init.sh で自動生成されます。"
         echo "            既定値で DB 初期化済みの場合はデータ再作成が必要: docker compose down -v）"
         echo "          それでも起動する場合: FORCE_PUBLISH=1 bin/publish.sh"
