@@ -323,6 +323,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 
 | 文書 | 中身 |
 |---|---|
+| `AGENTS.md` | **お店を運用する人とその AI 向け**（配布物に入る）。この CLAUDE.md は環境そのものの保守用 |
 | `docs/handbook.md` | 初心者向け。理由を書かず手順だけ。毎日の 3 コマンドと困ったときの 1 コマンド |
 | `docs/install.md` | 利用者向けの導入手順（取得 → 起動 → 更新の受け取り） |
 | `docs/customize.md` | 本体を汚さずに実装を足す場所、framework 級設定 |

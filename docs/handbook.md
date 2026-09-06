@@ -55,20 +55,20 @@ Docker Desktop は WSL2 の中からも使えます。
 
 ```bash
 # 配布元の最新リリースの中身をもらう（git の履歴は付いてこない）
-curl -fsSL https://github.com/kurozumi/eccube-docker/archive/refs/tags/v1.0.0.tar.gz | tar -xz
-mv eccube-docker-1.0.0 myshop && cd myshop
+curl -fsSL https://github.com/kurozumi/eccube-docker/releases/latest/download/eccube-docker.tar.gz | tar -xz
+mv eccube-docker-* myshop && cd myshop
 
 # 自分のリポジトリとして始める
 git init -b main
 git add -A
-git commit -m "eccube-docker v1.0.0 から開始"
+git commit -m "eccube-docker から開始"
 
 # GitHub に、非公開で置く（これが「あなたのリポジトリ」）
 gh repo create myshop --private --source=. --push
 ```
 
-`v1.0.0` の部分は、そのとき出ている最新のリリース番号にしてください
-（https://github.com/kurozumi/eccube-docker/releases）。
+この URL は**常に最新のリリース**を指します（版の番号を調べる必要はありません）。
+何が入っているかは https://github.com/kurozumi/eccube-docker/releases で読めます。
 
 このあと、あなたのパソコンでお店が動きます（終わると URL とログイン情報が表示されます）:
 

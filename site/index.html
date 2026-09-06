@@ -312,11 +312,11 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
     <h2><em class="k">git clone しない</em>始め方</h2>
     <p class="sub"><strong>git clone しません。</strong> リリースの中身をもらって、自分専用の非公開リポジトリとして始めます。</p>
     <pre><span class="c"># 配布元の最新リリースの中身をもらう（git の履歴は付いてこない）</span>
-curl -fsSL https://github.com/kurozumi/eccube-docker/archive/refs/tags/__TAG__.tar.gz | tar -xz
-mv eccube-docker-__VER__ myshop &amp;&amp; cd myshop
+curl -fsSL https://github.com/kurozumi/eccube-docker/releases/latest/download/eccube-docker.tar.gz | tar -xz
+mv eccube-docker-* myshop &amp;&amp; cd myshop
 
 <span class="c"># 自分のリポジトリとして始める（非公開で）</span>
-git init -b main &amp;&amp; git add -A &amp;&amp; git commit -m "eccube-docker __TAG__ から開始"
+git init -b main &amp;&amp; git add -A &amp;&amp; git commit -m "eccube-docker から開始"
 gh repo create myshop --private --source=. --push
 
 <span class="c"># 動かす（配布イメージを引くので数十秒。PHP はタグで選ぶ）</span>
