@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="eccube-docker">
+  <!-- 箱 = 出荷の箱（EC）とコンテナ（Docker）を兼ねる形。16px でも読めるよう、
+       線ではなく面の明度差だけで立体にしている。色は紹介ページの accent と同じ -->
+  <rect width="64" height="64" rx="14" fill="#E8621C"/>
+  <g>
+    <polygon points="32,10 52,21 32,32 12,21" fill="#FFFFFF"/>
+    <polygon points="12,21 32,32 32,54 12,43" fill="#FFFFFF" opacity="0.86"/>
+    <polygon points="52,21 32,32 32,54 52,43" fill="#FFFFFF" opacity="0.64"/>
+  </g>
+</svg>
