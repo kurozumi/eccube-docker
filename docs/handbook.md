@@ -80,8 +80,9 @@ gh repo create myshop --private --source=. --push
 ```bash
 bin/bootstrap-server.sh user@サーバー /srv/myshop   # Docker を入れ、店のファイルを送り、.env を作る（1 分）
 bin/setup.sh mail --remote=user@サーバー:/srv/myshop  # 送信メールを質問に答えて設定（先に 1 通試す）
-# Cloudflare Tunnel のトークンをサーバーの .env に書く（bootstrap が最後に打ち方を表示します）
+bin/setup.sh tunnel --remote=user@サーバー:/srv/myshop # Cloudflare Tunnel のトークンを貼る（繋がるか試してから書く）
 bin/publish.sh --remote=user@サーバー:/srv/myshop    # 公開する
+bin/setup.sh backup --remote=user@サーバー:/srv/myshop # バックアップの送り先と毎日の自動実行
 ```
 
 サーバーに git も GitHub の鍵も置きません。以後の反映も `bin/deploy.sh --remote=…` で

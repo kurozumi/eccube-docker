@@ -72,6 +72,15 @@ MariaDB では `--routines` / `--events` は付けない（EC-CUBE はどちら�
 **DB の種類は途中で変えない。** ダンプの形式が違うので、`mysql` で取った `db.sql.gz` は
 `postgresql` の環境には戻らない（逆も）。引っ越し先も同じ `DB_ENGINE` にする。
 
+## いちばん簡単な始め方
+
+```bash
+bin/setup.sh backup    # 送り先を選ぶ → 試す → 暗号化の鍵を作る → 1 回取る → 毎日 4:00 の cron に登録
+```
+
+rclone（Google Drive / S3 / R2 等）・別サーバーへの rsync・NAS のパス、から選べる。以下は
+その中身の説明。
+
 ## 暗号化する（外へ送るなら必ず）
 
 DB ダンプは会員の氏名・住所・メール・電話・注文そのもの。**`BACKUP_SYNC` で外へ置くなら、
