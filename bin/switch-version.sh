@@ -22,6 +22,7 @@ if [ -z "$ver" ]; then
     exit 1
 fi
 
+image_check_version "$ver" "bin/switch-version.sh" || exit 1
 echo "[switch] ECCUBE_VERSION=${ver} に切り替えます。既存の DB とアプリのデータは破棄されます。"
 echo "[switch] 注意: アップロード画像（eccube_upload）も削除されます。残したい場合は先にバックアップを:"
 echo "         docker compose cp ec-cube:/var/www/html/html/upload/. ./upload-backup/"

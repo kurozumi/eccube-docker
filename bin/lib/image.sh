@@ -101,6 +101,64 @@ image_php_for_series() { # image_php_for_series <系列>
     esac
 }
 
+# ── バージョン制約が本当に解決できるかを、build を始める前に確かめる ──
+#
+# **`~4.4.0` は解決できない。** 4.4 は Packagist にリリースが 1 つも無く、あるのは上流の
+# ブランチ（`4.4.x-dev`）だけ。確かめずに build に入ると、composer が
+# 「Could not find package ec-cube/ec-cube with version ~4.4.0」で落ちるまで数分かかり、
+# .env は書き換わったままになる。ここで 1 秒で止めて、打ち直す形を出す。
+#
+# 制約の完全な解釈は composer の仕事なのでやらない。見るのは「その系列に何があるか」だけ:
+#   系列に安定版がある            → 通す（~4.3.0 など）
+#   系列に安定版が無く dev がある  → <系列>.x-dev を使うよう言って止める
+#   系列そのものが無い            → ある系列を並べて止める
+#
+# **問い合わせに 1 つでも失敗したら黙って通す。** 安定版と dev で JSON が別々にあり、片方だけ
+# 落ちると「dev が無い」と誤って判定して、正しい指定を止めてしまう（実際に踏んだ）。
+# 判定できないことで作業を止めない。
+image_check_version() { # image_check_version <制約> [再実行の例] → 解決できなさそうなら説明して 1
+    local want="$1" hint="${2:-}" series url stable_json dev_json stable dev
+    series="$(image_series "$want")"
+    case "$series" in [0-9]*.[0-9]*) ;; *) return 0 ;; esac   # 系列を取り出せない形は composer に任せる
+    url="https://repo.packagist.org/p2/ec-cube/ec-cube"
+    stable_json="$(curl -fsSL --max-time 10 "${url}.json" 2>/dev/null)" || return 0
+    dev_json="$(curl -fsSL --max-time 10 "${url}~dev.json" 2>/dev/null)" || return 0
+    vers_of() { printf '%s' "$1" | grep -o '"version":"[^"]*"' | cut -d'"' -f4; }
+    stable="$(vers_of "$stable_json" | grep -c "^${series}\.[0-9]" || true)"
+    dev="$(vers_of "$dev_json" | grep -c "^${series}\.x-dev$" || true)"
+    [ -n "$(vers_of "$stable_json" | head -1)" ] || return 0   # 中身が読めない → 通す
+
+    case "$want" in
+        *x-dev|dev-*)   # すでに dev 指定。その dev があるかだけ見る
+            [ "$dev" != 0 ] && return 0
+            {
+                echo "エラー: ${want} は上流にありません。"
+                printf '       入れられる dev: %s\n' "$(vers_of "$dev_json" | grep -E 'x-dev$' | head -4 | tr '\n' ' ')"
+            } >&2
+            return 1 ;;
+    esac
+    [ "$stable" != 0 ] && return 0
+    if [ "$dev" != 0 ]; then
+        {
+            echo "エラー: EC-CUBE ${series} は **まだリリースされていません**（Packagist に安定版が 1 つも無い）。"
+            echo "       ${want} は解決できないので、build を始めずに止めました（.env は変えていません）。"
+            echo
+            echo "       上流の ${series} ブランチから入れるなら、制約をこう書きます:"
+            echo
+            echo "         ${hint:-<コマンド>} ${series}.x-dev"
+            echo
+            echo "       **動く的なので、build するたび中身が変わります**（同じ指定でも別のコミットになる）。"
+            echo "       本番なら配布イメージのタグを固定するほうが安全です（docs/install.md のタグ表）。"
+        } >&2
+        return 1
+    fi
+    {
+        echo "エラー: EC-CUBE ${series} は上流にありません（${want} は解決できません）。"
+        printf '       入れられる系列: %s\n' "$(vers_of "$stable_json" | sed -n 's/^\([0-9]*\.[0-9]*\)\..*/\1/p' | sort -u -V | tr '\n' ' ')"
+    } >&2
+    return 1
+}
+
 # 参照のタグに入っている系列だけを差し替える。
 #   ghcr.io/o/r/ec-cube:4.3-v1.0.0 + 4.4 → ghcr.io/o/r/ec-cube:4.4-v1.0.0
 #   ghcr.io/o/r/ec-cube:4.3        + 4.4 → ghcr.io/o/r/ec-cube:4.4

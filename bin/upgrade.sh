@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # EC-CUBE を「データを保ったまま」新しいバージョンへ上げる。
-#   使い方: bin/upgrade.sh ~4.3.2
+#   使い方: bin/upgrade.sh ~4.3.2        （4.4 系はまだリリースが無いので 4.4.x-dev）
 #
 # bin/switch-version.sh との違い:
 #   switch-version.sh … down -v で DB・画像ごと破棄して作り直す（開発で別バージョンを試す用）
@@ -45,6 +45,9 @@ if [ -z "$ver" ]; then
     exit 1
 fi
 
+# **.env を書き換える前に**、その制約が本当に解決できるか確かめる（~4.4.0 のような指定で
+# 数分 build してから composer が落ちる、を避ける）
+image_check_version "$ver" "bin/upgrade.sh$([ "$want_prod" = 1 ] && printf ' --prod')" || exit 1
 current="$(grep -E '^ECCUBE_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
 current_image="$(env_get ECCUBE_IMAGE)"
 series="$(image_series "$ver")"
