@@ -64,7 +64,7 @@ gh repo create myshop --private --source=. --push
 `v1.0.0` の部分は、そのとき出ている最新のリリース番号にしてください
 （https://github.com/kurozumi/eccube-docker/releases）。
 
-このあと `bin/init.sh` で、あなたのパソコンでお店が動きます（http://localhost:8080/）。
+このあと `bin/init.sh` で、あなたのパソコンでお店が動きます（終わると URL とログイン情報が表示されます）。
 
 ### 2. サーバーで、あなたのリポジトリから持ってきて動かす
 

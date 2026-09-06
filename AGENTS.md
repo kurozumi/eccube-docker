@@ -14,12 +14,12 @@
 ## 初回
 
 ```bash
-bin/init.sh            # .env を作り、パスワード類を生成し、起動する（数分）
-docker compose logs -f ec-cube   # 「セットアップ完了」が出るまで待つ
+bin/init.sh            # これだけ。.env を作り、パスワード類を生成し、空いているポートを選び、起動して、終わるまで待つ（初回は数分）
 ```
 
-終わると `http://localhost:8080/` でお店、管理画面は `.env` の `ECCUBE_ADMIN_ROUTE`
-（`admin-<乱数>`。init が表示する）、ログイン ID `admin`、パスワードは `.env` の `ECCUBE_ADMIN_PASS`。
+終わると **お店の URL・管理画面の URL（`admin-<乱数>`）・ログイン ID・パスワード** が表示される
+（`.env` にも入っている）。ポートは 8080 が使われていれば自動で別の番号になるので、
+表示された URL を使う。Docker が無い・動いていないときは、その旨と入れ方が表示される。
 
 ## 毎日
 
