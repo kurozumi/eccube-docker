@@ -2,7 +2,14 @@
 # 初回セットアップ: .env 作成 → シークレット生成 → ビルド＆起動。
 set -euo pipefail
 # -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
-case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
+no_start=0
+for a in "$@"; do
+    case "$a" in
+        -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+        --no-start) no_start=1 ;;   # .env を作るだけ（サーバーの初期化。bin/bootstrap-server.sh が使う）
+        *) echo "[init] 不明なオプション: $a" >&2; exit 1 ;;
+    esac
+done
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/image.sh
 . "$(dirname "$0")/lib/image.sh"
@@ -129,6 +136,10 @@ fi
 # 配布イメージ（ECCUBE_IMAGE）を使うなら pull、そうでなければ build。
 # **ここで `up -d --build` と書かない。** 配布イメージを指定している利用者の
 # 環境では、pull したイメージをローカル build で上書きしてしまう。
+if [ "$no_start" = 1 ]; then
+    echo "[init] .env を用意しました（--no-start なので起動していません）。"
+    exit 0
+fi
 if ! image_provision docker compose; then
     echo "[init] エラー: イメージを用意できませんでした。" >&2
     exit 1

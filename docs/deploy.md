@@ -8,6 +8,25 @@
 `bin/publish.sh` は起動するだけで、本体コードの入れ替えと migration は行わない。
 
 
+## サーバーを整える（手元から）
+
+```bash
+bin/bootstrap-server.sh user@host /srv/myshop      # Docker を入れ、店のファイルを送り、.env を作る
+bin/setup.sh mail --remote=user@host:/srv/myshop   # メール（先に 1 通試す）
+bin/publish.sh --remote=user@host:/srv/myshop      # 公開
+```
+
+`bootstrap-server.sh` は Ubuntu / Debian の VPS を想定（Docker は get.docker.com の手順で入れる。
+sudo が使えること）。**サーバーに git も GitHub の鍵も置かない。** 店のファイルは手元から rsync で
+送り、以後の反映も `bin/deploy.sh --remote=…` が手元から送る（**push モード**。サーバーに `.git` が
+あれば今までどおり向こうで `git pull` する **pull モード**。`--push` / `--pull` で強制できる）。
+push で上書きされたファイルはサーバーの `var/deploy-prev/<日時>/` に残る。
+
+手元の `.env` に `ECCUBE_IMAGE` があればサーバーにも書く（配布イメージを pull するだけで済む。
+無いとサーバーで build するので 10 分以上かかる）。
+
+## 公開方式
+
 ```bash
 # .env で公開方式を選ぶ（COMPOSE_PROFILES）
 bin/publish.sh   # compose.prod.yaml を重ねて起動（配布イメージなら pull、なければ build）

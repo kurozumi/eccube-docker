@@ -267,7 +267,7 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
     <div class="steps">
       <div class="step"><div class="num">1</div><h3>手元で直す</h3><pre>bin/init.sh                <span class="c"># 初回だけ。終わると URL とログイン情報が表示される</span></pre></div>
       <div class="step"><div class="num">2</div><h3>控えを送る</h3><pre>git add -A &amp;&amp; git commit -m "何を直したか" &amp;&amp; git push</pre></div>
-      <div class="step"><div class="num">3</div><h3>サーバーに反映する</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop</pre><p>数分かかります。途中で止めないでください。終わったらお店を開いて目で確かめる。</p></div>
+      <div class="step"><div class="num">3</div><h3>サーバーに反映する</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop</pre><p>手元から送るので、サーバーに git も GitHub の鍵も要りません（最初の 1 回は <code>bin/bootstrap-server.sh</code> が Docker まで入れる）。数分かかります。終わったらお店を開いて目で確かめる。</p></div>
     </div>
   </div>
 </section>

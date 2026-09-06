@@ -2,7 +2,9 @@
 # 自分のコードをサーバーに反映する（日常のデプロイ）。
 #
 #   bin/deploy.sh                       このサーバーで: 退避 → メンテ ON → pull → 反映 → 確認 → メンテ OFF
-#   bin/deploy.sh --remote host:/path   手元から: ssh でそこへ行って同じことをする
+#   bin/deploy.sh --remote=host:/path  手元から。サーバーに .git があれば向こうで git pull（今までどおり）、
+#                                      無ければ**手元から rsync で送る**（サーバーに GitHub の鍵が要らない。
+#                                      bin/bootstrap-server.sh が整えたサーバーはこちら）。--push / --pull で強制
 #   bin/deploy.sh --no-pull             pull せず、いま置いてあるコードを反映するだけ
 #   bin/deploy.sh --no-backup           退避を飛ばす（普段は付けない。5 秒で終わる）
 #
@@ -36,11 +38,13 @@ cd "$(dirname "$0")/.."
 log() { echo "[deploy] $*"; }
 die() { echo "[deploy] エラー: $*" >&2; exit 1; }
 
-do_pull=1; do_backup=1; remote=""
+do_pull=1; do_backup=1; remote=""; mode=auto
 for a in "$@"; do
     case "$a" in
         --no-pull)   do_pull=0 ;;
         --no-backup) do_backup=0 ;;
+        --push)      mode=push ;;
+        --pull)      mode=pull ;;
         --remote=*)  remote="${a#--remote=}" ;;
         --remote)    die "--remote=host:/path の形で指定してください" ;;
         -h|--help)   grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -53,9 +57,28 @@ if [ -n "$remote" ]; then
     host="${remote%%:*}"; path="${remote#*:}"
     [ "$host" != "$remote" ] || die "--remote=host:/path の形で指定してください"
     args=""
-    [ "$do_pull" = 0 ] && args="$args --no-pull"
     [ "$do_backup" = 0 ] && args="$args --no-backup"
-    log "${host} の ${path} で実行します"
+    # サーバーに .git が無ければ「手元から送る」（push）。サーバーに GitHub の鍵を置かなくてよい
+    # （bin/bootstrap-server.sh が整えたサーバーはこの形）。あれば今までどおり向こうで git pull。
+    if [ "$mode" = auto ]; then
+        if ssh "$host" "test -d '${path}/.git'" 2>/dev/null; then mode=pull; else mode=push; fi
+    fi
+    if [ "$mode" = push ]; then
+        git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "手元が git のリポジトリではありません（push モードは git が追跡しているファイルを送ります）"
+        command -v rsync >/dev/null 2>&1 || die "rsync が必要です（Mac は最初から入っています。Linux: apt install rsync）"
+        if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+            log "注意: コミットしていない変更も、いまの中身のまま送ります（控えは git commit で残してください）"
+        fi
+        stamp="$(date +%Y%m%d-%H%M%S)"
+        log "${host}:${path} へ送ります（git が追跡しているファイル。上書きされる分は向こうの var/deploy-prev/${stamp}/ に残す）..."
+        ssh "$host" "mkdir -p '${path}'" || die "${host} に入れません（ssh の設定を確認）"
+        git ls-files -z | rsync -az --from0 --files-from=- --backup --backup-dir="var/deploy-prev/${stamp}" ./ "${host}:${path}/" \
+            || die "送れませんでした。何も反映していません（向こうはまだ古いままです）"
+        args="$args --no-pull"
+    elif [ "$do_pull" = 0 ]; then
+        args="$args --no-pull"
+    fi
+    log "${host} の ${path} で実行します（${mode}）"
     exec ssh -t "$host" "cd '${path}' && bin/deploy.sh${args}"
 fi
 
