@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+> **お店を運用する人（とその AI）へ: まず `AGENTS.md` を読んでください。** このファイルは
+> eccube-docker という環境**そのもの**を保守するための記録で、お店の日々の運用には要りません。
+
 EC-CUBE 4 の汎用 Docker 環境。本体はイメージにベイクし、`app/`（Customize / template /
 DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）、`frontend`（scss
 ソース）だけを bind-mount して Git 管理する。
@@ -369,6 +372,9 @@ docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin
 ```
 
 ## 開発フロー（重要）
+
+**この節は eccube-docker 本家（kurozumi/eccube-docker）の開発者向け。** 自分の店のリポジトリでは
+`main` に直接 push してよい（`docs/handbook.md` の手順がそう）。
 
 - **`main` へ直接コミット・直接プッシュしない。** 変更は必ず作業ブランチを切り、
   プルリクエストを作成する。

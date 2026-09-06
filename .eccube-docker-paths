@@ -27,5 +27,6 @@ phpunit.11.xml
 .gitignore
 LICENSE
 README.md
+AGENTS.md
 CLAUDE.md
 VERSION

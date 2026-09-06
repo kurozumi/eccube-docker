@@ -11,6 +11,8 @@
 # 独自テーマの customize.css / customize.js は本体 default_frame.twig が自動読込するため
 # 上書き Twig は不要。編集後はブラウザをリロードすれば反映される。
 set -euo pipefail
+# -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
+case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
 
 cmd="${1:-help}"
