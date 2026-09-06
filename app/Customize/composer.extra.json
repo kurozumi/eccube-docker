@@ -1,0 +1,5 @@
+{
+  "_comment": "コンテナの中で composer require したライブラリは eccube_app ボリュームの中にしか無く、bin/upgrade.sh がボリュームを作り直すと消えます。ここに書いておくと、起動時に無ければ自動で入れ直します（このファイルは git 管理）。",
+  "_example": { "require": { "league/csv": "^9.8" } },
+  "require": {}
+}

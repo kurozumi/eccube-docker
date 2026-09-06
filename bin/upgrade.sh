@@ -255,6 +255,32 @@ if [ -n "$kept" ]; then
     echo "           残すなら .env（ホスト）に同じキーを書いてください（環境変数で渡ります）。"
 fi
 
+# コンテナの中で composer require したライブラリは volume の中にしか無いので、ここで消える。
+# 新しいイメージの composer.json（＝素の EC-CUBE）と突き合わせ、差分のうち
+# app/Customize/composer.extra.json に宣言されていないものを挙げる（宣言済みのものは
+# entrypoint が起動時に入れ直すので消えない）。
+extra_lost="$(docker run --rm -v "${app_vol}:/app:ro" -v "${PWD}/app/Customize:/cust:ro" --entrypoint sh "$image" -c '
+    php -r "
+        \$vol = json_decode(@file_get_contents("/app/composer.json"), true)["require"] ?? [];
+        \$img = json_decode(@file_get_contents("/var/www/html/composer.json"), true)["require"] ?? [];
+        \$dec = json_decode(@file_get_contents("/cust/composer.extra.json"), true)["require"] ?? [];
+        \$out = [];
+        foreach (\$vol as \$n => \$v) {
+            if (isset(\$img[\$n]) || isset(\$dec[\$n])) { continue; }
+            if (\$n === "symfony/messenger" || \$n === "symfony/doctrine-messenger") { continue; }
+            \$out[] = \$n . " " . \$v;
+        }
+        echo implode("\n", \$out);
+    "' 2>/dev/null || true)"
+if [ -n "$extra_lost" ]; then
+    echo "[upgrade] 注意: コンテナの中で composer require したライブラリがあります。ボリュームと一緒に消えます:"
+    printf '%s\n' "$extra_lost" | sed 's/^/           /'
+    echo "           残すには app/Customize/composer.extra.json に書いてください（git 管理。起動時に入れ直します）:"
+    echo '             { "require": { "<名前>": "<バージョン>" } }'
+    printf '           このまま続けますか? [y/N] '
+    read -r ans_extra
+    [ "$ans_extra" = "y" ] || { echo "[upgrade] 中止しました。何も変えていません。"; exit 1; }
+fi
 echo "[upgrade] 本体ボリューム ${app_vol} を作り直します..."
 docker volume rm "$app_vol" >/dev/null 2>&1 || true
 
