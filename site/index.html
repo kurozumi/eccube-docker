@@ -164,6 +164,35 @@
       <b>丸ごと写さない、が守られる</b>
       <span>テンプレートは「直すファイルだけ」を置く決まり。丸ごと写すと、上げたときに古いほうが勝ち続けて直したはずの不具合が戻ります。<code>bin/theme.sh diff</code> と <code>bin/plugin.sh template diff</code> が、本体側で変わったファイルを上げたあとに挙げます。</span>
     </div>
+
+    <h3 style="font-family:var(--f-display);font-size:20px;margin:44px 0 6px">バージョンを変えるのは、<em class="k">それぞれ 1 コマンド</em></h3>
+    <p class="sub">PHP・EC-CUBE 本体・この環境自体は、別々に上げ下げできます。どれもデータ（受注・会員・商品・画像）はそのままです。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>変えたいもの</th><th>やること</th><th>かかる時間</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>PHP</strong><br><span style="color:var(--ink-mute);font-size:13px">8.2 → 8.3 など</span></td>
+            <td><code>.env</code> のタグの <code>php8.2</code> を <code>php8.3</code> に書き換えて<br><code>docker compose pull ec-cube &amp;&amp; docker compose up -d</code></td>
+            <td><strong>約 20 秒</strong><br><span style="color:var(--ink-mute);font-size:13px">戻すのも同じ</span></td>
+          </tr>
+          <tr>
+            <td><strong>EC-CUBE 本体</strong><br><span style="color:var(--ink-mute);font-size:13px">4.3.1 → 4.3.2 など</span></td>
+            <td><code>bin/upgrade.sh ~4.3.0 --prod</code></td>
+            <td>数分<br><span style="color:var(--ink-mute);font-size:13px">失敗したら何も変えずに止まる</span></td>
+          </tr>
+          <tr>
+            <td><strong>この環境</strong><br><span style="color:var(--ink-mute);font-size:13px">bin/ や compose</span></td>
+            <td><code>bin/self-update.sh</code></td>
+            <td>1 分<br><span style="color:var(--ink-mute);font-size:13px">差分を git で見てから commit</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <b>PHP だけ変えても本体は動いたまま</b>
+      <span>PHP はイメージの中に、EC-CUBE 本体と <code>vendor</code> はボリュームの中にあります。だからイメージを差し替えても<strong>入れ替わるのは PHP だけ</strong>で、店のデータにも本体のバージョンにも触りません（作り直されるのはアプリのコンテナ 1 つ、約 20 秒）。合わない組み合わせのタグは存在しないので、<strong>壊れる前に <code>pull</code> が失敗します</strong>。選べる PHP は下の表のとおりです。</span>
+    </div>
   </div>
 </section>
 
