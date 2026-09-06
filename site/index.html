@@ -319,8 +319,8 @@ mv eccube-docker-__VER__ myshop &amp;&amp; cd myshop
 git init -b main &amp;&amp; git add -A &amp;&amp; git commit -m "eccube-docker __TAG__ から開始"
 gh repo create myshop --private --source=. --push
 
-<span class="c"># 動かす</span>
-bin/init.sh</pre>
+<span class="c"># 動かす（配布イメージを引くので数十秒。PHP はタグで選ぶ）</span>
+bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3</pre>
     <div class="note">
       <b>なぜ clone しないか</b>
       <span>clone だと origin が配布元のままで、あなたのコードを保存する場所が無い。fork は公開リポジトリだと非公開にできない。中身だけもらって自分のリポジトリにするのが、いちばん素直です。この環境自体の更新は <code>bin/self-update.sh</code> が取り込みます。</span>
@@ -331,7 +331,7 @@ bin/init.sh</pre>
 <section>
   <div class="wrap">
     <h2>対応する EC-CUBE</h2>
-    <p class="sub">配布イメージを使うと、手元でビルドせずに数十秒で立ち上がります。<code>.env</code> に 1 行書くだけ。</p>
+    <p class="sub">配布イメージを使うと、手元でビルドせずに数十秒で立ち上がります（<code>bin/init.sh --image=…</code> か <code>.env</code> の <code>ECCUBE_IMAGE</code>）。<strong>PHP はタグで選びます</strong>: <code>4.3-php8.3</code> のように書くとその PHP、<code>-php</code> を省くと系列の既定。</p>
     <div class="tablewrap">
       <table>
         <thead><tr><th>系列</th><th>イメージ（本番はこれ）</th><th>選べる PHP</th><th>備考</th></tr></thead>

@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# 初回セットアップ: .env 作成 → シークレット生成 → ビルド＆起動。
+# 初回セットアップ: .env 作成 → シークレット生成 → 起動（配布イメージなら pull、無ければ build）。
+#   使い方: bin/init.sh
+#           bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+#                                     … build せず配布イメージを引く（数十秒。PHP はタグで選ぶ）
+#           bin/init.sh --no-start    … .env を作るだけ（bin/bootstrap-server.sh が使う）
 set -euo pipefail
 # -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
 no_start=0
+want_image=""
 for a in "$@"; do
     case "$a" in
         -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
         --no-start) no_start=1 ;;   # .env を作るだけ（サーバーの初期化。bin/bootstrap-server.sh が使う）
+        --image=*)  want_image="${a#--image=}" ;;   # 配布イメージを使う（build しない）
         *) echo "[init] 不明なオプション: $a" >&2; exit 1 ;;
     esac
 done
@@ -50,10 +56,8 @@ free_port() { # free_port <希望> → FREE_PORT に空きポート（希望が�
     FREE_PORT="$p"
 }
 
-fresh_env=0
 if [ ! -f .env ]; then
     cp .env.example .env
-    fresh_env=1
     echo "[init] .env を作成しました"
 fi
 
@@ -88,54 +92,90 @@ case "$current" in
         ;;
 esac
 
-# DB パスワード類は「.env を新規作成したときだけ」自動生成する。
-# 既存 .env の場合、DB は古いパスワードで初期化済みのため書き換えると接続不能になる。
-if [ "$fresh_env" = "1" ]; then
-    # プロジェクト名（コンテナ名・ボリューム名の接頭辞）をディレクトリ名から。compose.yaml の
-    # name: eccube のままだと、同じパソコンに 2 つ目の店を置いたとき同じ名前になり、
-    # up のたびに互いのコンテナを作り直してしまう
+# ── 秘密とポートの生成 ──
+#
+# **「.env を作ったかどうか」ではなく「値がまだ既定値か」で判断する。** 文書は
+# `cp .env.example .env` → `bin/init.sh` の順を案内していて、その経路だと .env は既に
+# あるので、以前は DB パスワードも管理者パスワードも既定値のまま素通りしていた
+# （DB は eccube_pass、管理者は admin/password のまま公開一歩手前まで行けた）。
+#
+# ただし**すでに DB が作られていたら書き換えない。** DB のパスワードはボリュームに
+# 焼かれているので、変えるとアプリが繋がらなくなる。管理者パスワードも install の
+# 瞬間にしか効かない（あとから変えても嘘になる）。
+env_val() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- || true; }
+gen_pass() { openssl rand -hex 16; }
+
+# この店の DB がもう作られているか（プロジェクト名 → ボリューム）
+pname="$(env_val COMPOSE_PROJECT_NAME)"
+if [ -z "$pname" ]; then
+    # コンテナ名・ボリューム名の接頭辞。compose.yaml の name: eccube のままだと、同じパソコンに
+    # 2 つ目の店を置いたとき同じ名前になり、up のたびに互いのコンテナを作り直してしまう
     pname="$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/^-*//; s/-*$//')"
     [ -n "$pname" ] || pname="eccube"
     case "$pname" in eccube*) ;; *) pname="eccube-${pname}" ;; esac
     if grep -qE '^COMPOSE_PROJECT_NAME=' .env; then set_env COMPOSE_PROJECT_NAME "$pname"; else printf '\nCOMPOSE_PROJECT_NAME=%s\n' "$pname" >> .env; fi
     echo "[init] プロジェクト名: ${pname}"
-    # ポート。使用中なら次の空きへ
-    for pair in HTTP_PORT:8080 PMA_PORT:8081 MAILPIT_UI_PORT:8025; do
-        key="${pair%%:*}"; want="${pair##*:}"
-        cur="$(grep -E "^${key}=" .env | head -1 | cut -d= -f2- || true)"; cur="${cur:-$want}"
-        free_port "$cur"; got="$FREE_PORT"
-        if [ "$got" != "$cur" ]; then
-            echo "[init] ポート ${cur} は使用中なので ${got} にしました（${key}）"
-        fi
-        if grep -qE "^${key}=" .env; then set_env "$key" "$got"; else printf '%s=%s\n' "$key" "$got" >> .env; fi
-    done
-    set_env DB_PASSWORD "$(openssl rand -hex 16)"
-    set_env DB_ROOT_PASSWORD "$(openssl rand -hex 16)"
-    echo "[init] DB_PASSWORD / DB_ROOT_PASSWORD を生成しました"
+fi
+db_ready=0
+for v in "${pname}_db_data" "${pname}_pg_data"; do
+    docker volume inspect "$v" >/dev/null 2>&1 && db_ready=1
+done
+
+if [ "$db_ready" = 0 ]; then
+    case "$(env_val DB_PASSWORD)" in
+        ""|eccube_pass) set_env DB_PASSWORD "$(gen_pass)"; gen_db=1 ;;
+    esac
+    case "$(env_val DB_ROOT_PASSWORD)" in
+        ""|change_me_root) set_env DB_ROOT_PASSWORD "$(gen_pass)"; gen_db=1 ;;
+    esac
+    [ "${gen_db:-0}" = 1 ] && echo "[init] DB_PASSWORD / DB_ROOT_PASSWORD を生成しました"
     # 初期管理者。本体の fixtures が ECCUBE_ADMIN_USER / ECCUBE_ADMIN_PASS を読む（既定 admin / password）。
     # 既定のままだと bin/publish.sh が止める（#108）。管理画面の URL も推測されにくくする
-    admin_pass="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-20)"
-    set_env ECCUBE_ADMIN_PASS "$admin_pass"
-    set_env ECCUBE_ADMIN_ROUTE "admin-$(openssl rand -hex 3)"
-    echo "[init] 管理者のパスワードと管理画面の URL を生成しました（.env の ECCUBE_ADMIN_PASS / ECCUBE_ADMIN_ROUTE）"
+    case "$(env_val ECCUBE_ADMIN_PASS)" in
+        ""|password)
+            set_env ECCUBE_ADMIN_PASS "$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-20)"
+            case "$(env_val ECCUBE_ADMIN_ROUTE)" in ""|admin) set_env ECCUBE_ADMIN_ROUTE "admin-$(openssl rand -hex 3)" ;; esac
+            echo "[init] 管理者のパスワードと管理画面の URL を生成しました（.env の ECCUBE_ADMIN_PASS / ECCUBE_ADMIN_ROUTE）" ;;
+    esac
     # Redis の認証（redis プロファイルを使うときに効く。URL にも埋める。#117）
-    redis_pass="$(openssl rand -hex 16)"
-    set_env REDIS_PASSWORD "$redis_pass"
-    set_env REDIS_URL "redis://:${redis_pass}@redis:6379"
-    set_env SESSION_REDIS_URL "redis://:${redis_pass}@redis-session:6379"
-    echo "[init] REDIS_PASSWORD を生成しました"
+    if [ -z "$(env_val REDIS_PASSWORD)" ]; then
+        redis_pass="$(gen_pass)"
+        set_env REDIS_PASSWORD "$redis_pass"
+        case "$(env_val REDIS_URL)" in *@*) ;; *) set_env REDIS_URL "redis://:${redis_pass}@redis:6379" ;; esac
+        case "$(env_val SESSION_REDIS_URL)" in *@*) ;; *) set_env SESSION_REDIS_URL "redis://:${redis_pass}@redis-session:6379" ;; esac
+        echo "[init] REDIS_PASSWORD を生成しました"
+    fi
 else
+    echo "[init] この店の DB はもう作られているので、パスワード類はそのままにします。"
     for pair in "DB_PASSWORD=eccube_pass" "DB_ROOT_PASSWORD=change_me_root"; do
         if grep -qE "^${pair}$" .env 2>/dev/null; then
-            echo "[init] 警告: ${pair%%=*} が既定値のままです。DB 初期化前なら変更を推奨。"
-            echo "        （DB 初期化済みで変えるなら docker compose down -v でデータごと作り直し）"
+            echo "[init] 警告: ${pair%%=*} が既定値のままです。変えるなら docker compose down -v でデータごと作り直しが要ります。"
         fi
     done
 fi
 
-# 配布イメージ（ECCUBE_IMAGE）を使うなら pull、そうでなければ build。
-# **ここで `up -d --build` と書かない。** 配布イメージを指定している利用者の
-# 環境では、pull したイメージをローカル build で上書きしてしまう。
+# ポート。使用中なら次の空きへ。**この店がもう動いているときは触らない**
+# （自分自身が使っているポートを「使用中」と見て、毎回ずらしてしまうため）
+if [ -z "$(docker compose ps -aq 2>/dev/null)" ]; then
+    for pair in HTTP_PORT:8080 PMA_PORT:8081 MAILPIT_UI_PORT:8025; do
+        key="${pair%%:*}"; want="${pair##*:}"
+        cur="$(env_val "$key")"; cur="${cur:-$want}"
+        free_port "$cur"; got="$FREE_PORT"
+        [ "$got" != "$cur" ] && echo "[init] ポート ${cur} は使用中なので ${got} にしました（${key}）"
+        if grep -qE "^${key}=" .env; then set_env "$key" "$got"; else printf '%s=%s\n' "$key" "$got" >> .env; fi
+    done
+fi
+
+# --image=<参照> が来ていれば .env に書く（build せず配布イメージを引く）
+if [ -n "$want_image" ]; then
+    if grep -qE '^#?ECCUBE_IMAGE=' .env; then
+        tmp="$(mktemp)"; sed "s|^#\{0,1\}ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${want_image}|" .env > "$tmp" && mv "$tmp" .env
+    else
+        printf 'ECCUBE_IMAGE=%s\n' "$want_image" >> .env
+    fi
+    echo "[init] 配布イメージを使います: ${want_image}"
+fi
+
 if [ "$no_start" = 1 ]; then
     echo "[init] .env を用意しました（--no-start なので起動していません）。"
     exit 0
