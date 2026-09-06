@@ -50,7 +50,11 @@ jobs:
           # 展開先のディレクトリ名は GitHub の自動 tar.gz と同じ eccube-docker-<ver>/ にする
           # （docs/install.md の手順がそのまま使える）
           git archive --format=tar.gz --prefix="eccube-docker-${VER}/" -o "eccube-docker-${VER}.tar.gz" "$TAG"
-          sha256sum "eccube-docker-${VER}.tar.gz" > SHA256SUMS
+          # 同じ中身を固定名でも置く。**文書に書く URL が版ごとに古びないようにするため**
+          # （https://github.com/<owner>/<repo>/releases/latest/download/eccube-docker.tar.gz が
+          #   常に最新リリースを指す。この名前が無いと利用者は毎回タグ番号を調べることになる）
+          cp "eccube-docker-${VER}.tar.gz" eccube-docker.tar.gz
+          sha256sum "eccube-docker-${VER}.tar.gz" eccube-docker.tar.gz > SHA256SUMS
           cat SHA256SUMS
 
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
@@ -62,4 +66,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
           VER: ${{ steps.tag.outputs.ver }}
-        run: gh release upload "$TAG" "eccube-docker-${VER}.tar.gz" SHA256SUMS --clobber
+        run: gh release upload "$TAG" "eccube-docker-${VER}.tar.gz" eccube-docker.tar.gz SHA256SUMS --clobber

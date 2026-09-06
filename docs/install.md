@@ -25,8 +25,8 @@
 | 中身 | 全員が同じもの | 取得したタイミングで変わりうる |
 
 ```bash
-# 引いて使う場合の .env
-ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-v1.0.0
+# 引いて使う場合の .env（bin/init.sh --image=<タグ> でも同じことができる）
+ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
 ```
 
 判定はスクリプト側（`bin/lib/image.sh`）が行うので、`bin/init.sh` /
@@ -49,13 +49,13 @@ ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-v1.0.0
 
 ```bash
 # 1) リリースを取得する（git 履歴は付いてこない）
-curl -fsSL https://github.com/kurozumi/eccube-docker/archive/refs/tags/v1.0.0.tar.gz | tar -xz
-mv eccube-docker-1.0.0 myshop && cd myshop
+curl -fsSL https://github.com/kurozumi/eccube-docker/releases/latest/download/eccube-docker.tar.gz | tar -xz
+mv eccube-docker-* myshop && cd myshop
 
 # 2) 自分のリポジトリとして初期化する
 git init -b main
 git add -A
-git commit -m "eccube-docker v1.0.0 から開始"
+git commit -m "eccube-docker から開始"
 
 # 3) 自分の GitHub へ。**非公開で作る**（店のコードと設定が入るため）
 gh repo create myshop --private --source=. --push
@@ -71,7 +71,7 @@ EC-CUBE 本体はイメージの中にあり、このリポジトリには 1 フ
 |---|---|
 | `git clone` | origin が配布元のまま。あなたの履歴に配布元の履歴が丸ごと混ざる |
 | fork | **公開リポジトリの fork は非公開にできない。** 店のコードを置く場所として使えない |
-| テンプレート | **リリースではなく `main` の先頭が複製される。** `main` が最後のタグより進んでいると、`VERSION` は `v1.0.0` なのに中身が違う状態になり、`bin/self-update.sh` がその差分を「あなたの変更」と判定して止まる |
+| テンプレート | **リリースではなく `main` の先頭が複製される。** `main` が最後のタグより進んでいると、`VERSION` は最後のタグなのに中身が違う状態になり、`bin/self-update.sh` がその差分を「あなたの変更」と判定して止まる |
 
 `bin/self-update.sh` は **git を使わない**（Releases の tarball を取ってきて突き合わせる）。
 配布元とは git 上の関係を持たなくてよいので、tarball から始めるのが一番素直になる。
@@ -133,7 +133,7 @@ bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
 | `4.3` | **本番はこれ。** 毎週月曜に最新リリースの Dockerfile で焼き直され、**PHP と Debian のセキュリティパッチが入る**。`bin/deploy.sh` が「イメージが変わっていれば引き直す」ので、毎日の deploy で勝手に新しくなる |
 | `4.3-php8.3` | PHP を選ぶ。系列ごとに焼いてある PHP: **4.2** → 8.1 / 8.2、**4.3** → 8.1 / 8.2 / 8.3、**4.4** → 8.2 / 8.3 / 8.4 / 8.5（上流の対応一覧どおり）。`-php` 無しは系列の既定（4.2/4.3: 8.2、4.4: 8.3）。**8.1 は EOL**（2025-12）: OS のパッチは毎週入るが PHP 自体の修正はもう出ない。8.1 でしか動かないプラグインが無ければ選ばない |
 | `4.3-20260907` | 日付で固定。「同じものを何度も立てたい」（検証環境、複数ホスト）ならこちら。パッチは自分で日付を進めて受ける |
-| `4.3-v1.0.0` | リリース時点で固定。**パッチは入らない** |
+| `4.3-vX.Y.Z` | リリース時点で固定。**パッチは入らない** |
 | `4.3-<sha>` | 特定ビルド。ロールバック用 |
 
 **PHP のパッチは `upgrade.sh` 無しで入る。** PHP はイメージの中にあり、本体コードのボリューム
@@ -393,9 +393,6 @@ git push
 
 ## いまの制約
 
-- **リリースタグ（`v1.0.0`）はまだ打たれていない。** 配布イメージと
-  `bin/self-update.sh` は最初のリリース以降に有効になる。それまでは手元で
-  ビルドする経路を使うこと。
 - **EC-CUBE 4.4 は Packagist にリリースが無い。** 上流の `4.4` ブランチ
   （`4.4.x-dev`）から焼いているので、**同じタグでも焼き直すたびに中身が変わる。**
   本番で 4.4 を使うなら `4.4-<sha>` で固定すること。

@@ -55,6 +55,8 @@
 ├── compose.override.yaml   # 開発用（自動読込: Mailpit・phpMyAdmin・node・rw マウント）
 ├── compose.prod.yaml       # 本番用（-f で指定。公開層をプロファイルで選択）
 ├── compose.app.yaml        # 複数ホスト用: app 層のみ（DB/Redis は外部共有を参照）
+├── compose.externaldb.yaml # 外部 DB（マネージド DB）を使うとき（bin/setup.sh db が COMPOSE_FILE に足す）
+├── AGENTS.md               # お店を運用する人とその AI 向けの指示書（配布物に入る）
 ├── .env.example
 ├── .github/workflows/build-image.yml   # CI: GHCR へイメージ build & push
 ├── app/                    # ← Git 管理する「自分のコード」
@@ -119,6 +121,9 @@ bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
 ### よく使うコマンド
 
 ```bash
+bin/init.sh --image=<タグ> # 初回。--image で配布イメージを引く（数十秒。PHP はタグで選ぶ）
+bin/setup.sh mail|db|tunnel|backup   # 質問に答えて設定（先に試してから .env に書く）
+bin/bootstrap-server.sh user@host /srv/myshop  # サーバーを整える（Docker を入れ、ファイルを送り .env を作る）
 bin/deploy.sh              # 自分のコードを反映（退避→メンテ ON→pull→migration→proxy→キャッシュ→確認→OFF）
 bin/console.sh <cmd>       # コンテナの中で bin/console を実行（www-data 固定）
 bin/shell.sh               # コンテナの中に入る（www-data 固定。--root で root）
