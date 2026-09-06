@@ -100,7 +100,6 @@
 ```bash
 git clone <this-repo> eccube-docker && cd eccube-docker
 bin/init.sh                       # .env 作成・AUTH_MAGIC 生成・build & up
-docker compose logs -f ec-cube    # 初回は EC-CUBE 取得と install で数分
 ```
 
 | 用途 | URL |

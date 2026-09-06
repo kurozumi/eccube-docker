@@ -265,7 +265,7 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
     <h2>毎日は<em class="k">これだけ</em></h2>
     <p class="sub">直す場所（手元）と動かす場所（サーバー）を分ける。この環境の全部です。</p>
     <div class="steps">
-      <div class="step"><div class="num">1</div><h3>手元で直す</h3><pre>bin/init.sh                <span class="c"># 初回だけ。http://localhost:8080/ で動く</span></pre></div>
+      <div class="step"><div class="num">1</div><h3>手元で直す</h3><pre>bin/init.sh                <span class="c"># 初回だけ。終わると URL とログイン情報が表示される</span></pre></div>
       <div class="step"><div class="num">2</div><h3>控えを送る</h3><pre>git add -A &amp;&amp; git commit -m "何を直したか" &amp;&amp; git push</pre></div>
       <div class="step"><div class="num">3</div><h3>サーバーに反映する</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop</pre><p>数分かかります。途中で止めないでください。終わったらお店を開いて目で確かめる。</p></div>
     </div>
