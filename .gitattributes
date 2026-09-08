@@ -10,3 +10,6 @@
 /.gitattributes  export-ignore
 /.github         export-ignore
 /site            export-ignore
+# SECURITY.md はこのリポジトリ宛ての文書。店の tarball に入ると、店のリポジトリから
+# 「eccube-docker へ報告して」と読めてしまう
+/SECURITY.md     export-ignore
