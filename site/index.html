@@ -109,6 +109,18 @@
   .docs { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
   .docs .box p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
 
+  /* ── お問い合わせ / Issue 募集 ── */
+  section.contact { background: linear-gradient(180deg, #FFF7F1 0%, var(--accent-soft) 100%); border-top: 2px solid var(--accent); border-bottom: 1px solid var(--line); }
+  .contact .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .contact .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 30px 32px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 2px 6px rgba(11,31,51,.06); }
+  .contact .card .who { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-mute); margin: 0; }
+  .contact .card h3 { font-family: var(--f-display); font-weight: 900; font-size: 22px; line-height: 1.4; margin: 0; text-wrap: balance; }
+  .contact .card p { margin: 0; font-size: 15px; color: var(--ink-soft); }
+  .contact .card ul { margin: 0; padding-left: 1.2em; font-size: 14.5px; color: var(--ink-soft); }
+  .contact .card li { margin: 4px 0; }
+  .contact .card .cta { margin-top: auto; padding-top: 8px; }
+  .contact .card .addr { font-family: var(--f-mono); font-size: 15px; }
+
   footer { padding: 40px 0 64px; color: var(--ink-mute); font-size: 13.5px; border-top: 1px solid var(--line); }
   footer p { margin: 6px 0; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -130,6 +142,7 @@
       <a class="btn" href="#start">始め方</a>
       <a class="btn ghost" href="https://github.com/kurozumi/eccube-docker/blob/main/docs/handbook.md">はじめての人のための手引き</a>
       <a class="btn ghost" href="https://github.com/kurozumi/eccube-docker">GitHub</a>
+      <a class="btn ghost" href="#contact">お問い合わせ / Issue</a>
     </div>
   </div>
 </header>
@@ -393,12 +406,44 @@ bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3</pre>
   </div>
 </section>
 
+<section id="contact" class="contact">
+  <div class="wrap">
+    <h2>困ったこと、<em class="k">こう動いてほしい</em>を聞かせてください</h2>
+    <p class="sub">一人で使っている限り、この環境は一人分の経験でしか良くなりません。あなたの店で起きたことが、次の人の「黙って壊れる」を一つ減らします。</p>
+    <div class="cards">
+      <div class="card">
+        <p class="who">GITHUB ISSUE · 募集中</p>
+        <h3>不具合・要望・質問は Issue へ</h3>
+        <p>「エラーが出た」「この手順で止まった」「こういう構成で使いたい」。どれも歓迎です。うまく書けなくても構いません。実行したコマンドと出た文字をそのまま貼ってください。</p>
+        <ul>
+          <li>不具合 … <code>bin/plugin.sh doctor</code> の出力と、EC-CUBE と PHP の版</li>
+          <li>要望 … 今どう困っていて、どう動けば助かるか</li>
+          <li>質問 … 文書のどこを読んで分からなかったか</li>
+        </ul>
+        <div class="cta">
+          <a class="btn" href="https://github.com/kurozumi/eccube-docker/issues/new">Issue を書く</a>
+          <a class="btn ghost" href="https://github.com/kurozumi/eccube-docker/issues">これまでの Issue を見る</a>
+        </div>
+      </div>
+      <div class="card">
+        <p class="who">CONTACT · 構築・引っ越し・バージョンアップの相談</p>
+        <h3>公開できない話はメールで</h3>
+        <p>本番の URL や DB の中身が絡む相談、受託での構築や引っ越し、B2B サイトの構築、プラグイン開発の依頼はメールで受けています。返信は営業日に順次。</p>
+        <p class="addr"><a href="mailto:info@a-zumi.net">info@a-zumi.net</a></p>
+        <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）。EC-CUBE のプラグインを作りながら、この環境で自分の店も動かしています。</p>
+        <div class="cta">
+          <a class="btn" href="mailto:info@a-zumi.net?subject=eccube-docker%20%E3%81%AE%E7%9B%B8%E8%AB%87">メールで相談する</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <footer>
   <div class="wrap">
     <p>Apache License 2.0。EC-CUBE 本体は対象外で、EC-CUBE 自身のライセンスがそのまま適用されます（本体は一切改変していません）。</p>
     <p><a href="https://github.com/kurozumi/eccube-docker/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-docker/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-docker/blob/main/LICENSE">LICENSE</a></p>
-    <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）。EC-CUBE のプラグイン開発と、この環境での構築・引っ越し・バージョンアップの相談を受けています。</p>
-    <p>お問い合わせ: <a href="mailto:info@a-zumi.net">info@a-zumi.net</a>。不具合や「こう動いてほしい」は <a href="https://github.com/kurozumi/eccube-docker/issues">Issue</a> のほうが早く届きます。</p>
+    <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）· お問い合わせは<a href="#contact">上の節</a>へ。</p>
     <p>この環境は非公式です。EC-CUBE は株式会社イーシーキューブの登録商標で、同社とは無関係です。</p>
   </div>
 </footer>
