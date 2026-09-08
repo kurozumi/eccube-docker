@@ -49,8 +49,16 @@ fi
 # 数分 build してから composer が落ちる、を避ける）
 image_check_version "$ver" "bin/upgrade.sh$([ "$want_prod" = 1 ] && printf ' --prod')" || exit 1
 current="$(grep -E '^ECCUBE_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
+current_redis="$(grep -E '^PHPREDIS_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
 current_image="$(env_get ECCUBE_IMAGE)"
 series="$(image_series "$ver")"
+
+# phpredis は EC-CUBE 側の Symfony Cache に合わせる必要があり、両立しない
+# （4.2/4.3 は 6.0.2、4.4 は 6.3.0。対応表は bin/lib/image.sh）。
+# **ここが無いと、系列をまたぐ upgrade で古い phpredis のままビルドされる。**
+# switch-version.sh は以前からこれをやっているが、マイナーをまたぐのは
+# 運用中の環境を上げる upgrade.sh の方なので、影響はこちらの方が大きい。
+redis_ver="$(image_phpredis_for_series "$series")"
 
 # compose のプロジェクト名（ボリューム名の接頭辞）。COMPOSE_PROJECT_NAME や
 # compose.yaml の name: を compose 自身に解決させる。
@@ -149,6 +157,11 @@ restore_env() {
         sed "s|^ECCUBE_VERSION=.*|ECCUBE_VERSION=${current}|" .env > "$tmp" && mv "$tmp" .env
         echo "[upgrade] .env の ECCUBE_VERSION を ${current} へ戻しました。" >&2
     fi
+    if [ -n "$current_redis" ]; then
+        tmp="$(mktemp)"
+        sed "s|^PHPREDIS_VERSION=.*|PHPREDIS_VERSION=${current_redis}|" .env > "$tmp" && mv "$tmp" .env
+        echo "[upgrade] .env の PHPREDIS_VERSION を ${current_redis} へ戻しました。" >&2
+    fi
     if [ -n "$current_image" ]; then
         tmp="$(mktemp)"
         sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${current_image}|" .env > "$tmp" && mv "$tmp" .env
@@ -160,6 +173,16 @@ if grep -qE '^ECCUBE_VERSION=' .env 2>/dev/null; then
     sed "s|^ECCUBE_VERSION=.*|ECCUBE_VERSION=${ver}|" .env > "$tmp" && mv "$tmp" .env
 else
     echo "ECCUBE_VERSION=${ver}" >> .env
+fi
+
+if [ "$redis_ver" != "$current_redis" ]; then
+    echo "[upgrade] phpredis を ${redis_ver} に合わせます（EC-CUBE ${series} 系向け）。"
+fi
+if grep -qE '^PHPREDIS_VERSION=' .env 2>/dev/null; then
+    tmp="$(mktemp)"
+    sed "s|^PHPREDIS_VERSION=.*|PHPREDIS_VERSION=${redis_ver}|" .env > "$tmp" && mv "$tmp" .env
+else
+    echo "PHPREDIS_VERSION=${redis_ver}" >> .env
 fi
 
 # 2b) 配布イメージを使っているなら、タグの系列も動かす。
