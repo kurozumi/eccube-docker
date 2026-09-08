@@ -42,8 +42,12 @@ bin/plugin.sh list
 ```
 
 - **プラグインの対応状況**を先に調べる（下の「プラグインの互換性」）。ここが一番詰まる
-- **PHP のバージョン要件**を確認する。`bin/upgrade.sh` は `ECCUBE_VERSION` しか書き換え
-  ないので、PHP を上げる必要があるなら `.env` の `PHP_VERSION` を手で変える
+- **PHP のバージョン要件**を確認する。`bin/upgrade.sh` が書き換えるのは
+  `ECCUBE_VERSION` と `PHPREDIS_VERSION` だけなので、PHP を上げる必要があるなら
+  `.env` の `PHP_VERSION` を手で変える
+- **phpredis は系列に合わせて自動で書き換わる**（4.2/4.3 は 6.0.2、4.4 は 6.3.0。
+  symfony/cache が `ext-redis` の版を conflict するため両立しない）。失敗したときは
+  `ECCUBE_VERSION` と一緒に元の値へ戻る
 - **バックアップの保存先**がサーバー外にあるか確認する
 
 ### 2. ステージングで予行演習
