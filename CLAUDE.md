@@ -144,6 +144,13 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `CONFIRM_DESTROY=<プロジェクト名>` が無いと止まる（`bin/lib/guard.sh`）。
   **停止中は判定できない**ので、止まっている本番で打てば消える。
   上げたいだけなら `upgrade.sh`。詳細は `docs/data-safety.md`。
+- **本番には `main` の先頭と同じものしか出ない。** `bin/deploy.sh` は向こうが本番構成なら、
+  手元がブランチ違い・未コミット・未 push のどれかで**送らない**（`bin/lib/deploy-guard.sh`）。
+  出る前に要約を見せて**プロジェクト名を打たせる**（`y` では通さない）。非対話は
+  `CONFIRM_DEPLOY=<名前>`、緊急の main 以外は `DEPLOY_UNREVIEWED=<名前>`（`var/deploy.log` に残る）。
+  向こうが**止まっていて判定できないときは本番として扱う**（guard.sh と同じ）。開発/検証サーバーには
+  掛からない。GitHub 側の PR 必須・承認必須は `bin/setup.sh protect`（**非公開リポジトリは有料プラン**が
+  要る。無料なら 403 で止まり、手元とサーバーの壁だけになる）。詳細は `docs/deploy.md`。
 - **本番を上げるときは `bin/upgrade.sh <制約> --prod`。** `--prod` を落とすと
   `compose.override.yaml`（開発用のポートと bind mount）が効いた状態で公開される。
   **画面は出るので気づきにくい。** 稼働中なら自動でも寄せるが、停止中に打つと効かない。
