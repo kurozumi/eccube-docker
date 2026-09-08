@@ -334,7 +334,26 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
     <div class="steps">
       <div class="step"><div class="num">1</div><h3>手元で直す</h3><pre>bin/init.sh                <span class="c"># 初回だけ。終わると URL とログイン情報が表示される</span></pre></div>
       <div class="step"><div class="num">2</div><h3>控えを送る</h3><pre>git add -A &amp;&amp; git commit -m "何を直したか" &amp;&amp; git push</pre></div>
-      <div class="step"><div class="num">3</div><h3>サーバーに反映する</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop</pre><p>手元から送るので、サーバーに git も GitHub の鍵も要りません（最初の 1 回は <code>bin/bootstrap-server.sh</code> が Docker まで入れる）。数分かかります。終わったらお店を開いて目で確かめる。</p></div>
+      <div class="step"><div class="num">3</div><h3>サーバーに反映する</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop</pre><p>手元から送るので、サーバーに git も GitHub の鍵も要りません（最初の 1 回は <code>bin/bootstrap-server.sh</code> が Docker まで入れる）。数分かかります。終わったらお店を開いて目で確かめる。</p><p><strong>本番には <code>main</code> の先頭と同じものしか送れません。</strong>出る前に「何が出るか」を見せ、プロジェクト名を打つまで何も変えない。見るだけなら <code>--check</code>。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="gate">
+  <div class="wrap">
+    <h2>本番には、<em class="k">レビュー済みの main</em> しか出ない</h2>
+    <p class="sub">エンジニアが直し、担当者が承認して、本番へ出す。「エンジニアが勝手に出す」と「担当者がうっかり出す」を、別々の壁で止めます。どれか 1 枚が無くても残りは効く。</p>
+    <div class="steps">
+      <div class="step"><div class="num">①</div><h3>GitHub — 承認が無いと main に入らない</h3><pre>bin/setup.sh protect</pre><p>PR 必須、担当者（CODEOWNERS）の承認必須、force push と削除の禁止。管理者も例外なし。<span style="color:var(--ink-mute)">非公開リポジトリは GitHub の有料プランが要ります（無ければ②③だけで運用）。</span></p></div>
+      <div class="step"><div class="num">②</div><h3>手元 — main の先頭と同じものしか送れない</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop
+<span class="c">  ✗ いまのブランチは feature です。出せるのは main だけ</span></pre><p>別のブランチ、コミットしていない変更、push していないコミット。どれか 1 つでも本番へは<strong>送らない</strong>。何もしなくて効きます。</p></div>
+      <div class="step"><div class="num">③</div><h3>サーバー — 見せて、打たせて、記録する</h3><pre>  コード: 3f2a1c0 → 9b7e4d2（3 コミット）
+  ⚠ migration が含まれます
+  続けるなら、プロジェクト名 myshop を入力:</pre><p><code>y</code> では通しません。指が覚えて通してしまわないように、プロジェクト名を打つ。誰が・いつ・何を出したかは <code>var/deploy.log</code> に残る。</p></div>
+    </div>
+    <div class="note">
+      <b>正直に</b>
+      <span>本番の SSH を持つ人は②③を素通りできます。壁は「うっかり」を止めるもので「故意」は止められない。だから本番の SSH はエンジニアに渡さない、と決めてください。詳しくは <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/deploy.md">本番デプロイ</a>。</span>
     </div>
   </div>
 </section>
@@ -351,6 +370,7 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
           <li>ドメインと HTTPS を <strong>Cloudflare Tunnel で済ませたい</strong>（ポートを開けず、証明書の更新から解放される）</li>
           <li><strong>メールサーバーや DB の設定を手で書きたくない</strong>（<code>bin/setup.sh mail</code> / <code>db</code> が質問に答えるだけで、先に試してから書く）</li>
           <li>制作会社・フリーランスで、複数の案件を同じ手順で回したい</li>
+          <li><strong>複数人で運用する</strong>（エンジニアが直して担当者が出す。本番には承認済みの <code>main</code> しか出ない）</li>
           <li>前任者のいないサイトを引き継いで、まず状況を把握したい</li>
           <li>プラグインやテーマを作っていて、本番と同じ環境で試したい</li>
           <li>ターミナルでコマンドを打つことに抵抗がない（Windows は WSL2 の中で）</li>
@@ -423,6 +443,8 @@ bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3</pre>
       <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/install.md">導入手順</a></h3><p>取得から公開まで。.env の中身、公開方式、プラグインの扱い、デザインを直す場所。</p></div>
       <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md">バージョンアップ</a></h3><p>運用中の店を上げる手順と切り戻し。マイナーをまたぐときに黙って壊れる 3 つの型。</p></div>
       <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/data-safety.md">データを失わないために</a></h3><p><code>down</code> と <code>down -v</code> の違い、消えるコマンド、消したときの復旧。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/deploy.md">本番デプロイ</a></h3><p>誰が・何を・どうやって本番へ出すか。3 枚の壁、<code>--check</code>、記録、緊急時、誰に何を渡すか。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/backup.md">バックアップ / 復元</a></h3><p>5 点セット、送り先、暗号化、引っ越し。<code>bin/setup.sh backup</code> が毎日の cron まで入れる。</p></div>
     </div>
   </div>
 </section>
@@ -463,7 +485,7 @@ bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3</pre>
 <footer>
   <div class="wrap">
     <p>Apache License 2.0。EC-CUBE 本体は対象外で、EC-CUBE 自身のライセンスがそのまま適用されます（本体は一切改変していません）。</p>
-    <p><a href="https://github.com/kurozumi/eccube-docker/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-docker/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-docker/blob/main/LICENSE">LICENSE</a></p>
+    <p><a href="https://github.com/kurozumi/eccube-docker/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-docker/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-docker/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-docker/security/policy">脆弱性の報告（非公開）</a></p>
     <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）· お問い合わせは<a href="#contact">上の節</a>へ。</p>
     <p>この環境は非公式です。EC-CUBE は株式会社イーシーキューブの登録商標で、同社とは無関係です。</p>
   </div>
