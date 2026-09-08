@@ -149,7 +149,11 @@ if has admin-files.tar.gz; then
     # 中身は app/template と customize.css/js。git 管理下のパスを上書きするので、
     # 引っ越し先で git が汚れて見えるのは正常（本番で管理画面が書いた分）。
     echo "[restore] 管理画面が書いたファイルと、git に入らない資産を復元しています..."
-    rd admin-files.tar.gz | tar -xzf -
+    # `._*` は展開しない。v1.0.10 以前の macOS で取った書庫には AppleDouble（拡張属性の
+    # 別ファイル）が入っていて、Linux で展開すると `._customize.css` などが実ファイルの隣に
+    # 並び、中身のバイナリが画面の先頭に出る。取る側は直した（COPYFILE_DISABLE=1）が、
+    # 既に作った書庫は直せないので、展開側でも落とす。
+    rd admin-files.tar.gz | tar -xzf - --exclude='._*'
     # app/Plugin が戻った。DB は「有効」と言っているので、ファイルが揃った今、
     # プロキシとキャッシュを組み立て直さないと落ちる（下の cache:clear だけでは足りない）。
     need_reload=1
