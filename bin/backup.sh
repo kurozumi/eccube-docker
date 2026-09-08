@@ -115,8 +115,14 @@ vol eccube_upload /upload tar -C / -czf - upload > "${dest}/upload.tar.gz"
 # プラグインの .git は外す。実測で 160MB のうち 112MB が .git で、毎日 7 世代残すと
 # それだけで 800MB になる。ソースは入るので店は壊れない。git で入れたものは remote を
 # plugins.txt に控えておき、必要なら clone し直せるようにする。
+# **COPYFILE_DISABLE=1 を付けること（macOS）。** macOS の tar は拡張属性を
+# AppleDouble（`._` で始まる別ファイル）として書庫に入れる。Linux のサーバーで
+# 復元すると `._customize.css` や `._foo.twig` が実ファイルの隣に並び、
+# **中身（com.apple.provenance などのバイナリ）が画面の先頭に出力される。**
+# 手元（macOS）で取ったバックアップをサーバーへ持っていく引っ越しで必ず踏む。
+# Linux では無視される変数なので、常に付けてよい。
 echo "[backup] 管理画面が書いたファイルと、git に入らない資産を退避しています..."
-tar -czf "${dest}/admin-files.tar.gz" \
+COPYFILE_DISABLE=1 tar -czf "${dest}/admin-files.tar.gz" \
     --exclude='app/Plugin/*/.git' \
     app/template \
     html/user_data \
