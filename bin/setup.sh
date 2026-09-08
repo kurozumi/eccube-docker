@@ -4,19 +4,20 @@
 #           bin/setup.sh db     # DB を外部（マネージド DB）にする。いまのデータを写すこともできる
 #           bin/setup.sh tunnel # Cloudflare Tunnel のトークンを、繋がることを確かめてから書く
 #           bin/setup.sh backup # バックアップの送り先と暗号化の鍵を決め、1 回取って、毎日の cron に登録する
-#           どれも --remote=user@host:/path を付けるとサーバーで同じ質問に答えられる
+#           bin/setup.sh protect # GitHub 側で「PR と担当者の承認が無いと main に入らない」ようにする（手元で。gh が要る）
+#           protect 以外は --remote=user@host:/path を付けるとサーバーで同じ質問に答えられる
 #
 # .env の書き方（MAILER_DSN の URL エンコード、DB_* と COMPOSE_FILE の組み合わせ）を人に覚えさせない。
 # 試して通ったものだけ書き、書いたら起動し直す。
 set -euo pipefail
 # --remote=host:/path なら、向こうで同じ質問に答える（ssh -t で対話）
-for a in "$@"; do case "$a" in --remote=*) r="${a#--remote=}"; exec ssh -t "${r%%:*}" "cd '${r#*:}' && bin/setup.sh ${1:-}" ;; esac; done
+for a in "$@"; do case "$a" in --remote=*) [ "${1:-}" = protect ] && { echo "[setup] protect は手元で実行します（gh を使う）。--remote は要りません。" >&2; exit 1; }; r="${a#--remote=}"; exec ssh -t "${r%%:*}" "cd '${r#*:}' && bin/setup.sh ${1:-}" ;; esac; done
 case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/image.sh
 . bin/lib/image.sh
 
-[ -f .env ] || { echo "[setup] .env がありません。先に bin/init.sh を実行してください。" >&2; exit 1; }
+[ "${1:-}" = protect ] || [ -f .env ] || { echo "[setup] .env がありません。先に bin/init.sh を実行してください。" >&2; exit 1; }
 set_env() { # set_env KEY VALUE（無ければ追記）
     local tmp; tmp="$(mktemp)"
     if grep -qE "^#?${1}=" .env; then sed "s|^#\{0,1\}${1}=.*|${1}=${2}|" .env > "$tmp" && mv "$tmp" .env; else rm -f "$tmp"; printf '%s=%s\n' "$1" "$2" >> .env; fi
@@ -221,6 +222,107 @@ EOS
     echo "[setup] 完了。取れているかは backups/ と、送り先の中身で確かめられます。"
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GitHub 側の壁。main に直接 push できなくし、PR と担当者（CODEOWNERS）の承認を必須にする。
+# サーバー側の壁（bin/deploy.sh）と合わせて鉄壁になる。片方だけでも意味はある。
+#
+# **非公開リポジトリだと有料プランが要る**（個人は Pro、組織は Team 以上）。無料だと API が
+# 403 で「Upgrade」と返す。その場合はサーバー側の壁だけになる（それでも、手元から本番へは
+# origin/main の先頭と同じものしか送れない）。
+setup_protect() {
+    command -v gh >/dev/null 2>&1 || { echo "[setup] gh（GitHub CLI）が必要です: https://cli.github.com/" >&2; exit 1; }
+    gh auth status >/dev/null 2>&1 || { echo "[setup] gh でログインしてください: gh auth login" >&2; exit 1; }
+    repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
+    [ -n "$repo" ] || { echo "[setup] origin が GitHub のリポジトリではありません（この店のリポジトリで実行してください）" >&2; exit 1; }
+    branch="$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"
+    me="$(gh api user -q .login)"
+    cat <<EOS
+[setup] ${repo} の ${branch} を守ります。入れるルール:
+          - ${branch} へ直接 push できない（PR が必須）。force push と削除も禁止
+          - PR は担当者（CODEOWNERS）の承認が無いとマージできない。承認後に push し直したら承認は無効
+          - 未解決のレビューコメントが残っているとマージできない
+          - 例外なし（リポジトリの管理者も同じ）
+        担当者が自分で作った PR は、自分では承認できません（GitHub の仕様）。
+        一人で運用していて承認者が居ないなら、承認の人数を 0 にすると「PR は要るが承認は要らない」になります。
+EOS
+    ask owners "承認する担当者の GitHub ユーザー名（複数はカンマ区切り）" "$me"
+    ask count "承認に必要な人数" 1
+    case "$count" in 0|1|2|3) ;; *) echo "[setup] 0〜3 で答えてください" >&2; exit 1 ;; esac
+    handles="$(printf '%s' "$owners" | tr ',' '\n' | sed 's/^[[:space:]]*@\{0,1\}//; s/[[:space:]]*$//' | grep . | sed 's/^/@/' | tr '\n' ' ' | sed 's/ $//')"
+    codeowners="# 本番へ出るブランチの承認者。bin/setup.sh protect が書いた。
+# どのファイルの変更も、ここに居る人の承認が無いとマージできない。
+*   ${handles}
+"
+    # CODEOWNERS はリポジトリに入っていないと効かない。ルールを入れる前なら直接置ける
+    # （入れた後は PR でしか入らない）。
+    existing_rule="$(gh api "repos/${repo}/rulesets" -q '.[] | select(.name == "eccube-docker: 本番へ出るブランチを守る") | .id' 2>/dev/null | head -1 || true)"
+    if ! gh api "repos/${repo}/contents/.github/CODEOWNERS?ref=${branch}" >/dev/null 2>&1; then
+        if [ -z "$existing_rule" ]; then
+            echo "[setup] .github/CODEOWNERS を ${branch} に置きます..."
+            gh api -X PUT "repos/${repo}/contents/.github/CODEOWNERS" \
+                -f message="CODEOWNERS: 本番へ出るブランチの承認者（bin/setup.sh protect）" \
+                -f branch="$branch" \
+                -f content="$(printf '%s' "$codeowners" | base64 | tr -d '\n')" >/dev/null \
+                || { echo "[setup] CODEOWNERS を置けませんでした。手で .github/CODEOWNERS を作って push してください:" >&2; printf '%s' "$codeowners" >&2; exit 1; }
+            echo "[setup] 置きました（手元は git pull で取り込んでください）"
+        else
+            mkdir -p .github; printf '%s' "$codeowners" > .github/CODEOWNERS
+            echo "[setup] ルールは既にあるので、.github/CODEOWNERS は手元に書きました。**PR で ${branch} に入れてください**（入るまで承認者の指定は効きません）"
+        fi
+    else
+        echo "[setup] .github/CODEOWNERS は既にあります（変えるなら PR で）"
+    fi
+    [ "$count" -gt 0 ] && owner_review=true || owner_review=false
+    body="$(cat <<EOS
+{
+  "name": "eccube-docker: 本番へ出るブランチを守る",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "pull_request", "parameters": {
+        "required_approving_review_count": ${count},
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": ${owner_review},
+        "require_last_push_approval": ${owner_review},
+        "required_review_thread_resolution": true } }
+  ]
+}
+EOS
+)"
+    if [ -n "$existing_rule" ]; then
+        echo "[setup] ルールを更新します（id ${existing_rule}）..."
+        out="$(printf '%s' "$body" | gh api -X PUT "repos/${repo}/rulesets/${existing_rule}" --input - 2>&1)" && ok=1 || ok=0
+    else
+        echo "[setup] ルールを入れます..."
+        out="$(printf '%s' "$body" | gh api -X POST "repos/${repo}/rulesets" --input - 2>&1)" && ok=1 || ok=0
+    fi
+    if [ "$ok" != 1 ]; then
+        echo "[setup] 入れられませんでした:" >&2
+        printf '%s\n' "$out" | sed 's/^/    /' >&2
+        if printf '%s' "$out" | grep -qiE 'upgrade|403|not available|plan'; then
+            cat >&2 <<EOS
+[setup] 非公開リポジトリのブランチ保護には有料プラン（個人は Pro、組織は Team 以上）が要ります。
+        入れない場合も、サーバー側の壁は効きます:
+          - 手元から本番へは origin/${branch} の先頭と同じものしか送れない（bin/deploy.sh）
+          - 本番はプロジェクト名を打たないと反映されず、誰が何を出したかが var/deploy.log に残る
+        ただし「${branch} へ直接 push する」ことは止められないので、運用で守ってください
+        （エンジニアには PR を出してもらい、${branch} へ push できるのは担当者だけ、と決める）。
+EOS
+        fi
+        exit 1
+    fi
+    cat <<EOS
+[setup] 入れました。https://github.com/${repo}/settings/rules で見られます。
+        これで ${branch} には PR でしか入れず、${handles} の承認（${count} 人）が要ります。
+        本番へ出るのは bin/deploy.sh が ${branch} の先頭を送るときだけです（docs/deploy.md）。
+EOS
+}
+
+
 restart_app() {
     echo "[setup] 設定を反映するために起動し直します..."
     docker compose up -d --remove-orphans >/dev/null 2>&1 || { echo "[setup] 起動に失敗しました: docker compose logs --tail 30 ec-cube" >&2; exit 1; }
@@ -233,5 +335,6 @@ case "${1:-}" in
     db)     setup_db ;;
     tunnel) setup_tunnel ;;
     backup) setup_backup ;;
-    *) echo "使い方: bin/setup.sh mail | db | tunnel | backup [--remote=user@host:/path]"; exit 1 ;;
+    protect) setup_protect ;;
+    *) echo "使い方: bin/setup.sh mail | db | tunnel | backup [--remote=user@host:/path] | protect"; exit 1 ;;
 esac
