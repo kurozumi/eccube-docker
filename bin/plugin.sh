@@ -211,6 +211,25 @@ clean_leftovers() {
 # php-fpm がもう一度コンパイルし直すことになるため。
 # **warm_cache の失敗をそのまま返す。** 呼び出し側（set -e）が止まるので、
 # 「成功と表示されたのに古いキャッシュが残る」ことがなくなる。
+# エンティティ拡張の列をテーブルへ反映する。
+#
+# **`eccube:plugin:enable` はこれをやらない。** 無効化で落ちた列は、有効化しても
+# 戻らない。プロキシにはトレイトが入り、Doctrine のメタデータも列を知っているのに、
+# テーブルにだけ無い、という食い違いになる。有効化は `[OK] Plugin Enabled.` と
+# 出すので成功に見え、**画面かテストが落ちるまで気づけない。**
+#
+#     SQLSTATE[42S22]: Column not found: 1054 Unknown column 't0.company_account'
+#
+# **キャッシュを組み立てる前に打つ。** 組み立ては列を読みにいくので、順番を逆に
+# すると warmup がここで落ちる。落ちると古いコンパイル済みコンテナが残り、
+# 足したサービスやタグが例外も 500 も出さずに効かない状態になる。実際に踏んだ。
+#
+# スキーマを持たないプラグインでは失敗するので、握って先へ進む。
+schema_update() {
+    ec eccube:plugin:schema-update "$1" \
+        || echo "[plugin] 注意: schema-update が失敗しました（スキーマを持たないプラグインなら無視してよい）"
+}
+
 settle() {
     clean_leftovers
     clear_test_cache
@@ -282,6 +301,7 @@ case "$cmd" in
     prepare_plugin_command
     ec eccube:plugin:install --code="$code" --if-not-exists
     ec eccube:plugin:enable  --code="$code"
+    schema_update "$code"
     settle
     echo "[plugin] 完了: $code を有効化しました"
     ;;
@@ -292,6 +312,7 @@ case "$cmd" in
     prepare_plugin_command
     ec eccube:plugin:install --code="$code" --if-not-exists
     ec eccube:plugin:enable  --code="$code"
+    schema_update "$code"
     settle
     echo "[plugin] 完了: $code"
     ;;
@@ -318,7 +339,7 @@ case "$cmd" in
         die "eccube:plugin:update が失敗しました。ファイルは新しくなっています（キャッシュは組み立て直しました）。
        上のエラーを直してから、もう一度 bin/plugin.sh update $code"
     fi
-    ec eccube:plugin:schema-update "$code" || echo "[plugin] 注意: schema-update が失敗しました（スキーマを持たないプラグインなら無視してよい）"
+    schema_update "$code"
     settle
     echo "[plugin] 更新完了: $code"
     ;;
@@ -356,7 +377,13 @@ case "$cmd" in
     done
     ;;
 
-  enable)   prepare_plugin_command; ec eccube:plugin:enable  --code="${1:?Code}"; settle;;
+  enable)
+    code="${1:?Code}"
+    prepare_plugin_command
+    ec eccube:plugin:enable --code="$code"
+    schema_update "$code"
+    settle
+    ;;
   disable)  prepare_plugin_command; ec eccube:plugin:disable --code="${1:?Code}"; settle;;
 
   remove)
