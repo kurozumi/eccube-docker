@@ -220,6 +220,14 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   組み立てを次のリクエスト任せにすると、そこへ別のリクエストやコンソールコマンドが
   重なってコンパイル済みコンテナが書きかけのまま残り、全ページ 500 になる。
   **素の `bin/console eccube:plugin:enable` を直接叩かない。**
+- **有効化はエンティティ拡張の列を戻さない。** 無効化で落ちた列は
+  `eccube:plugin:enable` では復活しない。プロキシにはトレイトが入り、Doctrine の
+  メタデータも列を知っているのに、テーブルにだけ無い、という食い違いになる。
+  有効化は `[OK] Plugin Enabled.` と出すので成功に見え、**画面かテストが落ちるまで
+  気づけない**（`Column not found: 1054 Unknown column 't0.company_account'`）。
+  `bin/plugin.sh` の enable / install / add が `eccube:plugin:schema-update` を
+  **キャッシュを組み立てる前に**打つ。順番が逆だと warmup が列を読みにいって落ち、
+  古いコンパイル済みコンテナが残る（実際に踏んだ）。
 - **管理画面（オーナーズストア → プラグイン一覧）から有効化・無効化したら、その直後に
   `bin/plugin.sh reload` を実行する。** 本体の `PluginController` は `cacheUtil->clearCache()`
   しか呼ばず、これは `kernel.terminate` で `cache:clear --no-warmup` を走らせるだけ。
