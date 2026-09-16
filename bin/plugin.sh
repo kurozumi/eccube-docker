@@ -224,10 +224,21 @@ clean_leftovers() {
 # すると warmup がここで落ちる。落ちると古いコンパイル済みコンテナが残り、
 # 足したサービスやタグが例外も 500 も出さずに効かない状態になる。実際に踏んだ。
 #
-# スキーマを持たないプラグインでは失敗するので、握って先へ進む。
+# **失敗を握りつぶさない。** 以前は「スキーマを持たないプラグインなら無視してよい」
+# として `|| echo` で流していたが、4.4 の `eccube:plugin:schema-update` は
+# **エンティティを1つも持たないプラグインでも 0 を返す**（ProductCompare で確認）。
+# 失敗するのは接続不良・マイグレーションの SQL エラー・ロックといった本物の異常だけで、
+# 握ると列が無いまま「完了」と表示して先へ進むことになる。ここで戻さなかった列は、
+# あとで `Column not found` として画面かテストに出る。
+#
+# 死ぬ前にキャッシュを組み立て直す。消したまま止めると全ページ 500 になる。
 schema_update() {
-    ec eccube:plugin:schema-update "$1" \
-        || echo "[plugin] 注意: schema-update が失敗しました（スキーマを持たないプラグインなら無視してよい）"
+    if ! ec eccube:plugin:schema-update "$1"; then
+        settle
+        die "eccube:plugin:schema-update が失敗しました（$1）。
+       プラグインは有効なまま、エンティティ拡張の列がテーブルに無い可能性があります。
+       上のエラーを直してから、もう一度 bin/plugin.sh enable $1"
+    fi
 }
 
 settle() {

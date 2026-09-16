@@ -235,6 +235,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `bin/plugin.sh` の enable / install / add が `eccube:plugin:schema-update` を
   **キャッシュを組み立てる前に**打つ。順番が逆だと warmup が列を読みにいって落ち、
   古いコンパイル済みコンテナが残る（実際に踏んだ）。
+  **失敗は握りつぶさない。** 4.4 の `schema-update` は**エンティティを1つも持たない
+  プラグインでも 0 を返す**ので、非ゼロは接続不良・マイグレーションの SQL エラー・
+  ロックといった本物の異常だけ。握ると列が無いまま「完了」と表示することになる。
 - **管理画面（オーナーズストア → プラグイン一覧）から有効化・無効化したら、その直後に
   `bin/plugin.sh reload` を実行する。** 本体の `PluginController` は `cacheUtil->clearCache()`
   しか呼ばず、これは `kernel.terminate` で `cache:clear --no-warmup` を走らせるだけ。
