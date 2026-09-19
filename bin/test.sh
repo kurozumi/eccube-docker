@@ -153,6 +153,16 @@ codes="$(docker compose exec -T ec-cube php bin/console dbal:run-sql --force-fet
     "SELECT GROUP_CONCAT(code ORDER BY code) AS codes FROM dtb_plugin WHERE enabled = 1" \
     2>/dev/null | sed -n 4p | tr -d ' |' || true)"
 
+# **有効なプラグインが0本でも比べる。** GROUP_CONCAT は0件で NULL を返すので、
+# 空のまま下の if を素通りしていた。全部を無効にした直後にテストを流すと、
+# 有効だった頃のコンテナがそのまま使われ、無効のプラグインの Doctrine リスナーや
+# 購入フローが動いて大量に落ちた（Call to undefined method Customer::getParentCustomer()）。
+# 0本は「(none)」として控える。DB に届かなかったとき（sed の4行目が無い）とは区別する。
+if [ -z "$codes" ] && docker compose exec -T ec-cube php bin/console dbal:run-sql --force-fetch \
+    "SELECT COUNT(*) AS n FROM dtb_plugin WHERE enabled = 1" 2>/dev/null | sed -n 4p | grep -qw 0; then
+    codes="(none)"
+fi
+
 if [ -n "$codes" ]; then
     marker=/var/www/html/var/cache/test/.enabled-plugins
     prev="$(docker compose exec -T ec-cube sh -c "cat $marker 2>/dev/null" 2>/dev/null || true)"
@@ -171,6 +181,23 @@ if [ -n "$codes" ]; then
             "mkdir -p /var/www/html/var/cache/test && printf '%s' '$codes' > $marker" >/dev/null 2>&1 || true
     fi
 fi
+
+# 4.8) テンプレートが前回のテストより新しくないか。
+#    **Twig のキャッシュもファイルの更新を見ない**（APP_DEBUG=0 なので auto_reload が切れる）。
+#    テンプレートを直してもテストには古い版が使われ続け、直したのに落ちる／直す前なのに
+#    通る、が起きる。実際に、プラグインのテンプレートの修正がテストに届かなかった。
+#    コンテナ（4.6）ごとは作り直さず、コンパイル済みのテンプレートだけ消す。
+#    比べる相手は前回ここを通った時刻（.twig-checked）。コンテナの時刻と比べると、
+#    一度でも新しいテンプレートがあると毎回消すことになる。
+docker compose exec -T -u www-data ec-cube sh -c '
+    stamp=/var/www/html/var/cache/test/.twig-checked
+    if [ -f "$stamp" ] && find /var/www/html/app/Plugin /var/www/html/app/template /var/www/html/app/Customize \
+            -type f -name "*.twig" -not -path "*/vendor/*" -newer "$stamp" -print -quit 2>/dev/null | grep -q .; then
+        echo "[test] 前回より新しいテンプレートがあります。コンパイル済みのテンプレートを消します。"
+        rm -rf /var/www/html/var/cache/test/twig
+    fi
+    [ -d /var/www/html/var/cache/test ] && touch "$stamp" 2>/dev/null || true
+' 2>/dev/null || true
 
 # 5) 実行。設定ファイルの validation 警告が出たら、テストが緑でも失敗扱いにする
 #    （警告だけ出して読み飛ばされた要素があると、DAMA が登録されていない可能性がある）。

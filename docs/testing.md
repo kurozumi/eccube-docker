@@ -70,6 +70,18 @@ Symfony が DI を通さず `new` している合図で、原因はコードで�
 docker compose exec ec-cube rm -rf var/cache/test
 ```
 
+**プラグインの有効・無効の切り替えも同じ。** ファイルは1つも変わらないので時刻では
+気づけない。`bin/test.sh` は有効なプラグインの一覧を `var/cache/test/.enabled-plugins` に
+控え、変わっていたら作り直す。**全部を無効にした状態は `(none)` として控える。**
+以前は0本のときに一覧が空になって比べずに素通りし、有効だった頃のコンテナのまま
+無効のプラグインの Doctrine リスナーや購入フローが動いて、テストが大量に落ちた。
+
+**テンプレートも同じ。** debug=false では Twig がファイルの更新を見ないので、
+テンプレートを直してもコンパイル済みの古い版が使われ続ける。`bin/test.sh` は
+`app/Plugin` / `app/template` / `app/Customize` の `*.twig` を前回の実行
+（`var/cache/test/.twig-checked`）と比べ、新しいものがあれば `var/cache/test/twig` だけを
+消す（コンテナまでは作り直さない）。
+
 設定を編集するときは **両方のファイルを同じ内容に保つこと**（片方だけ直すと、
 バージョンを切り替えた瞬間に差分が出る）。
 
