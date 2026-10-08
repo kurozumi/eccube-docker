@@ -291,10 +291,29 @@ extra_rc=0
 extra_lost="$(docker run --rm -i -v "${app_vol}:/app:ro" -v "${PWD}/app/Customize:/cust:ro" \
     --entrypoint php "$image" 2>/dev/null <<'PHP'
 <?php
-$read = static fn (string $path): array => json_decode((string) @file_get_contents($path), true)['require'] ?? [];
-$vol = $read('/app/composer.json');
-$img = $read('/var/www/html/composer.json');
-$dec = $read('/cust/composer.extra.json');
+// 読めない・壊れているときは空として扱わない。「消えるものが無い」と誤って通してしまう。
+// composer.extra.json だけは無くてよい（宣言していない店が普通）。
+// 標準入力から読んだスクリプトでは STDERR 定数が無いので php://stderr へ書く。
+$read = static function (string $path, bool $required): array {
+    if (!is_file($path)) {
+        if ($required) {
+            file_put_contents("php://stderr", "読めません: {$path}\n");
+            exit(2);
+        }
+
+        return [];
+    }
+    $json = json_decode((string) file_get_contents($path), true);
+    if (!is_array($json)) {
+        file_put_contents("php://stderr", "JSON として読めません: {$path}\n");
+        exit(2);
+    }
+
+    return $json['require'] ?? [];
+};
+$vol = $read('/app/composer.json', true);
+$img = $read('/var/www/html/composer.json', true);
+$dec = $read('/cust/composer.extra.json', false);
 $out = [];
 foreach ($vol as $name => $version) {
     if (isset($img[$name]) || isset($dec[$name])) {
