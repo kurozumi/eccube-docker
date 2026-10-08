@@ -282,19 +282,56 @@ fi
 # 新しいイメージの composer.json（＝素の EC-CUBE）と突き合わせ、差分のうち
 # app/Customize/composer.extra.json に宣言されていないものを挙げる（宣言済みのものは
 # entrypoint が起動時に入れ直すので消えない）。
-extra_lost="$(docker run --rm -v "${app_vol}:/app:ro" -v "${PWD}/app/Customize:/cust:ro" --entrypoint sh "$image" -c '
-    php -r "
-        \$vol = json_decode(@file_get_contents("/app/composer.json"), true)["require"] ?? [];
-        \$img = json_decode(@file_get_contents("/var/www/html/composer.json"), true)["require"] ?? [];
-        \$dec = json_decode(@file_get_contents("/cust/composer.extra.json"), true)["require"] ?? [];
-        \$out = [];
-        foreach (\$vol as \$n => \$v) {
-            if (isset(\$img[\$n]) || isset(\$dec[\$n])) { continue; }
-            if (\$n === "symfony/messenger" || \$n === "symfony/doctrine-messenger") { continue; }
-            \$out[] = \$n . " " . \$v;
+#
+# **PHP は標準入力から渡す。** 以前は sh -c '…' の中の php -r "…" に書いていたが、
+# PHP 側の文字列の二重引用符でシェルの引用が切れて毎回構文エラーになり、
+# そのエラー文を「消えるライブラリ」として表示して確認を求めていた。
+# 標準入力の無い実行（cron・nohup）では、その確認で止まる。
+extra_rc=0
+extra_lost="$(docker run --rm -i -v "${app_vol}:/app:ro" -v "${PWD}/app/Customize:/cust:ro" \
+    --entrypoint php "$image" 2>/dev/null <<'PHP'
+<?php
+// 読めない・壊れているときは空として扱わない。「消えるものが無い」と誤って通してしまう。
+// composer.extra.json だけは無くてよい（宣言していない店が普通）。
+// 標準入力から読んだスクリプトでは STDERR 定数が無いので php://stderr へ書く。
+$read = static function (string $path, bool $required): array {
+    if (!is_file($path)) {
+        if ($required) {
+            file_put_contents("php://stderr", "読めません: {$path}\n");
+            exit(2);
         }
-        echo implode("\n", \$out);
-    "' 2>/dev/null || true)"
+
+        return [];
+    }
+    $json = json_decode((string) file_get_contents($path), true);
+    if (!is_array($json)) {
+        file_put_contents("php://stderr", "JSON として読めません: {$path}\n");
+        exit(2);
+    }
+
+    return $json['require'] ?? [];
+};
+$vol = $read('/app/composer.json', true);
+$img = $read('/var/www/html/composer.json', true);
+$dec = $read('/cust/composer.extra.json', false);
+$out = [];
+foreach ($vol as $name => $version) {
+    if (isset($img[$name]) || isset($dec[$name])) {
+        continue;
+    }
+    if ($name === 'symfony/messenger' || $name === 'symfony/doctrine-messenger') {
+        continue;
+    }
+    $out[] = $name.' '.$version;
+}
+echo implode("\n", $out);
+PHP
+)" || extra_rc=$?
+if [ "$extra_rc" != 0 ]; then
+    # 調べられなかったことを黙って通さない。消えるものが無い、とは言えない
+    echo "[upgrade] 注意: コンテナの中で composer require したライブラリを調べられませんでした（終了コード ${extra_rc}）。"
+    extra_lost="（確認できませんでした）"
+fi
 if [ -n "$extra_lost" ]; then
     echo "[upgrade] 注意: コンテナの中で composer require したライブラリがあります。ボリュームと一緒に消えます:"
     printf '%s\n' "$extra_lost" | sed 's/^/           /'
