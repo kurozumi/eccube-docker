@@ -51,8 +51,11 @@ guard_destructive() {
     echo "[${tag}] ${what}を削除します。**元に戻せません。**"
     echo "[${tag}] 残したいものがあれば、先に bin/backup.sh を実行してください。"
 
-    guard_is_prod_stack
-    local prod=$?
+    # **戻り値は `|| prod=$?` で受ける。** 呼び出し側（switch-version.sh / reset.sh）は
+    # set -e で動いている。素で呼ぶと、本番でない（1）・停止中（2）を返した時点で
+    # スクリプトごと終わり、確認の質問にすら辿り着かない（開発環境で実際にそうなった）。
+    local prod=0
+    guard_is_prod_stack || prod=$?
 
     if [ "$prod" = "0" ]; then
         echo "[${tag}] エラー: 稼働中のスタックは**本番構成**です（compose.prod.yaml）。" >&2
