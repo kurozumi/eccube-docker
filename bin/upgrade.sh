@@ -78,7 +78,9 @@ running_php=""
 if [ -n "$running_php" ]; then
     base_php="$running_php"
 elif [ -n "$current_image" ] && image_uses_registry; then
+    # 固定の短いタグはタグから読めない（空）。そのときは .env の値（無ければ既定へ寄る）
     base_php="$(image_ref_php "$current_image")"
+    base_php="${base_php:-$current_php}"
 else
     base_php="$current_php"
 fi

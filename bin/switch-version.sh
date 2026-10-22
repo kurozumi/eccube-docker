@@ -41,7 +41,9 @@ base_php=""
 [ -n "$cid_now" ] && base_php="$(image_php_of_container "$cid_now")"
 if [ -z "$base_php" ]; then
     if image_uses_registry; then
+        # 固定の短いタグはタグから読めない（空）。そのときは .env の値（無ければ既定へ寄る）
         base_php="$(image_ref_php "$(env_get ECCUBE_IMAGE)")"
+        base_php="${base_php:-$current_php}"
     else
         base_php="$current_php"
     fi

@@ -152,6 +152,17 @@ image_resolve_php() { # image_resolve_php <系列> <指定（空可）> <いま�
     image_php_for_series "$series"
 }
 
+# 動いているコンテナの PHP（8.3 のような major.minor）を、**イメージの**環境変数から読む。
+# 公式の php イメージは ENV PHP_VERSION=8.3.36 を持つ。コンテナ側の環境変数は見ない
+# （compose の env_file が .env の PHP_VERSION=8.2 を流し込むと、実物と違う値が読めてしまう）。
+# 読めなければ空（失敗で止めない。呼び出し側はタグや .env へ落とす）。
+image_php_of_container() { # image_php_of_container <コンテナ ID>
+    local img
+    img="$(docker inspect --format '{{.Image}}' "$1" 2>/dev/null)" || return 0
+    docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$img" 2>/dev/null |
+        sed -n 's/^PHP_VERSION=\([0-9]*\.[0-9]*\).*/\1/p' | head -1 || true
+}
+
 # 配布イメージの参照の PHP を差し替える。タグは「<系列>[-php<版>][-<固定の印>]」の形で、
 # ワークフローは -php 付きと無しの両方に固定の印（-vX.Y.Z / 日付 / sha）を打っている。
 #   :4.3-php8.1        + 8.3 → :4.3-php8.3
