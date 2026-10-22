@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # PHP のバージョン（EC-CUBE 4.1〜4.3 は 8.1〜8.3 で動く。既定 8.2）
-ARG PHP_VERSION=8.2
+ARG PHP_VERSION=8.3
 FROM php:${PHP_VERSION}-fpm-bookworm
 
 # EC-CUBE のバージョン制約（composer create-project 用）。compose から渡す。

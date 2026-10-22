@@ -133,7 +133,7 @@ Packages → ec-cube → Package settings → Danger Zone → Change visibility 
 Symfony Cache と両立しないバージョンがあり、間違えると起動時に落ちる）。対応表は
 2 か所にあり、**必ず揃えること**:
 
-- `bin/lib/image.sh` の `image_php_for_series` / `image_phpredis_for_series`
+- `bin/lib/image.sh` の `image_php_for_series` / `image_php_versions_for_series` / `image_phpredis_for_series`
 - `.github/workflows/build-image.yml` の `setup` ジョブ
 
 ### 3. リリースノートに書くこと

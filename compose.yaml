@@ -180,7 +180,7 @@ services:
       dockerfile: docker/php/Dockerfile
       args:
         ECCUBE_VERSION: ${ECCUBE_VERSION:-~4.3.0}
-        PHP_VERSION: ${PHP_VERSION:-8.2}
+        PHP_VERSION: ${PHP_VERSION:-8.3}
         PHPREDIS_VERSION: ${PHPREDIS_VERSION:-6.0.2}
     # .env は丸ごと渡さない（#107）。渡すのは上の environment に列挙したものだけ。
     # DB_ROOT_PASSWORD / TUNNEL_TOKEN / BACKUP_SYNC のような、アプリに要らない秘密が
@@ -240,7 +240,7 @@ services:
       dockerfile: docker/php/Dockerfile
       args:
         ECCUBE_VERSION: ${ECCUBE_VERSION:-~4.3.0}
-        PHP_VERSION: ${PHP_VERSION:-8.2}
+        PHP_VERSION: ${PHP_VERSION:-8.3}
         PHPREDIS_VERSION: ${PHPREDIS_VERSION:-6.0.2}
     # .env は丸ごと渡さない（#107）。渡すのは上の environment に列挙したものだけ。
     # DB_ROOT_PASSWORD / TUNNEL_TOKEN / BACKUP_SYNC のような、アプリに要らない秘密が

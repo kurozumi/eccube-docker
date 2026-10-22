@@ -77,6 +77,15 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **PHP は系列ごとに複数焼く**（4.2: 8.1/8.2、4.3: 8.1/8.2/8.3、4.4: 8.2〜8.5。上流 README の
   対応一覧）。`-php` 無しの短いタグは系列の既定（`image_php_for_series`）。phpredis は系列で
   決まる（4.2/4.3: 6.0.2、4.4: 6.3.0）。**matrix と `bin/lib/image.sh` を揃える。**
+  **既定（matrix の `default: true`）を動かすと、短いタグを追っている本番の PHP が次の焼き直しで
+  黙って変わる。** 定期の焼き直しは main のワークフローで回るので、リリースを待たずマージした時点で
+  効く。4.3 の既定を 8.2 → 8.3 にしたのは 8.2 のサポート切れ（2026-12-31）のため。
+  `upgrade.sh` / `switch-version.sh` は `--php=<版>` を受け、系列が対応しない版なら何も変えずに止まる
+  （`image_resolve_php`）。いまの PHP は**イメージの** `ENV PHP_VERSION` から読む（コンテナの環境変数は
+  env_file 経由で .env の値が混ざるので見ない）。
+- **`image_check_version` は alpha / beta / RC を安定版として数えない。** 以前は「系列で始まる版が
+  あるか」だけを見ていたので、4.4.0-alpha が Packagist に出た時点で `~4.4.0` を通し、build に入って
+  から composer が落ちていた（create-project は stability を指定しないので安定版しか探さない）。
   DB の版は `.env` の `MARIADB_VERSION` / `PG_VERSION`（image と Doctrine の `serverVersion` の
   両方に効く。`DATABASE_SERVER_VERSION` は外部 DB で版が違うときだけ）。
 - **`bin/self-update.sh` の更新対象は `.eccube-docker-paths`。** スクリプト内の配列は控えで、

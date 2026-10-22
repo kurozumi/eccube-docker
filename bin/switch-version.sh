@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # EC-CUBE のバージョンを切り替える。スキーマが変わるため DB とアプリのボリュームを作り直す。
 #   使い方: bin/switch-version.sh ~4.2.0
+#           bin/switch-version.sh 4.4.x-dev --php=8.5   PHP も選ぶ（系列が対応している版だけ）
 #
 # これは「指定バージョンをまっさらに立て直す」開発用ツールで、バージョンアップ用ではない。
 # 運用中の環境をデータを保ったまま上げるには bin/upgrade.sh を使うこと。
@@ -16,13 +17,29 @@ cd "$(dirname "$0")/.."
 # shellcheck source=lib/image.sh
 . "$(dirname "$0")/lib/image.sh"
 
-ver="${1:-}"
+ver=""; want_php=""
+for a in "$@"; do
+    case "$a" in
+        --php=*) want_php="${a#--php=}" ;;
+        --php)   echo "エラー: --php=8.3 の形で指定してください。" >&2; exit 1 ;;
+        *)       [ -z "$ver" ] && ver="$a" ;;
+    esac
+done
 if [ -z "$ver" ]; then
-    echo "使い方: bin/switch-version.sh <制約>   例: ~4.3.0 / ~4.2.0 / ~4.1.0"
+    echo "使い方: bin/switch-version.sh <制約> [--php=<版>]   例: ~4.3.0 / ~4.2.0 / 4.4.x-dev --php=8.5"
     exit 1
 fi
 
 image_check_version "$ver" "bin/switch-version.sh" || exit 1
+# PHP は**何かを消す前に**決める。使えない組み合わせなら、ここで止まれば何も失わない。
+# 作り直すので「いまの PHP」は .env の値（配布イメージならタグ）でよい。
+current_php="$(grep -E '^PHP_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
+if image_uses_registry; then
+    base_php="$(image_ref_php "$(env_get ECCUBE_IMAGE)")"
+else
+    base_php="$current_php"
+fi
+php_ver="$(image_resolve_php "$(image_series "$ver")" "$want_php" "$base_php")" || exit 1
 echo "[switch] ECCUBE_VERSION=${ver} に切り替えます。既存の DB とアプリのデータは破棄されます。"
 echo "[switch] 注意: アップロード画像（eccube_upload）も削除されます。残したい場合は先にバックアップを:"
 echo "         docker compose cp ec-cube:/var/www/html/html/upload/. ./upload-backup/"
@@ -39,6 +56,13 @@ current_image="$(env_get ECCUBE_IMAGE)"
 series="$(image_series "$ver")"
 redis_ver="$(image_phpredis_for_series "$series")"
 echo "[switch] phpredis は ${redis_ver} を使用します（EC-CUBE ${ver} 向け）。"
+echo "[switch] PHP は ${php_ver} を使用します。"
+if grep -qE '^PHP_VERSION=' .env 2>/dev/null; then
+    tmp="$(mktemp)"
+    sed "s|^PHP_VERSION=.*|PHP_VERSION=${php_ver}|" .env > "$tmp" && mv "$tmp" .env
+else
+    echo "PHP_VERSION=${php_ver}" >> .env
+fi
 
 if grep -qE '^PHPREDIS_VERSION=' .env 2>/dev/null; then
     tmp="$(mktemp)"
@@ -58,7 +82,7 @@ fi
 # **ここを忘れると、.env だけ 4.4 になって動くのは 4.3 のイメージ**という
 # 食い違いになる（build しないので ECCUBE_VERSION は参照されない）。
 if [ -n "$current_image" ]; then
-    retagged="$(image_retag_series "$current_image" "$series")"
+    retagged="$(image_retag_php "$(image_retag_series "$current_image" "$series")" "$php_ver")"
     if [ "$retagged" != "$current_image" ]; then
         tmp="$(mktemp)"
         sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${retagged}|" .env > "$tmp" && mv "$tmp" .env
@@ -85,6 +109,10 @@ if ! image_provision docker compose; then
     if [ -n "$current_image" ]; then
         tmp="$(mktemp)"
         sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${current_image}|" .env > "$tmp" && mv "$tmp" .env
+    fi
+    if [ -n "$current_php" ]; then
+        tmp="$(mktemp)"
+        sed "s|^PHP_VERSION=.*|PHP_VERSION=${current_php}|" .env > "$tmp" && mv "$tmp" .env
     fi
     exit 1
 fi
