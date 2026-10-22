@@ -8,6 +8,8 @@
 #   bin/deploy.sh --no-pull             pull せず、いま置いてあるコードを反映するだけ
 #   bin/deploy.sh --no-backup           退避を飛ばす（普段は付けない。5 秒で終わる）
 #   bin/deploy.sh --check               何が出るかを見るだけ。何も変えない（--remote と組み合わせ可）
+#   bin/deploy.sh --rebuild             ローカル build の環境で、イメージも作り直す（土台の PHP / Debian の
+#                                      パッチを取り込む。数分）。配布イメージの環境では毎回引き直すので要らない
 #
 # **本番（compose.prod.yaml で動いているスタック）には、レビュー済みのものしか出ない。**
 #   - 手元から送るとき（push モード）: いまのブランチが DEPLOY_BRANCH（既定 main）で、
@@ -27,6 +29,8 @@
 # ボリュームは作り直さず、DB も画像も触らない。
 #
 # やること（順番に意味がある）:
+#   0. イメージ              配布イメージなら引き直す（--rebuild ならローカル build し直す）。
+#                            **メンテナンスより前に**やる（数分かかりうるので、古いサイトのまま待つ）
 #   1. bin/backup.sh         管理画面が本番で書いたものを含めて退避（戻せる状態を先に作る）
 #   2. メンテナンス ON        .maintenance を deploy:<token> で作る。ログイン中の管理者は素通り
 #   3. git pull --ff-only    自分のリポジトリから取り込む。衝突したら何も変えずに OFF して止まる
@@ -54,12 +58,13 @@ cd "$(dirname "$0")/.."
 log() { echo "[deploy] $*"; }
 die() { echo "[deploy] エラー: $*" >&2; exit 1; }
 
-do_pull=1; do_backup=1; remote=""; mode=auto; check=0; sent_sha=""; sent_by=""; sent_note=""
+do_pull=1; do_backup=1; do_rebuild=0; remote=""; mode=auto; check=0; sent_sha=""; sent_by=""; sent_note=""
 for a in "$@"; do
     case "$a" in
         --no-pull)   do_pull=0 ;;
         --no-backup) do_backup=0 ;;
         --check)     check=1 ;;
+        --rebuild)   do_rebuild=1 ;;
         --push)      mode=push ;;
         --pull)      mode=pull ;;
         --sha=*)     sent_sha="${a#--sha=}" ;;   # 内部用: push モードで手元が送った sha
@@ -79,6 +84,7 @@ if [ -n "$remote" ]; then
     args=""; envs=""
     [ "$do_backup" = 0 ] && args="$args --no-backup"
     [ "$check" = 1 ] && args="$args --check"
+    [ "$do_rebuild" = 1 ] && args="$args --rebuild"
     # サーバーに .git が無ければ「手元から送る」（push）。サーバーに GitHub の鍵を置かなくてよい
     # （bin/bootstrap-server.sh が整えたサーバーはこの形）。あれば今までどおり向こうで git pull。
     if [ "$mode" = auto ]; then
@@ -194,6 +200,43 @@ if [ "$is_prod" = 1 ]; then
 fi
 deploy_record "${planned:-?}" "$([ -d .git ] && echo pull || echo push)" "$by" "start${sent_note:-}"
 
+# ── 0. イメージ ──
+# **タグの名前ではなく、イメージの ID で比べる。** 追跡タグ（…/ec-cube:4.3）は毎週焼き直されても
+# 名前が変わらない。以前は動いているコンテナの .Config.Image（＝タグ名）と ECCUBE_IMAGE を
+# 文字列で比べていたので、両者はいつも一致し、焼き直しを一度も引かなかった
+# （CVE-2026-109618/109619 の修正版が出ても、本番は古い PHP のままだった）。
+# 引いておけば、ID が変わったコンテナは 4. の up -d が作り直す。
+#
+# ローカル build の環境（ECCUBE_IMAGE 無し）は、作り直さない限り PHP が古いまま。
+# 毎回 build すると数分かかるので --rebuild のときだけにして、それ以外はイメージの古さを見せる。
+#
+# メンテナンスより前にやるのは、引き直しも build も数分かかりうるから。その間は古いサイトのまま動く。
+img_running="$(docker inspect --format '{{.Image}}' "$cid" 2>/dev/null || true)"
+if image_uses_registry; then
+    log "配布イメージを引き直します: $(image_ref)"
+    if ! "${dc[@]}" pull --quiet ec-cube; then
+        # 届かないのは GHCR の障害か回線。手元に同じ参照のイメージがあるなら、コードの反映まで
+        # 止める理由にはしない。**無ければ止める。** そのまま進むと 4. の up -d が compose.yaml の
+        # build: を見て手元で build し、配布物ではないイメージで公開してしまう
+        # （しかもメンテナンス ON のあとで、数分かかってから落ちうる）。
+        docker image inspect "$(image_ref)" >/dev/null 2>&1 \
+            || die "配布イメージ $(image_ref) を取得できず、手元にもありません。何も変えていません。
+       ECCUBE_IMAGE のタグが正しいか、サーバーから ghcr.io に届くかを確かめてください。"
+        log "注意: 引き直せませんでした。いま手元にあるイメージのまま進めます。"
+    fi
+elif [ "$do_rebuild" = 1 ]; then
+    log "イメージを作り直します（土台の PHP / Debian のパッチを取り込みます。数分かかります）..."
+    "${dc[@]}" build --pull ec-cube || die "イメージを作り直せませんでした。何も変えていません（サイトは古いまま動いています）。"
+else
+    built="$(docker image inspect --format '{{.Created}}' "$(image_ref)" 2>/dev/null | cut -c1-10 || true)"
+    log "イメージは手元で build したもの（${built:-作成日不明}）。PHP のパッチは作り直さないと入りません。"
+    log "  取り込むには: bin/deploy.sh --rebuild（週に 1 回が目安。docs/deploy.md）"
+fi
+img_new="$(docker image inspect --format '{{.Id}}' "$(image_ref)" 2>/dev/null || true)"
+if [ -n "$img_new" ] && [ -n "$img_running" ] && [ "$img_new" != "$img_running" ]; then
+    log "  イメージが新しくなっています（${img_running#sha256:} → ${img_new#sha256:}）。4. で作り直します。" | sed -E 's/([0-9a-f]{12})[0-9a-f]{52}/\1/g'
+fi
+
 # token は疎通確認でも使う。本体の index.php は cookie の maintenance_token が
 # ファイルの token と一致すれば、メンテナンス中でも通常どおり応答する
 # （管理者が素通りできる仕組みと同じ）。これが無いと確認が 503 を見て必ず失敗する。
@@ -275,13 +318,13 @@ else
 fi
 
 # ── 4. compose / イメージ ──
-running_img="$(docker inspect --format '{{.Config.Image}}' "$cid" 2>/dev/null || true)"
-if image_uses_registry && [ "$(image_ref)" != "$running_img" ]; then
-    log "配布イメージが変わっています: ${running_img} → $(image_ref)"
-    image_provision "${dc[@]}"
-fi
 log "コンテナを揃えます（compose / .env が同じなら何も起きません）..."
-"${dc[@]}" up -d --remove-orphans >/dev/null 2>&1 || "${dc[@]}" up -d
+# 配布イメージでは build も pull もさせない。0. で用意したイメージだけを使う。
+# --no-build だけでは、compose が足りないと見たイメージを自分で pull しに行く。0. の pull が
+# 失敗して手元のイメージで進むと決めたあとに、ここでもう一度 pull して落ちる（メンテナンス ON の
+# あとで）、を避けるため --pull never も付ける。
+up_opts=(); image_uses_registry && up_opts=(--no-build --pull never)
+"${dc[@]}" up -d ${up_opts[@]+"${up_opts[@]}"} --remove-orphans >/dev/null 2>&1 || "${dc[@]}" up -d ${up_opts[@]+"${up_opts[@]}"}
 # 作り直された場合、entrypoint（migrate + cache:clear）が終わるまで待つ
 for i in $(seq 1 60); do
     st="$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q ec-cube)" 2>/dev/null || echo unknown)"
