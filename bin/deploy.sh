@@ -319,8 +319,11 @@ fi
 
 # ── 4. compose / イメージ ──
 log "コンテナを揃えます（compose / .env が同じなら何も起きません）..."
-# 配布イメージでは build させない。0. で用意したイメージだけを使う（無ければ build せずに落ちる）
-up_opts=(); image_uses_registry && up_opts=(--no-build)
+# 配布イメージでは build も pull もさせない。0. で用意したイメージだけを使う。
+# --no-build だけでは、compose が足りないと見たイメージを自分で pull しに行く。0. の pull が
+# 失敗して手元のイメージで進むと決めたあとに、ここでもう一度 pull して落ちる（メンテナンス ON の
+# あとで）、を避けるため --pull never も付ける。
+up_opts=(); image_uses_registry && up_opts=(--no-build --pull never)
 "${dc[@]}" up -d ${up_opts[@]+"${up_opts[@]}"} --remove-orphans >/dev/null 2>&1 || "${dc[@]}" up -d ${up_opts[@]+"${up_opts[@]}"}
 # 作り直された場合、entrypoint（migrate + cache:clear）が終わるまで待つ
 for i in $(seq 1 60); do
