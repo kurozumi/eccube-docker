@@ -92,6 +92,8 @@ jobs:
   # **系列ごとに焼く PHP の一覧と、phpredis が決まる。** PHP は上流の README の
   # 対応一覧に従う（4.2: 7.4–8.1、4.3: 8.1–8.3、4.4: 8.2–8.5）。4.2 の既定 8.2 は
   # 対応一覧の外だが composer の制約（^8.0）には入り、v1.0.0 からそれで配っている。
+  # 4.3 の既定は 8.3（8.2 は 2026-12-31 でセキュリティサポートが切れるため。v1.0.13 から）。
+  # **既定を動かすと、短いタグ（4.3）を追っている本番の PHP が次の焼き直しで変わる。**
   # phpredis は EC-CUBE 側の Symfony Cache と両立しないバージョンがあり、間違えると
   # 起動時に落ちる（docker/php/Dockerfile のコメント参照）。**bin/lib/image.sh の
   # image_php_for_series / image_phpredis_for_series と揃えること。**
@@ -137,8 +139,8 @@ jobs:
             {"series":"4.2","eccube":"~4.2.0",  "php":"8.1","phpredis":"6.0.2","default":false},
             {"series":"4.2","eccube":"~4.2.0",  "php":"8.2","phpredis":"6.0.2","default":true},
             {"series":"4.3","eccube":"~4.3.0",  "php":"8.1","phpredis":"6.0.2","default":false},
-            {"series":"4.3","eccube":"~4.3.0",  "php":"8.2","phpredis":"6.0.2","default":true},
-            {"series":"4.3","eccube":"~4.3.0",  "php":"8.3","phpredis":"6.0.2","default":false},
+            {"series":"4.3","eccube":"~4.3.0",  "php":"8.2","phpredis":"6.0.2","default":false},
+            {"series":"4.3","eccube":"~4.3.0",  "php":"8.3","phpredis":"6.0.2","default":true},
             {"series":"4.4","eccube":"4.4.x-dev","php":"8.2","phpredis":"6.3.0","default":false},
             {"series":"4.4","eccube":"4.4.x-dev","php":"8.3","phpredis":"6.3.0","default":true},
             {"series":"4.4","eccube":"4.4.x-dev","php":"8.4","phpredis":"6.3.0","default":false},

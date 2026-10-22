@@ -62,7 +62,7 @@ services:
       dockerfile: docker/php/Dockerfile
       args:
         ECCUBE_VERSION: ${ECCUBE_VERSION:-~4.3.0}
-        PHP_VERSION: ${PHP_VERSION:-8.2}
+        PHP_VERSION: ${PHP_VERSION:-8.3}
         # phpredis は系列で決まる（4.4 は 6.1 以上でないと symfony/cache と conflict）。
         # ここを渡し忘れると 4.4 のローカル build だけが起動時に落ちる。
         PHPREDIS_VERSION: ${PHPREDIS_VERSION:-6.0.2}

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # EC-CUBE を「データを保ったまま」新しいバージョンへ上げる。
-#   使い方: bin/upgrade.sh ~4.3.2        （4.4 系はまだリリースが無いので 4.4.x-dev）
+#   使い方: bin/upgrade.sh ~4.3.2              （4.4 系は正式版がまだ無いので 4.4.0-alpha-1 か 4.4.x-dev）
+#           bin/upgrade.sh 4.4.x-dev --php=8.5  PHP も一緒に変える（系列が対応している版だけ。
+#                                                 指定しなければ、いまの PHP が使える限りそのまま）
 #
 # bin/switch-version.sh との違い:
 #   switch-version.sh … down -v で DB・画像ごと破棄して作り直す（開発で別バージョンを試す用）
@@ -26,20 +28,23 @@ cd "$(dirname "$0")/.."
 . "$(dirname "$0")/lib/compose.sh"
 
 # --prod は本番構成（compose.prod.yaml）で上げる指定。位置は問わない。
+# --php=8.x は PHP も一緒に変える指定。
 want_prod=0
+want_php=""
 args=()
 for a in "$@"; do
-    if [ "$a" = "--prod" ]; then
-        want_prod=1
-    else
-        args+=("$a")
-    fi
+    case "$a" in
+        --prod)  want_prod=1 ;;
+        --php=*) want_php="${a#--php=}" ;;
+        --php)   echo "エラー: --php=8.3 の形で指定してください。" >&2; exit 1 ;;
+        *)       args+=("$a") ;;
+    esac
 done
 set -- ${args[@]+"${args[@]}"}
 
 ver="${1:-}"
 if [ -z "$ver" ]; then
-    echo "使い方: bin/upgrade.sh <制約> [--prod]   例: ~4.3.2"
+    echo "使い方: bin/upgrade.sh <制約> [--prod] [--php=<版>]   例: ~4.3.2 / 4.4.x-dev --php=8.5"
     echo "  データを保ったままバージョンを上げます。"
     echo "  データごと作り直したい場合は bin/switch-version.sh を使ってください。"
     exit 1
@@ -59,6 +64,27 @@ series="$(image_series "$ver")"
 # switch-version.sh は以前からこれをやっているが、マイナーをまたぐのは
 # 運用中の環境を上げる upgrade.sh の方なので、影響はこちらの方が大きい。
 redis_ver="$(image_phpredis_for_series "$series")"
+
+# PHP。**.env を書き換える前に**、上げた先の系列で使えるかを確かめる（使えない版で数分 build して
+# から落ちる、配布イメージなら存在しないタグを pull して落ちる、を避ける）。
+# いまの PHP は動いているイメージから読む（.env の PHP_VERSION は build にしか使われず、
+# 配布イメージではタグが正なので、どちらも実物とずれうる）。
+current_php="$(grep -E '^PHP_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
+had_php_key=0; grep -qE '^PHP_VERSION=' .env 2>/dev/null && had_php_key=1
+cid_now="$(docker compose ps -q ec-cube 2>/dev/null | head -1 || true)"
+running_php=""
+[ -n "$cid_now" ] && running_php="$(image_php_of_container "$cid_now")"
+# 実物を先に見る。配布イメージの -php 無しの固定タグ（4.3-v1.0.12）は、タグからは PHP が分からない
+if [ -n "$running_php" ]; then
+    base_php="$running_php"
+elif [ -n "$current_image" ] && image_uses_registry; then
+    # 固定の短いタグはタグから読めない（空）。そのときは .env の値（無ければ既定へ寄る）
+    base_php="$(image_ref_php "$current_image")"
+    base_php="${base_php:-$current_php}"
+else
+    base_php="$current_php"
+fi
+php_ver="$(image_resolve_php "$series" "$want_php" "$base_php")" || exit 1
 
 # compose のプロジェクト名（ボリューム名の接頭辞）。COMPOSE_PROJECT_NAME や
 # compose.yaml の name: を compose 自身に解決させる。
@@ -125,8 +151,8 @@ fi
 
 cat <<EOS
 [upgrade] EC-CUBE をバージョンアップします。
-          現在: ${current:-(未設定)}
-          変更後: ${ver}
+          現在: ${current:-(未設定)}（PHP ${running_php:-${base_php:-?}}）
+          変更後: ${ver}（PHP ${php_ver}）
 
   残るもの : DB(${db_vol}) / アップロード画像(${proj}_eccube_upload)
              app/Customize・app/template・app/Plugin など bind-mount 一式
@@ -167,6 +193,16 @@ restore_env() {
         sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${current_image}|" .env > "$tmp" && mv "$tmp" .env
         echo "[upgrade] .env の ECCUBE_IMAGE を ${current_image} へ戻しました。" >&2
     fi
+    # 元から行が無かったなら、足した行を消す（値だけ戻すと、無かったものが残る）
+    if [ "$had_php_key" = 0 ]; then
+        tmp="$(mktemp)"
+        grep -vE '^PHP_VERSION=' .env > "$tmp" || true
+        mv "$tmp" .env
+    elif [ "$current_php" != "$php_ver" ]; then
+        tmp="$(mktemp)"
+        sed "s|^PHP_VERSION=.*|PHP_VERSION=${current_php}|" .env > "$tmp" && mv "$tmp" .env
+        echo "[upgrade] .env の PHP_VERSION を ${current_php} へ戻しました。" >&2
+    fi
 }
 if grep -qE '^ECCUBE_VERSION=' .env 2>/dev/null; then
     tmp="$(mktemp)"
@@ -177,6 +213,17 @@ fi
 
 if [ "$redis_ver" != "$current_redis" ]; then
     echo "[upgrade] phpredis を ${redis_ver} に合わせます（EC-CUBE ${series} 系向け）。"
+fi
+# PHP_VERSION は手元で build するときに使う。配布イメージでもタグと揃えておく
+# （あとで ECCUBE_IMAGE を外して build に切り替えたとき、古い PHP で焼かないため）。
+if [ "$php_ver" != "$current_php" ]; then
+    echo "[upgrade] PHP を ${php_ver} にします。"
+fi
+if grep -qE '^PHP_VERSION=' .env 2>/dev/null; then
+    tmp="$(mktemp)"
+    sed "s|^PHP_VERSION=.*|PHP_VERSION=${php_ver}|" .env > "$tmp" && mv "$tmp" .env
+else
+    echo "PHP_VERSION=${php_ver}" >> .env
 fi
 if grep -qE '^PHPREDIS_VERSION=' .env 2>/dev/null; then
     tmp="$(mktemp)"
@@ -190,7 +237,9 @@ fi
 #     **動くのは古い系列のイメージのまま**になる。build しないので
 #     ECCUBE_VERSION は誰にも読まれず、食い違いに気づく機会が無い。
 if [ -n "$current_image" ]; then
-    retagged="$(image_retag_series "$current_image" "$series")"
+    # 系列と PHP の両方。-php を残したまま系列だけ変えると、新しい系列に無い PHP の
+    # タグ（4.4-php8.1 など）を指して pull で止まる。
+    retagged="$(image_retag_php "$(image_retag_series "$current_image" "$series")" "$php_ver")"
     if [ "$retagged" != "$current_image" ]; then
         tmp="$(mktemp)"
         sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${retagged}|" .env > "$tmp" && mv "$tmp" .env
