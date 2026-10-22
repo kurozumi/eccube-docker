@@ -66,6 +66,10 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   追跡タグ（`4.3` / `4.3-php8.3`）と日付タグ（`4.3-20260907`）だけ動かし、`-vX.Y.Z` は
   「そのリリースの時点」として不変。**本番の推奨は追跡タグ + `bin/deploy.sh`**
   （PHP のパッチに `upgrade.sh` は要らない。PHP は `eccube_app` ボリュームの外）。
+  **`deploy.sh` はイメージを ID で比べる。タグ名で比べない。** 追跡タグは焼き直しても名前が
+  変わらないので、v1.0.12 まではタグ名の比較で「同じ」と判定し、一度も引き直していなかった
+  （CVE-2026-109618/109619 の緊急焼き直しが届かずに発覚）。ローカル build の環境は焼き直しを
+  受け取れないので `deploy.sh --rebuild`（docs/deploy.md「PHP のパッチを受け取る」）。
   緊急は `workflow_dispatch` の `refresh: true` で当日焼く。
 - **Dockerfile の `apt-get upgrade` を外さない。** 土台の `php:8.1` は EOL で二度と焼き直されず、
   upgrade 無しだと Debian の修正済み CVE が数百件残ったまま毎週配ることになる（v1.0.3 の Trivy）。
