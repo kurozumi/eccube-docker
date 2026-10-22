@@ -152,11 +152,16 @@ image_resolve_php() { # image_resolve_php <系列> <指定（空可）> <いま�
     image_php_for_series "$series"
 }
 
-# 配布イメージの参照の PHP を差し替える。タグは「<系列>[-php<版>][-その他]」の形。
-#   :4.3-php8.1 + 8.3 → :4.3-php8.3
-#   :4.3        + 8.3 → :4.3（8.3 が 4.3 の既定なので短いタグのまま）
-#   :4.3        + 8.2 → :4.3-php8.2
-#   :4.3-php8.2 + 8.3 → :4.3-php8.3（既定でも -php を外さない。明示した人の意図を残す）
+# 配布イメージの参照の PHP を差し替える。タグは「<系列>[-php<版>][-<固定の印>]」の形で、
+# ワークフローは -php 付きと無しの両方に固定の印（-vX.Y.Z / 日付 / sha）を打っている。
+#   :4.3-php8.1        + 8.3 → :4.3-php8.3
+#   :4.3               + 8.3 → :4.3（追跡タグで、8.3 が 4.3 の既定。短いまま）
+#   :4.3               + 8.2 → :4.3-php8.2
+#   :4.3-v1.0.12       + 8.3 → :4.3-php8.3-v1.0.12
+#   :4.3-v1.0.12       + 8.2 → :4.3-php8.2-v1.0.12
+# **固定タグでは -php を必ず明示する。** -php 無しの固定タグが指す PHP は「焼いた時点の既定」で、
+# 既定は動く（4.3 は v1.0.12 まで 8.2、以後 8.3）。いまの既定と同じだからと短いまま残すと、
+# 4.3-v1.0.12（中身は 8.2）を 8.3 のつもりで使い続けることになる。
 # 系列で始まらないタグは触らない（image_retag_series と同じ理由）。
 image_retag_php() { # image_retag_php <参照> <PHP>
     local ref="$1" php="$2" name tag series rest
@@ -175,33 +180,27 @@ image_retag_php() { # image_retag_php <参照> <PHP>
     case "$rest" in
         -php[0-9]*)
             rest="$(printf '%s' "$rest" | sed -E "s/^-php[0-9]+\.[0-9]+/-php${php}/")" ;;
+        "")
+            [ "$php" = "$(image_php_for_series "$series")" ] || rest="-php${php}" ;;
         *)
-            [ "$php" = "$(image_php_for_series "$series")" ] || rest="-php${php}${rest}" ;;
+            rest="-php${php}${rest}" ;;
     esac
     printf '%s:%s%s' "$name" "$series" "$rest"
 }
 
-# 動いているコンテナの PHP（8.3 のような major.minor）を、**イメージの**環境変数から読む。
-# 公式の php イメージは ENV PHP_VERSION=8.3.36 を持つ。コンテナ側の環境変数は見ない
-# （compose の env_file が .env の PHP_VERSION=8.2 を流し込むと、実物と違う値が読めてしまう）。
-# 読めなければ空。
-image_php_of_container() { # image_php_of_container <コンテナ ID>
-    local img
-    img="$(docker inspect --format '{{.Image}}' "$1" 2>/dev/null)" || return 0
-    docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$img" 2>/dev/null |
-        sed -n 's/^PHP_VERSION=\([0-9]*\.[0-9]*\).*/\1/p' | head -1
-}
-
-# 配布イメージの参照から PHP を読む。-php が無ければ系列の既定（短いタグが指すもの）。
-# 系列で始まらないタグは空。
+# 配布イメージの参照から PHP を読む。分からなければ空。
+#   :4.3-php8.1 → 8.1 / :4.3 → 系列の既定 / :4.3-v1.0.12 → 空（焼いた時点の既定は読めない）
+# **当てにするのは、動いているイメージが無いときだけ。** 実物は image_php_of_container で読む。
 image_ref_php() { # image_ref_php <参照>
     local tag series
     case "$1" in *:*) ;; *) return 0 ;; esac
     tag="${1##*:}"
     case "$tag" in [0-9]*.[0-9]*) ;; *) return 0 ;; esac
+    series="$(printf '%s' "$tag" | sed -E 's/^([0-9]+\.[0-9]+).*/\1/')"
     case "$tag" in
         *-php[0-9]*) printf '%s' "$tag" | sed -E 's/.*-php([0-9]+\.[0-9]+).*/\1/' ;;
-        *) series="$(printf '%s' "$tag" | sed -E 's/^([0-9]+\.[0-9]+).*/\1/')"; image_php_for_series "$series" ;;
+        "$series")   image_php_for_series "$series" ;;
+        *)           return 0 ;;
     esac
 }
 

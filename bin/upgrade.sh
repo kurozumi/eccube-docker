@@ -70,13 +70,17 @@ redis_ver="$(image_phpredis_for_series "$series")"
 # いまの PHP は動いているイメージから読む（.env の PHP_VERSION は build にしか使われず、
 # 配布イメージではタグが正なので、どちらも実物とずれうる）。
 current_php="$(grep -E '^PHP_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
+had_php_key=0; grep -qE '^PHP_VERSION=' .env 2>/dev/null && had_php_key=1
 cid_now="$(docker compose ps -q ec-cube 2>/dev/null | head -1 || true)"
 running_php=""
 [ -n "$cid_now" ] && running_php="$(image_php_of_container "$cid_now")"
-if [ -n "$current_image" ] && image_uses_registry; then
+# 実物を先に見る。配布イメージの -php 無しの固定タグ（4.3-v1.0.12）は、タグからは PHP が分からない
+if [ -n "$running_php" ]; then
+    base_php="$running_php"
+elif [ -n "$current_image" ] && image_uses_registry; then
     base_php="$(image_ref_php "$current_image")"
 else
-    base_php="${running_php:-${current_php}}"
+    base_php="$current_php"
 fi
 php_ver="$(image_resolve_php "$series" "$want_php" "$base_php")" || exit 1
 
@@ -187,7 +191,12 @@ restore_env() {
         sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${current_image}|" .env > "$tmp" && mv "$tmp" .env
         echo "[upgrade] .env の ECCUBE_IMAGE を ${current_image} へ戻しました。" >&2
     fi
-    if [ -n "$current_php" ] && [ "$current_php" != "$php_ver" ]; then
+    # 元から行が無かったなら、足した行を消す（値だけ戻すと、無かったものが残る）
+    if [ "$had_php_key" = 0 ]; then
+        tmp="$(mktemp)"
+        grep -vE '^PHP_VERSION=' .env > "$tmp" || true
+        mv "$tmp" .env
+    elif [ "$current_php" != "$php_ver" ]; then
         tmp="$(mktemp)"
         sed "s|^PHP_VERSION=.*|PHP_VERSION=${current_php}|" .env > "$tmp" && mv "$tmp" .env
         echo "[upgrade] .env の PHP_VERSION を ${current_php} へ戻しました。" >&2

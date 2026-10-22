@@ -34,10 +34,17 @@ image_check_version "$ver" "bin/switch-version.sh" || exit 1
 # PHP は**何かを消す前に**決める。使えない組み合わせなら、ここで止まれば何も失わない。
 # 作り直すので「いまの PHP」は .env の値（配布イメージならタグ）でよい。
 current_php="$(grep -E '^PHP_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
-if image_uses_registry; then
-    base_php="$(image_ref_php "$(env_get ECCUBE_IMAGE)")"
-else
-    base_php="$current_php"
+had_php_key=0; grep -qE '^PHP_VERSION=' .env 2>/dev/null && had_php_key=1
+# 実物を先に見る（-php 無しの固定タグはタグから PHP が分からない。upgrade.sh と同じ）
+cid_now="$(docker compose ps -q ec-cube 2>/dev/null | head -1 || true)"
+base_php=""
+[ -n "$cid_now" ] && base_php="$(image_php_of_container "$cid_now")"
+if [ -z "$base_php" ]; then
+    if image_uses_registry; then
+        base_php="$(image_ref_php "$(env_get ECCUBE_IMAGE)")"
+    else
+        base_php="$current_php"
+    fi
 fi
 php_ver="$(image_resolve_php "$(image_series "$ver")" "$want_php" "$base_php")" || exit 1
 echo "[switch] ECCUBE_VERSION=${ver} に切り替えます。既存の DB とアプリのデータは破棄されます。"
@@ -110,7 +117,11 @@ if ! image_provision docker compose; then
         tmp="$(mktemp)"
         sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${current_image}|" .env > "$tmp" && mv "$tmp" .env
     fi
-    if [ -n "$current_php" ]; then
+    if [ "$had_php_key" = 0 ]; then
+        tmp="$(mktemp)"
+        grep -vE '^PHP_VERSION=' .env > "$tmp" || true
+        mv "$tmp" .env
+    else
         tmp="$(mktemp)"
         sed "s|^PHP_VERSION=.*|PHP_VERSION=${current_php}|" .env > "$tmp" && mv "$tmp" .env
     fi
