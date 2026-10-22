@@ -215,7 +215,13 @@ img_running="$(docker inspect --format '{{.Image}}' "$cid" 2>/dev/null || true)"
 if image_uses_registry; then
     log "配布イメージを引き直します: $(image_ref)"
     if ! "${dc[@]}" pull --quiet ec-cube; then
-        # 届かないのは GHCR の障害か回線。コードの反映まで止める理由にはしない
+        # 届かないのは GHCR の障害か回線。手元に同じ参照のイメージがあるなら、コードの反映まで
+        # 止める理由にはしない。**無ければ止める。** そのまま進むと 4. の up -d が compose.yaml の
+        # build: を見て手元で build し、配布物ではないイメージで公開してしまう
+        # （しかもメンテナンス ON のあとで、数分かかってから落ちうる）。
+        docker image inspect "$(image_ref)" >/dev/null 2>&1 \
+            || die "配布イメージ $(image_ref) を取得できず、手元にもありません。何も変えていません。
+       ECCUBE_IMAGE のタグが正しいか、サーバーから ghcr.io に届くかを確かめてください。"
         log "注意: 引き直せませんでした。いま手元にあるイメージのまま進めます。"
     fi
 elif [ "$do_rebuild" = 1 ]; then
@@ -313,7 +319,9 @@ fi
 
 # ── 4. compose / イメージ ──
 log "コンテナを揃えます（compose / .env が同じなら何も起きません）..."
-"${dc[@]}" up -d --remove-orphans >/dev/null 2>&1 || "${dc[@]}" up -d
+# 配布イメージでは build させない。0. で用意したイメージだけを使う（無ければ build せずに落ちる）
+up_opts=(); image_uses_registry && up_opts=(--no-build)
+"${dc[@]}" up -d ${up_opts[@]+"${up_opts[@]}"} --remove-orphans >/dev/null 2>&1 || "${dc[@]}" up -d ${up_opts[@]+"${up_opts[@]}"}
 # 作り直された場合、entrypoint（migrate + cache:clear）が終わるまで待つ
 for i in $(seq 1 60); do
     st="$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q ec-cube)" 2>/dev/null || echo unknown)"
