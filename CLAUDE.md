@@ -193,6 +193,12 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   消す。`opcache.validate_timestamps=Off` のためファイルを更新しても php-fpm は
   古いコンパイル結果を返し続ける。**OPcache は CLI では無効**なので `bin/console`
   からは正常に見え、ブラウザだけ壊れる。`bin/plugin.sh` の各コマンドは両方消す。
+- **EC-CUBE 4.4 のコンパイル済みテンプレートは `var/runtime/<env>/twig` にあり、`cache:clear` は
+  消さない。** 4.4 はキャッシュを `var/build`・`var/cache`・`var/runtime` の 3 か所に分けた。本番モードの
+  Twig は更新を見ないので、**テンプレートを直してもプラグインを更新しても古い画面が出続ける**（例外も
+  出ない）。`bin/plugin.sh`（`clear_twig_runtime`）と entrypoint が `cache:clear` の前に消す。
+  テストも同じで、`bin/test.sh` は `var/runtime/test/twig` も消す。本体の `eccube:cache:build` も
+  ここを消す。
 - **本番モードでは「キャッシュが古い」こと自体はエラーにならない。** ファイルを足しても
   コンパイル済みコンテナには入らないので、**足したサービスやタグだけが例外も 500 も
   出さずに効かない**。実例: 承認対象を決めるタグ付きサービスを1つ足したのに古い並びが

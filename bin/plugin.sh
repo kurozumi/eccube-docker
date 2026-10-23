@@ -137,6 +137,23 @@ prepare_plugin_command() {
 #
 # メモリ上限は既定の 1G を使う。プラグインを何十個も入れると warmup は重く、
 # php.ini の memory_limit（既定 256M）では足りない。変えたいときは
+# EC-CUBE 4.4 のコンパイル済みテンプレート（var/runtime/<env>/twig）を消す。
+#
+# 4.4 はキャッシュを 3 か所に分けた（var/build・var/cache・var/runtime）。Twig の
+# 実行時キャッシュは var/runtime にあり、**cache:clear はここを消さない。**
+# 本番モードは Twig が更新を見ない（auto_reload が切れる）ので、テンプレートを
+# 直しても、プラグインを更新しても、**画面は古いテンプレートのまま出続ける。**
+# 例外も出ない。実際に、reload の後もトップページが前日のテンプレートで出ていた。
+#
+# 本体の eccube:cache:build もここを消すが、コンパイル済みコンテナの置き場所を
+# 入れ替える仕組みで、この環境の手順と噛み合うかは確かめていない。ここでは
+# 消すだけにして、組み立ては cache:clear に任せる。消したものはリクエストの
+# たびに作り直される（管理画面のキャッシュ管理と同じ動き）。
+# 4.3 以前にはこのディレクトリが無いので、何もしない。
+clear_twig_runtime() {
+    docker compose exec -T ec-cube sh -c 'rm -rf /var/www/html/var/runtime/*/twig' >/dev/null 2>&1 || true
+}
+
 # PLUGIN_CACHE_MEMORY_LIMIT で上書きする。
 #
 # **進捗を出す。** 出力をコマンド置換で抱え込むと、終わるまで画面が沈黙する。
@@ -153,6 +170,9 @@ warm_cache() {
     log=$(mktemp)
 
     echo "[plugin] キャッシュを組み立てています（数分かかることがあります。止めないでください）"
+
+    # コンパイル済みのテンプレートも作り直させる（cache:clear は消さない。clear_twig_runtime）
+    clear_twig_runtime
 
     if docker compose exec -T ec-cube runuser -u www-data -- \
             php -d memory_limit="$limit" bin/console cache:clear --no-interaction >"$log" 2>&1; then
