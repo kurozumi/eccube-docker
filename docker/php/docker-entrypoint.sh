@@ -208,6 +208,13 @@ done
 #    「app ロール（ECCUBE_SKIP_DB_INIT=1）」はスキーマに触らず cache:clear だけ行う
 #    （全 app ホストが一斉に migrate すると競合するため）。単一ホストなら未設定でよい。
 MARKER="$APP_DIR/var/.eccube_installed"
+# EC-CUBE 4.4 のコンパイル済みテンプレート（var/runtime/<env>/twig）は cache:clear が
+# 消さない。本番モードの Twig は更新を見ないので、残すとテンプレートを直しても
+# 古い画面が出続ける（bin/plugin.sh の clear_twig_runtime と同じ理由）。
+# cache:clear の直前に消す。4.3 以前にはこのディレクトリが無い。
+clear_twig_runtime() {
+    rm -rf "$APP_DIR"/var/runtime/*/twig 2>/dev/null || true
+}
 # ECCUBE_SKIP_CACHE_CLEAR=1: cache:clear もスキップする。
 # 同一ホストで --scale する際、レプリカは同じ eccube_app ボリューム（var/cache）を
 # 共有するため、追加レプリカの cache:clear が稼働中レプリカのコンパイル済み
@@ -217,12 +224,14 @@ if [ "${ECCUBE_SKIP_DB_INIT:-0}" = "1" ]; then
         log "scale レプリカ: DB 初期化・cache:clear ともスキップ"
     else
         log "app ロール: DB 初期化/マイグレーションをスキップ（cache:clear のみ）"
+        clear_twig_runtime
         runuser -u www-data -- php bin/console cache:clear --no-interaction || true
     fi
 elif [ ! -f "$MARKER" ]; then
     log "eccube:install（初回セットアップ）"
     if runuser -u www-data -- php bin/console eccube:install --no-interaction; then
         runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true
+        clear_twig_runtime
         runuser -u www-data -- php bin/console cache:clear --no-interaction || true
         touch "$MARKER"
         log "セットアップ完了"
@@ -238,6 +247,7 @@ else
     runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true
     # bind-mount した app/config・app/Customize の変更を prod のコンパイル済み
     # コンテナへ反映するため、毎起動でキャッシュを作り直す（dev では無害）。
+    clear_twig_runtime
     runuser -u www-data -- php bin/console cache:clear --no-interaction || true
 fi
 

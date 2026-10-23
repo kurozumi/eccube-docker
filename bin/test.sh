@@ -194,7 +194,8 @@ docker compose exec -T -u www-data ec-cube sh -c '
     if [ -f "$stamp" ] && find /var/www/html/app/Plugin /var/www/html/app/template /var/www/html/app/Customize \
             -type f -name "*.twig" -not -path "*/vendor/*" -newer "$stamp" -print -quit 2>/dev/null | grep -q .; then
         echo "[test] 前回より新しいテンプレートがあります。コンパイル済みのテンプレートを消します。"
-        rm -rf /var/www/html/var/cache/test/twig
+        # 4.4 は var/runtime/test/twig（4.3 以前は var/cache/test/twig）
+        rm -rf /var/www/html/var/cache/test/twig /var/www/html/var/runtime/test/twig
     fi
     [ -d /var/www/html/var/cache/test ] && touch "$stamp" 2>/dev/null || true
 ' 2>/dev/null || true
