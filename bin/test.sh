@@ -118,9 +118,18 @@ fi
 #    Symfony が DI を通さず new している合図で、コードではなくキャッシュが原因。
 #    cache:clear を何度打っても直らないので、ここで見つけて消す。
 #    Tests 配下はコンテナに入らないので、変更を見ても作り直さない（毎回20秒損する）。
+#
+#    **EC-CUBE 4.4 はコンテナを var/build/test に置く**（4.3 以前は var/cache/test）。
+#    4.3 の場所だけを見ていた頃は、4.4 ではコンテナが「無い」ことになって比べず、
+#    消すのも var/cache/test だけで、古いコンテナがそのまま使われ続けた。
+#    両方の場所を探し、消すときは 3 か所とも消す（clear_test_build）。
+clear_test_build() {
+    docker compose exec -T ec-cube rm -rf /var/www/html/var/cache/test /var/www/html/var/build/test /var/www/html/var/runtime/test
+}
+
 stale="$(docker compose exec -T ec-cube sh -c '
-    c=/var/www/html/var/cache/test/Eccube_KernelTestContainer.php
-    [ -f "$c" ] || exit 0
+    c=$(find /var/www/html/var/build/test /var/www/html/var/cache/test -maxdepth 2 -name Eccube_KernelTestContainer.php 2>/dev/null | head -1)
+    [ -n "$c" ] || exit 0
     find /var/www/html/app/Plugin /var/www/html/app/Customize \
         -type f \( -name "*.php" -o -name "*.yaml" -o -name "*.yml" -o -name "*.xml" \) \
         -not -path "*/Tests/*" -not -path "*/vendor/*" \
@@ -131,8 +140,8 @@ if [ -n "$stale" ]; then
     echo "[test] コンパイル済みのテスト用コンテナより新しいファイルがあります:"
     echo "[test]   ${stale#/var/www/html/}"
     echo "[test] テストは APP_DEBUG=0 で動くため、このコンテナは更新を見ません。"
-    echo "[test] var/cache/test を消して作り直します。"
-    docker compose exec -T ec-cube rm -rf /var/www/html/var/cache/test
+    echo "[test] テスト用のキャッシュ（var/cache・var/build・var/runtime の test）を消して作り直します。"
+    clear_test_build
 fi
 
 # 4.7) 有効なプラグインの構成が変わっていないか。
@@ -173,7 +182,7 @@ if [ -n "$codes" ]; then
             echo "[test]   前回: ${prev}"
             echo "[test]   今回: ${codes}"
             echo "[test] コンテナにはサービスとルートが焼き込まれています。作り直します。"
-            docker compose exec -T ec-cube rm -rf /var/www/html/var/cache/test
+            clear_test_build
         fi
         # **www-data で作る。** root で mkdir すると、テスト実行時に
         # 「Unable to write in the cache directory」でカーネルが起動できない。

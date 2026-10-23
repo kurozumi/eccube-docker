@@ -669,7 +669,19 @@ PHP
     fi
     sleep 2
 
-    base="${ECCUBE_BASE_URL:-http://localhost:8080}"
+    # **見に行く先は、このスタックの nginx が実際に開けているポート。** 既定の 8080 と
+    # 決め打ちすると、同じ機械で別のスタックが 8080 を使っているとき（手元に複数の
+    # 店を並べる・同じサーバーに別のサイトを置く）、**よそのサイトの結果を拾う。**
+    # 実際に、別のデモの 500 をこちらの異常として報告した。本番も 8081 で開けて
+    # いたので、8080 の別サイトを点検していた。ECCUBE_BASE_URL があればそれを使う
+    base="${ECCUBE_BASE_URL:-}"
+    if [ -z "$base" ]; then
+        published="$(docker compose port nginx 80 2>/dev/null | tail -1 || true)"
+        published="${published/0.0.0.0/localhost}"
+        published="${published/\[::\]/localhost}"
+        base="http://${published:-localhost:8080}"
+    fi
+    echo "[doctor] 疎通を確かめる先: ${base}"
     page_ng=0
     for path in / /products/list /entry /admin/login; do
         code="$(curl -s -o /dev/null -w '%{http_code}' "${base}${path}" || echo 000)"
