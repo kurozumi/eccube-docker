@@ -274,6 +274,13 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `auto_maintenance` を自動で立てる。処理が途中で落ちると消されず、フロントだけ
   503「ただいまメンテナンス中です」になる。**管理画面は素通りできるので気づきにくい。**
   `bin/plugin.sh doctor` が自動で解除する（手動で入れたメンテナンスは残す）。
+- **コンテナの中で `bin/console` を root のまま打たない。** `docker compose exec ec-cube php bin/console`
+  は root で走り、その日のログ（`var/log/prod/site-<日付>.log`）やキャッシュを root の持ち物で作る。
+  php-fpm（www-data）はそこへ書けないので、**エラーをログに書こうとしたリクエストだけが 500 になり、
+  そのログも残らない。** 失敗したときだけ落ちるので、プラグインの不具合に見える（業務の自動化の
+  「手で試す → 実際に送る」で実際に取り違えた）。`bin/console.sh` か `runuser -u www-data --` を使う。
+  起動時は entrypoint が `var` を直し、動いている間にできたものは `bin/plugin.sh` の
+  reload / doctor（`clean_leftovers`）が直す。
 - **プラグインが勝手に無効へ落ちることがある。** 中断した操作の巻き添えで
   `dtb_plugin.enabled` が 0 になる。無効になっただけでは表向き何も起きないが、
   Doctrine のメタデータに拡張プロパティが残ったままだと
