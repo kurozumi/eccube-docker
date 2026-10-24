@@ -205,6 +205,15 @@ warm_cache() {
 # 2) var/cache/.!!xxxx
 #    cache:clear が旧ディレクトリをこの名前に改名してから消す。消し損ねると
 #    たまり続ける。実際に14個・85MB 残っていた。
+#
+# 3) var/ の中の root が持つファイル
+#    `docker compose exec ec-cube php bin/console ...` を root のまま打つと、その日の
+#    ログ（var/log/prod/site-<日付>.log）やキャッシュが root の持ち物で作られる。
+#    php-fpm（www-data）はそこへ書けないので、**エラーをログに書こうとした
+#    リクエストだけが 500 になり、そのログも残らない。** 失敗したときだけ落ちるので
+#    プラグインの不具合に見える（実際に取り違えた）。起動時は entrypoint が直すが、
+#    動いている間に作られたものは次の起動まで残る。
+#
 # clean_leftovers [--with-deploy]
 #   auto_maintenance … 本体がプラグイン操作で自動で立てたもの → いつでも解除する
 #   deploy:          … bin/deploy.sh が立てたもの → **doctor のときだけ**解除する
@@ -220,6 +229,12 @@ clean_leftovers() {
             echo "[plugin] 中断した操作のメンテナンス表示を解除しました"
         fi
         rm -rf /var/www/html/var/cache/.!!* 2>/dev/null || true
+        bad="$(find /var/www/html/var -xdev ! -user www-data 2>/dev/null | head -n 1)"
+        if [ -n "$bad" ]; then
+            chown -R www-data:www-data /var/www/html/var 2>/dev/null || true
+            echo "[plugin] var/ に www-data 以外が持つファイルがあったので直しました（例: ${bad#/var/www/html/}）"
+            echo "[plugin]   bin/console はコンテナの中で root のまま打たず、bin/console.sh を使ってください"
+        fi
     ' 2>/dev/null || true
 }
 
