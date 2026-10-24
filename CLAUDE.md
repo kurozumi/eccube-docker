@@ -257,6 +257,16 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **失敗は握りつぶさない。** 4.4 の `schema-update` は**エンティティを1つも持たない
   プラグインでも 0 を返す**ので、非ゼロは接続不良・マイグレーションの SQL エラー・
   ロックといった本物の異常だけ。握ると列が無いまま「完了」と表示することになる。
+- **プラグインを入れ替えると、列のデータが別のプラグインへ移ることがある（4.4。止めてある）。**
+  本体の `SchemaService::updateSchema` は Doctrine DBAL 4 の比較器を既定のまま使い、同じテーブルで
+  「無効にしたプラグインの列が消える」と「有効にするプラグインの列が増える」が同時に起き、型が
+  同じだと**名前の変更とみなして `CHANGE 古い列 新しい列`** を打つ。データはそのまま移る。
+  実例: 取引先アカウント管理を無効にして営業担当者を有効にしたら、会員の「所属する取引先」の ID が
+  「担当営業」の ID になった。**番号が担当者の ID と重なると外部キーも通り、有効化は成功と出る。**
+  `app/config/eccube/packages/schema_rename_guard.php`（クラスは `lib/`）が `SchemaService` を
+  差し替え、名前の変更の推測だけを切る。`app/Customize` に置かないのは、利用者のもので
+  self-update が届けられないため。**4.2 / 4.3 では本体へそのまま渡す**（Doctrine が古く切る設定が無い）。
+  無効にしたプラグインの列が次のスキーマ更新で消えること自体は本体の挙動のまま。
 - **管理画面（オーナーズストア → プラグイン一覧）から有効化・無効化したら、その直後に
   `bin/plugin.sh reload` を実行する。** 本体の `PluginController` は `cacheUtil->clearCache()`
   しか呼ばず、これは `kernel.terminate` で `cache:clear --no-warmup` を走らせるだけ。
