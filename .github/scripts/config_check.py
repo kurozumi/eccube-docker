@@ -142,7 +142,8 @@ def check_combo(name, files, prod, envf):
 
 
 def check_files():
-    compose = (ROOT / "compose.yaml").read_text()
+    # コメントに書いてあるだけの `${X:?` で通らないよう、コメントを除いてから探す
+    compose = "\n".join(re.sub(r"(^|\s)#.*$", "", l) for l in (ROOT / "compose.yaml").read_text().splitlines())
     for k in ("DB_PASSWORD", "DB_ROOT_PASSWORD", "ECCUBE_AUTH_MAGIC"):
         if not re.search(r"\$\{" + k + r":\?", compose):
             bad("required-secret", "compose.yaml", f"{k} が `:?` で必須になっていない（既定値で黙って立ち上がる。#110）")
@@ -166,14 +167,26 @@ def check_files():
             if h not in c:
                 bad("caddy-headers", "docker/caddy/Caddyfile", f"{h} を付けていない（nginx と揃える）")
         if not re.search(r"respond\s+@denied\s+403", c):
-            bad("caddy-denied", "docker/caddy/Caddyfile", "内部ディレクトリ・ドットファイルを 403 にしていない")
+            bad("caddy-denied", "docker/caddy/Caddyfile", "内部ディレクトリ（/vendor/* など）を 403 にしていない")
+        # ドットファイルは別に見る。`/\.` を含む path_regexp の matcher が、403 で返されていること
+        dot = [m for m in re.findall(r"@(\S+)[ \t]+path_regexp[ \t]+(?:\S+[ \t]+)?(\S+)[ \t]*$", c, re.M) if "/\\." in m[1]]
+        if not any(re.search(r"respond\s+@" + re.escape(name) + r"\s+403", c) for name, _ in dot):
+            bad("caddy-dotfiles", "docker/caddy/Caddyfile", "ドットファイル（どの階層でも）を 403 にしていない（`path_regexp /\\.` + `respond 403`）")
 
 
 def check_trivy():
-    if not TRIVY_JSON or not TRIVY_JSON.exists():
-        warnings.append("- Trivy の設定スキャン（Dockerfile）の結果が無い")
+    if not TRIVY_JSON:
+        warnings.append("- Trivy の設定スキャン（Dockerfile）を渡されていない（手元の実行）")
         return
-    doc = json.loads(TRIVY_JSON.read_text() or "{}")
+    # 渡されたのに無い・空・壊れている = Trivy が落ちた。**「違反なし」にしない**
+    raw = TRIVY_JSON.read_text().strip() if TRIVY_JSON.exists() else ""
+    try:
+        doc = json.loads(raw) if raw else None
+    except json.JSONDecodeError:
+        doc = None
+    if not isinstance(doc, dict):
+        bad("trivy-config", str(TRIVY_JSON), "Trivy の設定スキャンの結果が無い・空・壊れている（スキャンが落ちた）")
+        return
     for res in doc.get("Results") or []:
         for m in res.get("Misconfigurations") or []:
             if m.get("Severity") in ("CRITICAL", "HIGH"):

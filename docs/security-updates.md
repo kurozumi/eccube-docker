@@ -50,7 +50,9 @@ PR のたび  config-check            compose / docker/ を変える PR が決�
 - 要対応にするもの: 保守が終わった版・60 日以内に終わる版・修正版のある CRITICAL / HIGH・点検できなかったイメージ。
 - 配布イメージ（ec-cube）は OS のパッケージだけを見る。`vendor` は EC-CUBE 本体の lock で、こちらでは触らない。
 - **あえて配っている保守終了の版**（例: PHP 8.1。4.2 / 4.3 の対応一覧にあるため）は
-  `.github/security-accept.json` に理由と見直し期限を書いて外す。期限を過ぎると、また挙がる。
+  `.github/security-accept.json` の `accept` に理由と見直し期限を書いて外す。期限を過ぎると、また挙がる。
+- **CVE を 1 件ずつ受け入れる仕組みは無い。** うちの構成で効かない CVE でも、修正版があれば挙がり続ける
+  （その判断は Issue にコメントで残す）。受け入れられるのは保守終了の版（`accept`）と設定の決まりの例外（`config`）だけ。
 
 ### 挙がったときの判断
 
@@ -80,7 +82,7 @@ compose はファイルではなく **`docker compose config` で展開した結
 | `port-bind` | 127.0.0.1 に束縛する。例外は本番の caddy（80/443）と、複数ホストの nginx（LB から） | |
 | `image-tag` | 本番で `latest` や版の無いイメージを使わない | |
 | `secret-scope` | root パスワード・TUNNEL_TOKEN・BACKUP_* を持ち主以外に渡さない。公開層に秘密を渡さない | #107 |
-| `required-secret` | DB_PASSWORD / DB_ROOT_PASSWORD / ECCUBE_AUTH_MAGIC は `:?` で必須 | #110 |
+| `required-secret` | DB_PASSWORD / DB_ROOT_PASSWORD / ECCUBE_AUTH_MAGIC は `:?` で必須（compose.yaml の文字を、コメントを除いて探す。展開後の値からは `:?` が分からないため） | #110 |
 | `nginx-*` / `caddy-*` | Server の版を出さない・ドットファイルを 403・nosniff / X-Frame-Options / Referrer-Policy | |
 | `trivy:*` | Dockerfile の設定スキャン（CRITICAL / HIGH） | |
 
@@ -110,8 +112,10 @@ claude.ai の定期ルーティン（`/schedule`）は作ってあるが、止�
 
 ## 利用者の側
 
-- **追跡タグ（`ECCUBE_IMAGE=…/ec-cube:4.3`）にして `bin/deploy.sh` を回していれば**、PHP・Debian・
-  系列タグのミドルウェアのパッチは、上流が直した翌日に入る。
+- **追跡タグ（`ECCUBE_IMAGE=…/ec-cube:4.3`）にして `bin/deploy.sh` を回していれば**、上流のイメージ
+  （公式の `php:*-fpm-bookworm`・nginx・redis など）に入ったパッチは、翌日に入る。
+  **Debian のパッケージだけが直って、公式の PHP イメージがまだ作り直されていないときは、翌日には入らない。**
+  月曜の全部の焼き直しを待つか、急ぐなら `build-image` を `refresh: true` で手動実行する。
 - `bin/deploy.sh` はミドルウェアも引き直す（`docker compose pull --ignore-buildable`）。以前は ec-cube だけで、
   nginx などは最初に引いた日の版のまま残っていた。
 - 手元で build している環境は `bin/deploy.sh --rebuild`（docs/deploy.md「PHP のパッチを受け取る」）。

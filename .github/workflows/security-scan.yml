@@ -71,7 +71,8 @@ jobs:
       - name: Trivy
         run: |
           mkdir -p trivy
-          docker pull -q "$TRIVY_IMAGE"
+          # 取れなくても止めない。下の docker run が全部落ち、全イメージが「点検できなかった」として報告に出る
+          docker pull -q "$TRIVY_IMAGE" || echo "::warning::Trivy のイメージを取れませんでした"
           i=0
           while read -r img; do
             i=$((i + 1))
@@ -118,6 +119,7 @@ jobs:
         run: |
           label=security-scan
           gh label create "$label" --color B60205 --description "毎日のセキュリティ点検（security-scan.yml）" 2>/dev/null || true
+          gh label create security --color B60205 --description "セキュリティ関連" 2>/dev/null || true
           num="$(gh issue list --label "$label" --state open --json number -q '.[0].number')"
           # 日付の行を除いた中身で比べ、変わった日だけコメントする
           digest="$(tail -n +2 report.md | sha256sum | cut -c1-16)"

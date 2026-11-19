@@ -290,7 +290,10 @@ jobs:
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "$tags" | tr ',' '\n'
 
-      # 土台の digest を控える。翌日の定期実行が上流と比べ、変わっていれば焼き直す
+      # 土台の digest を控え、**その digest で焼く**（PHP_BASE）。タグで焼くと、調べた直後に上流が
+      # 変わったとき、ラベルと中身の土台がずれる。翌日の定期実行はラベルと上流を比べる
+      # （焼き直しは最新リリースの Dockerfile を使うので、PHP_BASE を知らない古い Dockerfile では
+      # 引数が無視され、タグで焼く。そのときだけ数秒のずれがありうる）
       - name: 土台の digest
         id: base
         run: |
@@ -310,6 +313,7 @@ jobs:
             ECCUBE_VERSION=${{ matrix.target.eccube }}
             PHP_VERSION=${{ matrix.target.php }}
             PHPREDIS_VERSION=${{ matrix.target.phpredis }}
+            PHP_BASE=php:${{ matrix.target.php }}-fpm-bookworm@${{ steps.base.outputs.digest }}
           tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.base.name=docker.io/library/php:${{ matrix.target.php }}-fpm-bookworm
