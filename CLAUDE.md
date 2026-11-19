@@ -257,6 +257,13 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **失敗は握りつぶさない。** 4.4 の `schema-update` は**エンティティを1つも持たない
   プラグインでも 0 を返す**ので、非ゼロは接続不良・マイグレーションの SQL エラー・
   ロックといった本物の異常だけ。握ると列が無いまま「完了」と表示することになる。
+- **プラグインをファイルだけ新しくしても DB は追いつかない。** `git -C app/Plugin/<Code> pull` で
+  列を足した版にすると、本体の更新処理（スキーマ更新・`PluginManager::update()`・版の書き換え）を
+  誰も通らず、そのエンティティを読む画面が「Column not found」で 500 になる。`bin/deploy.sh` は
+  migration のあとに `bin/plugin.sh sync` を打つ。**版が変わったものは `eccube:plugin:update`**
+  （スキーマ更新だけでは `update()` で既存の店の設定を引き継ぐプラグインが壊れる）、版は同じで
+  `Entity/` だけ変わったものは schema-update。全部に打たないのは 1 個 7 秒かかるから
+  （指紋は `var/plugin-sync/`）。
 - **管理画面（オーナーズストア → プラグイン一覧）から有効化・無効化したら、その直後に
   `bin/plugin.sh reload` を実行する。** 本体の `PluginController` は `cacheUtil->clearCache()`
   しか呼ばず、これは `kernel.terminate` で `cache:clear --no-warmup` を走らせるだけ。
@@ -391,7 +398,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 
 ```bash
 bin/init.sh                    # 初回セットアップ
-bin/deploy.sh                  # 自分のコードを反映。退避→メンテ ON→pull→migration→proxy→
+bin/deploy.sh                  # 自分のコードを反映。退避→メンテ ON→pull→migration→プラグインDB→proxy→
                                # キャッシュ→疎通→OFF。失敗したら ON のまま止まる（壊れた画面を出さない）
 bin/self-update.sh             # この環境自体を新しいリリースへ（--check で確認だけ）
 bin/upgrade.sh ~4.3.2          # バージョンアップ（データ保持・運用環境向け）
@@ -417,6 +424,7 @@ bin/test.sh app/Plugin/Foo/Tests  # パス指定でプラグインのテスト�
 bin/plugin.sh add git@github.com:you/MyPlugin.git   # clone→install→enable
 bin/plugin.sh list                                  # 導入状況（enabled/version）
 bin/plugin.sh reload                                # PHP/config 変更後のキャッシュ一掃
+bin/plugin.sh sync                                  # ファイルだけ新しいプラグインの DB を追いつかせる（deploy が呼ぶ）
 bin/plugin.sh watch                                 # 変更を見張って自動で reload
 bin/plugin.sh doctor                                # システムエラー時の点検と修復
 docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin:generate <Name>

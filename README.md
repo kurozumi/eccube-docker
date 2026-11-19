@@ -124,7 +124,7 @@ bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
 bin/init.sh --image=<タグ> # 初回。--image で配布イメージを引く（数十秒。PHP はタグで選ぶ）
 bin/setup.sh mail|db|tunnel|backup   # 質問に答えて設定（先に試してから .env に書く）
 bin/bootstrap-server.sh user@host /srv/myshop  # サーバーを整える（Docker を入れ、ファイルを送り .env を作る）
-bin/deploy.sh              # 自分のコードを反映（退避→メンテ ON→pull→migration→proxy→キャッシュ→確認→OFF）
+bin/deploy.sh              # 自分のコードを反映（退避→メンテ ON→pull→migration→プラグインDB→proxy→キャッシュ→確認→OFF）
 bin/console.sh <cmd>       # コンテナの中で bin/console を実行（www-data 固定）
 bin/shell.sh               # コンテナの中に入る（www-data 固定。--root で root）
 bin/plugin.sh reload       # PHP / 設定を触ったあとのキャッシュ一掃

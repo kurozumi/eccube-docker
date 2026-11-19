@@ -9,6 +9,8 @@
 #   bin/plugin.sh install <Code>        既に app/Plugin/<Code> にある物を install → enable
 #   bin/plugin.sh update <Code>         git pull → plugin:update/schema-update → cache:clear
 #   bin/plugin.sh reload                キャッシュ一掃（PHP/config/twig を編集したら実行）
+#   bin/plugin.sh sync                  ファイルだけ新しくなったプラグインの DB を追いつかせる
+#                                       （版が変わった → 本体の更新処理、エンティティだけ変わった → スキーマ更新）
 #   bin/plugin.sh watch [秒]            変更を見張って自動で reload（既定 2 秒間隔）
 #   bin/plugin.sh enable  <Code>
 #   bin/plugin.sh disable <Code>
@@ -393,6 +395,96 @@ case "$cmd" in
   reload)
     settle
     echo "[plugin] キャッシュを消して温め直しました（var/cache・キャッシュプール・OPcache）"
+    ;;
+
+  # ファイルだけ新しくなったプラグインを、DB に追いつかせる（bin/deploy.sh が呼ぶ）。
+  #
+  # **プラグインのファイルを git pull や rsync で差し替えただけでは、DB は古いまま。**
+  # 新しい版が列やテーブルを足していると、そのエンティティを読む画面が
+  # 「Column not found」で 500 になる（会員グループの設定のように毎リクエスト読むものなら
+  # 全ページ）。オーナーズストアや bin/plugin.sh update は本体の更新処理を通るので
+  # 起きないが、`git -C app/Plugin/<Code> pull` → bin/deploy.sh の経路では、
+  # 誰もスキーマを更新しない。deploy は疎通確認で止まり、メンテナンス表示のまま残る。
+  #
+  # 有効なプラグインごとに、次のどちらかだけを打つ（何もなければ何もしない）:
+  #   - composer.json の version が dtb_plugin.version と違う
+  #       → eccube:plugin:update。ストアから更新したのと同じ処理（スキーマ更新・
+  #         PluginManager::update()・版の書き換え）。update() で既存の店の設定を
+  #         引き継ぐプラグインがあるので、スキーマ更新だけでは足りない
+  #   - 版は同じだが Entity/ の中身が前回から変わった（開発中など）
+  #       → eccube:plugin:schema-update
+  # 全部に打たないのは、1 回 7 秒ほどかかり、何十個も入れた店ではメンテナンスが
+  # 数分延びるから。Entity/ の指紋は var/plugin-sync/<Code>.entity に残す。
+  # **指紋がまだ無いプラグインは記録するだけ**（版の比べは初回からする）。全部に打つと、
+  # これを入れて最初のデプロイだけメンテナンスが 10 分続いた（4.3・39 個で実測）。
+  # 版を上げずにエンティティだけ変えるのは開発中の話で、そこは 2 回目から拾える。
+  #
+  # キャッシュの組み立てはしない（呼んだ側が最後にまとめてやる。単体で打ったときは
+  # 何か打った場合だけ組み立てる）。**組み立てより前に打つこと**（schema_update の注記）。
+  sync)
+    rows="$(docker compose exec -T ec-cube php <<'PHP'
+<?php
+// 有効なプラグインの「code / DB の版 / ファイルの版 / Entity の指紋」をタブ区切りで出す
+$dsn = getenv('DATABASE_URL');
+$u = $dsn ? parse_url($dsn) : false;
+if (!$u) { fwrite(STDERR, "DATABASE_URL が読めません\n"); exit(1); }
+$pg = in_array($u['scheme'] ?? '', ['postgresql', 'postgres', 'pgsql'], true);
+$pdo = new PDO(
+    sprintf('%s:host=%s;port=%d;dbname=%s', $pg ? 'pgsql' : 'mysql', $u['host'], $u['port'] ?? ($pg ? 5432 : 3306), ltrim($u['path'] ?? '', '/')),
+    urldecode($u['user'] ?? ''),
+    urldecode($u['pass'] ?? ''),
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+);
+// PostgreSQL では enabled が boolean なので `= 1` は型エラーになる。TRUE は両方で通る
+foreach ($pdo->query('SELECT code, version FROM dtb_plugin WHERE enabled = TRUE ORDER BY code') as $r) {
+    $dir = '/var/www/html/app/Plugin/'.$r['code'];
+    $json = @json_decode((string) @file_get_contents($dir.'/composer.json'), true);
+    $files = [];
+    if (is_dir($dir.'/Entity')) {
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir.'/Entity', FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $f) {
+            if ($f->isFile()) {
+                $files[substr($f->getPathname(), strlen($dir))] = hash_file('sha256', $f->getPathname());
+            }
+        }
+    }
+    ksort($files);
+    printf("%s\t%s\t%s\t%s\n", $r['code'], $r['version'], $json['version'] ?? '', $files ? hash('sha256', serialize($files)) : '-');
+}
+PHP
+)" || die "有効なプラグインの一覧を読めませんでした（DB に繋がっていますか）"
+    mkdir -p var/plugin-sync
+    did=0; prepared=0
+    # 一覧は fd 3 から読む。ループの中の `docker compose exec` は -T でも標準入力を読み尽くすので、
+    # 標準入力から回すと 1 個目を処理したところで残りが消え、黙って 1 個しか追いつかない（実際にそうなった）
+    while IFS=$'\t' read -r code dbver filever ehash <&3; do
+        [ -n "$code" ] || continue
+        if [ ! -d "app/Plugin/$code" ]; then
+            echo "[plugin] 注意: $code は有効ですが app/Plugin/$code がありません（飛ばします。bin/plugin.sh doctor で点検してください）"
+            continue
+        fi
+        stamp="var/plugin-sync/$code.entity"
+        if [ -n "$filever" ] && [ "$filever" != "$dbver" ]; then
+            [ "$prepared" = 1 ] || { prepare_plugin_command; prepared=1; }
+            echo "[plugin] $code: 版が変わりました（${dbver} → ${filever}）。本体の更新処理を流します"
+            if ! ec eccube:plugin:update "$code"; then
+                settle
+                die "eccube:plugin:update が失敗しました（$code）。上のエラーを直してから、もう一度打ってください"
+            fi
+            did=1
+        elif [ "$ehash" != "-" ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" != "$ehash" ]; then
+            [ "$prepared" = 1 ] || { prepare_plugin_command; prepared=1; }
+            echo "[plugin] $code: エンティティが前回から変わりました。スキーマを更新します"
+            schema_update "$code"
+            did=1
+        fi
+        echo "$ehash" > "$stamp"
+    done 3<<< "$(printf '%s\n' "$rows" | tr -d '\r')"
+    if [ "$did" = 0 ]; then
+        echo "[plugin] プラグインの DB は最新です"
+    elif [ "${PLUGIN_SYNC_NO_SETTLE:-0}" != 1 ]; then
+        settle
+    fi
     ;;
 
   # 変更を見張って自動で reload する。
