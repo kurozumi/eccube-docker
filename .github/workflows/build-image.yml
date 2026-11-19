@@ -166,7 +166,7 @@ jobs:
 
       # リリース（タグ push）で、イメージの中身に関わるファイルが前のタグから変わっていなければ
       # 焼かずに名前だけ足す（retag）。それ以外は build。
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.ref_type == 'tag'
         with:
           fetch-depth: 0
@@ -241,17 +241,17 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.setup.outputs.targets) }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.setup.outputs.ref }}
 
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GHCR
         # pull_request では push しないので認証も要らない（fork からの PR で
         # トークンが読み取り専用になり、login 自体が失敗するため）
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -302,7 +302,7 @@ jobs:
           echo "php:${{ matrix.target.php }}-fpm-bookworm = $d"
 
       - name: Build and push
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: docker/php/Dockerfile
@@ -337,7 +337,7 @@ jobs:
       # 数え、Security タブで追う。PR（push しない）では走らない。
       - name: Trivy で脆弱性スキャン
         if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.target.series }}-php${{ matrix.target.php }}-${{ needs.setup.outputs.ref == github.sha && github.sha || needs.setup.outputs.ref }}
           format: sarif
@@ -347,7 +347,7 @@ jobs:
           exit-code: "0"
       - name: 結果を Code scanning へ
         if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3.37.9
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: trivy.sarif
           category: trivy-${{ matrix.target.series }}-php${{ matrix.target.php }}
@@ -367,8 +367,8 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.setup.outputs.matrix) }}
     steps:
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -399,8 +399,8 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.setup.outputs.matrix) }}
     steps:
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
