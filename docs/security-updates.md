@@ -10,7 +10,7 @@ nginx・PHP・DB・Redis などに重大な脆弱性が出たとき、**その�
 04:00 JST  security-scan（毎日） 全イメージを Trivy で調べ、保守期限と Docker の設定も見る → 要対応なら Issue
 PR のたび  config-check            compose / docker/ を変える PR が決まりを破っていたら落とす
 05:00 JST  Dependabot（毎日）    版を固定して書いてあるイメージの版上げ PR
-06:00 JST  Claude ルーティン      Issue と PR を読み、うちの構成で効くかを調べ、直す PR と説明を書く
+           人（必要なら Claude）  Issue と PR を読み、うちの構成で効くかを調べ、直す PR を作る
            人                    PR を見てマージ → 必要ならリリース
 利用者     bin/deploy.sh          配布イメージもミドルウェアも引き直し、変わったものだけ作り直す
 ```
@@ -20,7 +20,7 @@ PR のたび  config-check            compose / docker/ を変える PR が決�
 | 見つける | GitHub Actions | `.github/workflows/security-scan.yml`・`.github/scripts/security_report.py` |
 | 設定を守る | GitHub Actions | `.github/workflows/config-check.yml`・`.github/scripts/config_check.py`（毎日の点検でも走る） |
 | 版上げの PR | Dependabot | `.github/dependabot.yml` |
-| 判断と説明 | Claude のルーティン（クラウドで毎朝） | 下の「ルーティンの指示」 |
+| 判断と説明 | 人。手元の Claude Code に Issue を渡してもよい | 下の「判断を Claude に頼むとき」 |
 | PHP / Debian のパッチを焼く | GitHub Actions | `.github/workflows/build-image.yml` |
 | 利用者のサーバーへ届ける | `bin/deploy.sh` | 「0. イメージ」 |
 | マージ・リリース | **人** | CLAUDE.md の開発フロー |
@@ -40,7 +40,7 @@ PR のたび  config-check            compose / docker/ を変える PR が決�
 - 版を固定して書いてあるもの（`caddy:2.11.4-alpine`・`cloudflared:2026.8.3`）
 - 配布イメージの PHP の版の一覧（`build-image.yml` の matrix と `bin/lib/image.sh`）
 
-これらは Dependabot か Claude のルーティンが PR にし、人がマージしてリリースする。
+これらは Dependabot か人（手元の Claude Code）が PR にし、人がマージしてリリースする。
 リリースしたものは、利用者が `bin/self-update.sh` → `bin/deploy.sh` で受け取る。
 
 ## 点検の Issue（ラベル `security-scan`）
@@ -88,11 +88,14 @@ compose はファイルではなく **`docker compose config` で展開した結
 **決まりの例外は `.github/security-accept.json` の `config` に、理由を付けて書く**（いまは Dockerfile が root で
 終わること。entrypoint が uid を揃えてから www-data に落とすため）。
 
-## Claude のルーティン
+## 判断を Claude に頼むとき
 
-毎朝 06:00 JST にクラウドで動く。止める・変えるのは Claude Code の `/schedule`。
+**自動では動かしていない**（2026-11-19 に決めた）。GitHub Actions で動かすと API の従量課金が要るので採らなかった。
+claude.ai の定期ルーティン（`/schedule`）は作ってあるが、止めてある。点検の Issue が立ったら、手元の Claude Code に
+「security-scan の Issue を見て」と頼めば、下と同じことをする。定期で回したくなったら、ルーティンを
+有効にするだけでよい（**コネクタは付けない**。外の人が書いた文章を毎日読むので、メールや会計に手が届かないように）。
 
-**ルーティンの指示（要約）**
+**頼むときの指示（要約。ルーティンにもこれが入っている）**
 
 1. ラベル `security-scan` の開いた Issue と、Dependabot の開いた PR を読む
 2. 項目ごとに、上の表のどれに当たるかを決める（設定の違反なら、決まりを直すのか例外にするのか）。そのとき `compose*.yaml`・`docker/nginx/*.conf`・
@@ -102,7 +105,7 @@ compose はファイルではなく **`docker compose config` で展開した結
 4. Issue に「今日の判断」をコメントする（前日と同じなら書かない）
 5. **マージしない・main へ push しない・リリースしない・タグを打たない**
 
-**ルーティンにできないこと**: クラウドの環境で Docker が動くとは限らないので、画面が出るかまでは
+**クラウドで動かすときにできないこと**: クラウドの環境で Docker が動くとは限らないので、画面が出るかまでは
 確かめられない。PR の「確かめていないこと」に書かせ、人がマージ前に手元で見る。
 
 ## 利用者の側

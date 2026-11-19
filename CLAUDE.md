@@ -76,7 +76,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   設定の決まり（固め・公開範囲・秘密の渡し方・ヘッダ）は `.github/scripts/config_check.py` が展開後の compose で見て、
   compose / docker/ を変える PR を `config-check.yml` が落とす。**決まりを変えたら、このファイルとあちらを揃える。**
   `security-scan.yml` が全イメージを Trivy と保守期限（endoflife.date）で調べ、要対応ならラベル
-  `security-scan` の Issue を 1 つ開く。Claude のルーティンがそれを読んで PR を作る。**マージとリリースは人。**
+  `security-scan` の Issue を 1 つ開く。判断と PR は人（手元の Claude Code に Issue を渡してよい。定期のルーティンは費用の都合で止めてある）。**マージとリリースは人。**
   **系列タグ（`nginx:1.30-alpine`）は名前が変わらないので、引き直さない限り古いまま。**
   `bin/deploy.sh` は v1.0.16 まで ec-cube しか pull しておらず、nginx は最初に引いた日の版で
   止まっていた。いまは `pull --ignore-buildable` で全部引き直す。
@@ -425,7 +425,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 | `docs/scale.md` | 大規模アクセス、セッション・画像の共有、LB、メールの非同期化 |
 | `docs/monitoring.md` | 監視 |
 | `docs/testing.md` | ユニットテスト |
-| `docs/security-updates.md` | ミドルウェアの脆弱性と Docker の設定の毎日の点検（Trivy・設定の決まり・Dependabot・Claude ルーティン） |
+| `docs/security-updates.md` | ミドルウェアの脆弱性と Docker の設定の毎日の点検（Trivy・設定の決まり・Dependabot） |
 | `docs/ide.md` | PhpStorm の設定 |
 
 ## よく使う操作
