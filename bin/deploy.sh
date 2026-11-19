@@ -36,6 +36,9 @@
 #   3. git pull --ff-only    自分のリポジトリから取り込む。衝突したら何も変えずに OFF して止まる
 #   4. docker compose up -d  compose / .env / イメージが変わっていれば作り直す（同じなら何もしない）
 #   5. migration             app/DoctrineMigrations（CustomizeMigrations）と本体の未適用分
+#   5b. プラグインの DB      ファイルだけ新しくなったプラグインを DB に追いつかせる（bin/plugin.sh sync）。
+#                            版が変わったものは本体の更新処理、エンティティだけ変わったものはスキーマ更新。
+#                            打たないと、列を足した版で画面が「Column not found」の 500 になる
 #   6. proxy の生成          エンティティ拡張（プラグインのトレイト）を反映
 #   7. キャッシュ            プール → OPcache → warmup（bin/plugin.sh reload と同じ）
 #   8. 疎通確認             落ちていれば **OFF にしない。** 壊れた画面より 503 のほうがまし
@@ -335,6 +338,12 @@ done
 # ── 5. migration ──
 log "migration を適用します..."
 ec php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+
+# ── 5b. プラグインの DB ──
+# `git -C app/Plugin/<Code> pull` などでファイルだけ新しくした版が列やテーブルを足していると、
+# 本体の更新処理を通っていないので DB に無い。キャッシュを組み立てる前にやる（組み立ては列を読む）。
+log "プラグインの DB を確かめます（ファイルだけ新しくなったものがあれば追いつかせます）..."
+PLUGIN_SYNC_NO_SETTLE=1 bin/plugin.sh sync
 
 # ── 6. proxy ──
 log "エンティティ proxy を生成します..."
