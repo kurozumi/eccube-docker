@@ -1,7 +1,7 @@
 <?php
 
 /*
- * プラグインの有効化で、別のプラグインの列のデータが入れ替わるのを止める。
+ * プラグインの有効化・スキーマ更新で、別のプラグインの列のデータが入れ替わる・消えるのを止める。
  * 理由と中身は lib/RenameSafeSchemaService.php。
  *
  * **クラスは lib/ に置き、ここで読み込む。** app/Customize は利用者のもので、
@@ -23,5 +23,6 @@ return static function (ContainerConfigurator $container): void {
         ->set('eccube_docker.rename_safe_schema_service', \EccubeDocker\Schema\RenameSafeSchemaService::class)
         ->decorate(\Eccube\Service\SchemaService::class)
         ->file('%kernel.project_dir%/app/config/eccube/packages/lib/RenameSafeSchemaService.php')
-        ->autowire();
+        ->autowire()
+        ->call('setPluginDir', ['%kernel.project_dir%/app/Plugin']);
 };

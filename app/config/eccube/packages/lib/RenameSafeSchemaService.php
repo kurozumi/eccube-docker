@@ -9,11 +9,16 @@ namespace EccubeDocker\Schema;
 
 use Doctrine\DBAL\Schema\ComparatorConfig;
 use Doctrine\DBAL\Schema\SchemaDiff;
+use Doctrine\DBAL\Schema\TableDiff;
+use Doctrine\ORM\Mapping as ORM;
 use Doctrine\ORM\Tools\SchemaTool;
 use Eccube\Service\SchemaService;
 
 /**
- * プラグインの有効化で、**別のプラグインの列のデータが入れ替わる**のを止める。
+ * プラグインの有効化・スキーマ更新で、**別のプラグインの列のデータが失われる**のを止める（4.4）。
+ * 止めるものは 2 つ。
+ *
+ * ## 1. 名前の変更の推測（データが別の列へ移る）
  *
  * EC-CUBE 4.4 の SchemaService::updateSchema は Doctrine DBAL 4 の比較器を既定のまま
  * 使う。既定では「列の名前が変わった」を推測する。同じテーブルで
@@ -29,14 +34,45 @@ use Eccube\Service\SchemaService;
  * 番号が営業担当者として無かったので外部キーで止まったが、**番号が重なれば止まらず、
  * 会員に別の担当営業が付く。** 所属する取引先も失われる。
  *
- * ここでは名前の変更の推測だけを止める（削除と追加として扱う）。それ以外は本体と同じ。
  * 列の名前を変えるのはマイグレーションの役目で、スキーマ更新が推測してよいものではない。
  *
+ * ## 2. 無効なプラグインの列の削除（データごと消える）
+ *
+ * 有効なプラグインのスキーマ更新（`eccube:plugin:schema-update`・`eccube:plugin:update`・
+ * オーナーズストアの更新）は、**有効なプラグインだけ**から作ったメタデータと DB を比べる
+ * （PluginService::generateProxyAndCallback が findAllEnabled でプロキシを作る）。
+ * 「追加だけ」の saveMode が外すのはテーブルとシーケンスの削除だけで、**列・索引・外部キーの
+ * 削除は残る。** インストール済みで無効のプラグインの列は、メタデータに無いので DROP される。
+ *
+ * 実際に起きたこと（2026-11-19、37 本インストール・全部無効のデモ本番）: `bin/plugin.sh enable`
+ * を 1 本打ち、他のプラグインの列 46 本をデータごと消した。エラーは出ない。消えた側を有効に
+ * した時点で、その列を読む画面が Unknown column で落ちる（本体の enable は列を足さない）。
+ *
+ * そこで saveMode では、**dtb_plugin に載っているプラグインのエンティティが宣言する列**
+ * （とその列に掛かる索引・外部キー）を削除から外す。それ以外は本体と同じに消す:
+ *   - アンインストール中のプラグインは、本体がスキーマ更新の前に dtb_plugin から外す
+ *     （unregisterPlugin が flush する）ので、その列は今までどおり消える
+ *   - プラグインの新しい版が宣言から外した列も消える（どのプラグインも宣言していないため）
+ *
+ * Doctrine のメタデータは有効なプラグインしか知らないので、無効なものはエンティティの
+ * 属性をリフレクションで直接読む。
+ *
  * **EC-CUBE 4.2 / 4.3 では何もしない**（本体の処理へそのまま渡す）。Doctrine が古く、
- * この推測を止める設定が無い。
+ * 名前の変更の推測を止める設定が無い。
  */
 class RenameSafeSchemaService extends SchemaService
 {
+    private ?string $pluginDir = null;
+
+    /**
+     * schema_rename_guard.php が `%kernel.project_dir%/app/Plugin` を渡す。
+     * コンストラクタに足さないのは、4.2 / 4.3 の本体の引数と食い違わせないため。
+     */
+    public function setPluginDir(string $pluginDir): void
+    {
+        $this->pluginDir = $pluginDir;
+    }
+
     /**
      * 引数に型を書かない。4.2 / 4.3 の本体は型の無い宣言なので、型を書くと
      * そちらで読み込んだ瞬間に互換エラーになる。
@@ -69,7 +105,8 @@ class RenameSafeSchemaService extends SchemaService
 
     /**
      * 打つ SQL を作る（打たない）。本体の updateSchema と同じ組み立てで、
-     * 比較器の「名前の変更の推測」だけを切る。
+     * 比較器の「名前の変更の推測」を切り、saveMode ではインストール済みのプラグインの列を
+     * 削除から外す。
      *
      * @param array<mixed> $metaData
      *
@@ -90,12 +127,21 @@ class RenameSafeSchemaService extends SchemaService
         $schemaDiff = $comparator->compareSchemas($fromSchema, $toSchema);
 
         if ($saveMode) {
-            // 本体と同じく、テーブルとシーケンスの削除だけを外す
+            $owned = $this->installedPluginColumns();
+            $altered = [];
+            foreach ($schemaDiff->getAlteredTables() as $key => $tableDiff) {
+                $tableDiff = $this->keepOwnedColumns($tableDiff, $owned);
+                if (!$tableDiff->isEmpty()) {
+                    $altered[$key] = $tableDiff;
+                }
+            }
+
+            // 本体と同じく、テーブルとシーケンスの削除は外す
             $schemaDiff = new SchemaDiff(
                 $schemaDiff->getCreatedSchemas(),
                 $schemaDiff->getDroppedSchemas(),
                 $schemaDiff->getCreatedTables(),
-                $schemaDiff->getAlteredTables(),
+                $altered,
                 [],
                 $schemaDiff->getCreatedSequences(),
                 $schemaDiff->getAlteredSequences(),
@@ -104,6 +150,149 @@ class RenameSafeSchemaService extends SchemaService
         }
 
         return $connection->getDatabasePlatform()->getAlterSchemaSQL($schemaDiff);
+    }
+
+    /**
+     * 列・索引・外部キーの削除のうち、インストール済みのプラグインの列に掛かるものを外す。
+     *
+     * @param array<string, array<string, true>> $owned テーブル => 列 => true（小文字）
+     */
+    private function keepOwnedColumns(TableDiff $diff, array $owned): TableDiff
+    {
+        $table = self::normalize($diff->getOldTable()->getName());
+        $cols = $owned[$table] ?? [];
+        if ([] === $cols) {
+            return $diff;
+        }
+
+        $touches = static function (array $columns) use ($cols): bool {
+            foreach ($columns as $c) {
+                if (isset($cols[self::normalize((string) $c)])) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        $droppedColumns = array_filter(
+            $diff->getDroppedColumns(),
+            static fn ($c) => !isset($cols[self::normalize($c->getName())])
+        );
+        $droppedIndexes = array_filter(
+            $diff->getDroppedIndexes(),
+            static fn ($i) => !$touches($i->getColumns())
+        );
+        $droppedForeignKeys = array_filter(
+            $diff->getDroppedForeignKeys(),
+            static fn ($fk) => !$touches($fk->getLocalColumns())
+        );
+
+        if (count($droppedColumns) === count($diff->getDroppedColumns())
+            && count($droppedIndexes) === count($diff->getDroppedIndexes())
+            && count($droppedForeignKeys) === count($diff->getDroppedForeignKeys())) {
+            return $diff;
+        }
+
+        return new TableDiff(
+            $diff->getOldTable(),
+            $diff->getAddedColumns(),
+            $diff->getChangedColumns(),
+            $droppedColumns,
+            $diff->getAddedIndexes(),
+            $diff->getModifiedIndexes(),
+            $droppedIndexes,
+            $diff->getRenamedIndexes(),
+            $diff->getAddedForeignKeys(),
+            $diff->getModifiedForeignKeys(),
+            $droppedForeignKeys,
+        );
+    }
+
+    /**
+     * dtb_plugin に載っているプラグイン（有効・無効を問わない）のエンティティが宣言する列。
+     *
+     * @return array<string, array<string, true>> テーブル => 列 => true（小文字）
+     */
+    private function installedPluginColumns(): array
+    {
+        if (null === $this->pluginDir) {
+            return [];
+        }
+
+        $codes = $this->entityManager->getConnection()->fetchFirstColumn('SELECT code FROM dtb_plugin');
+        $naming = $this->entityManager->getConfiguration()->getNamingStrategy();
+
+        $attr = static function (\ReflectionClass|\ReflectionProperty $r, string $class): ?array {
+            $a = $r->getAttributes($class, \ReflectionAttribute::IS_INSTANCEOF);
+
+            return $a ? $a[0]->getArguments() : null;
+        };
+        $tableOf = static function (string $class) use ($attr, $naming): string {
+            $t = $attr(new \ReflectionClass($class), ORM\Table::class);
+
+            return $t['name'] ?? $t[0] ?? $naming->classToTableName($class);
+        };
+
+        $owned = [];
+        foreach ($codes as $code) {
+            $dir = $this->pluginDir.'/'.$code.'/Entity';
+            if (!is_dir($dir)) {
+                continue;
+            }
+            $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
+            foreach ($files as $file) {
+                if ('php' !== $file->getExtension()) {
+                    continue;
+                }
+                $class = 'Plugin\\'.$code.'\\Entity\\'.str_replace('/', '\\', substr($file->getPathname(), strlen($dir) + 1, -4));
+
+                // 読めないものは守れないだけで、本体の挙動（消す）に戻る。スキーマ更新自体は止めない
+                try {
+                    if (!class_exists($class) && !trait_exists($class)) {
+                        continue;
+                    }
+                    $r = new \ReflectionClass($class);
+
+                    $table = null;
+                    foreach ($r->getAttributes() as $a) {
+                        if (str_ends_with($a->getName(), '\\EntityExtension')) {
+                            $args = $a->getArguments();
+                            $table = $tableOf($args[0] ?? $args['value']);
+                        }
+                    }
+                    if (null === $table && $r->getAttributes(ORM\Entity::class)) {
+                        $table = $tableOf($class);
+                    }
+                    if (null === $table) {
+                        continue;
+                    }
+                    $table = self::normalize($table);
+
+                    foreach ($r->getProperties() as $p) {
+                        if (!$r->isTrait() && $p->getDeclaringClass()->getName() !== $class) {
+                            continue;
+                        }
+                        if (null !== ($c = $attr($p, ORM\Column::class))) {
+                            $owned[$table][self::normalize($c['name'] ?? $naming->propertyToColumnName($p->getName(), $class))] = true;
+                        }
+                        if ($p->getAttributes(ORM\ManyToOne::class) || $p->getAttributes(ORM\OneToOne::class)) {
+                            $j = $attr($p, ORM\JoinColumn::class);
+                            $owned[$table][self::normalize($j['name'] ?? $naming->joinColumnName($p->getName(), $class))] = true;
+                        }
+                    }
+                } catch (\Throwable) {
+                    continue;
+                }
+            }
+        }
+
+        return $owned;
+    }
+
+    private static function normalize(string $name): string
+    {
+        return strtolower(trim($name, '`"[]'));
     }
 
     /**
