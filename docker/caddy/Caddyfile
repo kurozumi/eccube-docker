@@ -5,9 +5,26 @@
 	root * /var/www/html
 	encode gzip zstd
 
-	# アプリ内部ディレクトリ・ドットファイルへの直接アクセスを禁止
-	@denied path /var/* /tests/* /test/* /vendor/* /app/* /src/* /bin/* /.*
+	# nginx（docker/nginx/default.conf）と同じヘッダ。Server ヘッダは消す（版が外に出る）。
+	# defer: PHP（php_fastcgi）が返すヘッダにも、書き出す直前に効かせる
+	header {
+		defer
+		-Server
+		-X-Powered-By
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	# アプリ内部ディレクトリ・ドットファイルへの直接アクセスを禁止。
+	# ドットファイルはどの階層でも（/foo/.git も）。nginx の `location ~ /\.` と同じ
+	@denied {
+		path /var/* /tests/* /test/* /vendor/* /app/* /src/* /bin/*
+	}
+	@dotfiles path_regexp /\.
 	respond @denied 403
+	respond @dotfiles 403
 
 	php_fastcgi ec-cube:9000
 	file_server

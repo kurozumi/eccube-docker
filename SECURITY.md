@@ -40,7 +40,7 @@
   この環境は本体を一切改変しておらず、ビルド時に Packagist から取っています。
   本体のパッチが出たら、この環境では `bin/upgrade.sh` で当てられます
 - **PHP / Debian / MariaDB / PostgreSQL / Redis** のイメージ自体の脆弱性 → 各上流へ。
-  この環境のイメージは**毎週月曜に土台から焼き直し**、OS と PHP のパッチを取り込みます。
+  この環境のイメージは**土台の PHP イメージが変わった日に焼き直し（月曜は全部）**、OS と PHP のパッチを取り込みます。
   重大なものは `build-image.yml` の手動実行（`refresh: true`）で当日焼きます
 - 利用者が `app/Customize` / `app/Plugin` / `app/template` に置いたコードとプラグイン
 - 利用者のサーバーの設定（SSH、ファイアウォール、`.env` の管理）

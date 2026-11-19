@@ -135,7 +135,7 @@ PHP と Debian のパッチはイメージの側に入る（EC-CUBE 本体のボ
 
 | `.env` の `ECCUBE_IMAGE` | パッチが入る契機 | やること |
 |---|---|---|
-| 追跡タグ（`…/ec-cube:4.3`） | 毎週月曜の焼き直し（緊急時は当日） | `bin/deploy.sh` を打つ。毎回引き直し、イメージが新しければ作り直す |
+| 追跡タグ（`…/ec-cube:4.3`） | 土台が変わった翌朝の焼き直し（月曜は全部。緊急時は当日） | `bin/deploy.sh` を打つ。毎回引き直し、イメージが新しければ作り直す |
 | 日付タグ・`-vX.Y.Z` | 入らない（固定のため） | タグを新しいものへ書き換えて `bin/deploy.sh` |
 | 無し（手元で build） | **作り直したときだけ** | `bin/deploy.sh --rebuild`（土台を引き直して build。数分） |
 
@@ -146,6 +146,10 @@ PHP と Debian のパッチはイメージの側に入る（EC-CUBE 本体のボ
 # 毎週月曜 04:00（配布イメージの焼き直しの 1 時間後）。本番は CONFIRM_DEPLOY が要る
 0 4 * * 1 cd /srv/myshop && CONFIRM_DEPLOY=myshop bin/deploy.sh --no-pull --rebuild >> var/rebuild.log 2>&1
 ```
+
+**nginx / redis / DB などのミドルウェアも毎回引き直す**（`docker compose pull --ignore-buildable`）。`up -d` は
+同じ名前のイメージが手元にあると取りに行かないので、`nginx:1.30-alpine` のような系列タグは引き直さない限り
+最初の日の版のまま残る（docs/security-updates.md）。
 
 build（配布イメージなら pull）はメンテナンス表示より**前**に走るので、その数分は古いサイトのまま
 動く。メンテナンス表示になるのはそのあとで、退避・コンテナの作り直し・migration・プラグインの DB の追いつき・proxy の生成・

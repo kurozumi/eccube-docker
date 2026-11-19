@@ -1,0 +1,59 @@
+# 版上げの PR を自動で作る（docs/security-updates.md）。
+#
+# **見るのは「版を固定して書いてあるもの」。** nginx:1.30-alpine / redis:7-alpine のような系列タグは
+# 上流が作り直すたびに中身が新しくなるので、版上げの PR は要らない（届けるのは bin/deploy.sh の pull）。
+# 系列そのものの乗り換え（1.27 → 1.30 のような、保守が終わったとき）は毎日の点検
+# （security-scan.yml）が挙げる。
+#
+# 版を変数で書いているもの（MariaDB / PostgreSQL の `${..._VERSION:-既定}`、Dockerfile の
+# `php:${PHP_VERSION}-fpm-bookworm`）は Dependabot が読めない。これも点検の保守期限で拾う。
+#
+# **マージは人がやる。** CLAUDE.md の開発フローのとおり。
+version: 2
+updates:
+  # compose の image:（caddy / cloudflared / 開発用の node / mailpit / phpmyadmin など）
+  - package-ecosystem: docker-compose
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Asia/Tokyo
+    labels: [dependencies, security]
+    open-pull-requests-limit: 5
+    ignore:
+      # nginx は奇数のマイナーが mainline。stable（偶数）から mainline へ上げる PR を作らせない。
+      # stable の乗り換えは保守期限の点検で挙がる
+      - dependency-name: nginx
+        update-types: ["version-update:semver-minor"]
+      # DB のメジャー・マイナーは中身の移行を伴う。点検で挙げて人が決める
+      - dependency-name: mariadb
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
+
+  # ワークフローの actions（SHA 固定のまま上げる）
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Asia/Tokyo
+    labels: [dependencies, ci]
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # 独自テーマの scss ビルド（開発用）。frontend/ は利用者のもので self-update では届かないが、
+  # 配布物の初期値としては新しくしておく
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Asia/Tokyo
+    labels: [dependencies]
+    groups:
+      frontend:
+        patterns: ["*"]

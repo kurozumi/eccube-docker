@@ -1,0 +1,141 @@
+# 毎日のセキュリティ点検。使っているイメージ全部の脆弱性と保守期限、Docker の設定を調べ、Issue にまとめる。
+#
+# 見るもの:
+#   - compose*.yaml の `image:`（`${VAR:-既定}` は既定値で）… nginx / redis / DB / caddy / cloudflared / 開発用
+#   - 配布イメージの追跡タグ（<系列>-php<版>）全部 … OS のパッケージだけ（vendor は EC-CUBE 本体の lock）
+#   - 保守期限（endoflife.date）… 終わった版と、60 日以内に終わる版
+#   - Docker の設定（.github/scripts/config_check.py）… compose を展開した結果の固め・公開範囲・秘密の渡し方、
+#     nginx / caddy のヘッダとドットファイル、Dockerfile（Trivy config）。設定を変える PR では config-check.yml が落とす
+#
+# 結果:
+#   - 要対応があれば、ラベル `security-scan` の Issue を 1 つだけ開いて本文を最新にする。
+#     **中身が変わった日だけコメントする**（毎日コメントすると通知が埋もれる）
+#   - 無くなれば、その Issue を閉じる
+#   - 判断（うちの構成で本当に効くか、上流の作り直し待ちか）と PR 作りは Claude のルーティンと人の仕事
+#     （docs/security-updates.md）
+#
+# **点検できなかったイメージは「要対応」に入れる。** 黙って飛ばすと「問題なし」に見える。
+#
+# 受け入れ済み（あえて配っている保守終了の版）は .github/security-accept.json。
+name: security-scan
+
+on:
+  schedule:
+    # 毎日 04:00 JST（= 前日 19:00 UTC）。配布イメージの焼き直し（03:00 JST）のあと
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+  pull_request:
+    types: [opened, reopened]
+    paths:
+      - ".github/workflows/security-scan.yml"
+      - ".github/scripts/security_report.py"
+
+concurrency:
+  group: security-scan
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  # 版と digest で固定（2026-10-21 の 0.76.1）。上げるときは両方書き換える
+  TRIVY_IMAGE: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      actionable: ${{ steps.report.outputs.actionable }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: 点検するイメージを集める
+        run: |
+          # 系列の一覧は bin/lib/image.sh の image_php_versions_for_series が持っている（build-image.yml の matrix と揃っている前提）
+          # shellcheck disable=SC1091
+          source bin/lib/image.sh
+          {
+            grep -hE '^[[:space:]]*image:' compose*.yaml \
+              | sed -E 's/^[[:space:]]*image:[[:space:]]*//; s/\$\{[A-Za-z_]+:-([^}]*)\}/\1/g; s/["'"'"']//g' \
+              | grep -vx 'eccube-ec-cube'
+            for s in 4.2 4.3 4.4; do
+              for p in $(image_php_versions_for_series "$s"); do
+                echo "ghcr.io/${GITHUB_REPOSITORY}/ec-cube:${s}-php${p}"
+              done
+            done
+          } | sort -u > images.txt
+          cat images.txt
+
+      - name: Trivy
+        run: |
+          mkdir -p trivy
+          # 取れなくても止めない。下の docker run が全部落ち、全イメージが「点検できなかった」として報告に出る
+          docker pull -q "$TRIVY_IMAGE" || echo "::warning::Trivy のイメージを取れませんでした"
+          i=0
+          while read -r img; do
+            i=$((i + 1))
+            echo "$img" > "trivy/${i}.ref"
+            types=os,library
+            case "$img" in ghcr.io/*/ec-cube:*) types=os ;; esac
+            echo "::group::${img}"
+            # 失敗しても続ける。.json が無いものは報告で「点検できなかった」になる
+            docker run --rm -v trivy-cache:/root/.cache -v "$PWD/trivy:/out" "$TRIVY_IMAGE" image \
+              --quiet --format json --output "/out/${i}.json" \
+              --severity CRITICAL,HIGH --ignore-unfixed --pkg-types "$types" --timeout 15m \
+              "$img" || echo "::warning::点検できませんでした: ${img}"
+            echo "::endgroup::"
+          done < images.txt
+
+      - name: Docker の設定
+        id: config
+        run: |
+          docker run --rm -v trivy-cache:/root/.cache -v "$PWD:/repo:ro" -w /repo "$TRIVY_IMAGE" config \
+            --quiet --severity CRITICAL,HIGH --format json docker > trivy-config.json || echo "::warning::Trivy の設定スキャンが落ちました"
+          if python3 .github/scripts/config_check.py . .github/security-accept.json trivy-config.json; then
+            echo "violations=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "violations=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 報告を作る
+        id: report
+        env:
+          CONFIG_VIOLATIONS: ${{ steps.config.outputs.violations }}
+        run: |
+          python3 .github/scripts/security_report.py images.txt trivy .github/security-accept.json
+          { echo; cat config-report.md; } >> report.md
+          if [ "$CONFIG_VIOLATIONS" = true ]; then
+            sed -i 's/^actionable=false$/actionable=true/' "$GITHUB_OUTPUT"
+          fi
+
+      - name: Issue を更新する
+        # PR では Issue を触らない（報告はログで見る）
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTIONABLE: ${{ steps.report.outputs.actionable }}
+        run: |
+          label=security-scan
+          gh label create "$label" --color B60205 --description "毎日のセキュリティ点検（security-scan.yml）" 2>/dev/null || true
+          gh label create security --color B60205 --description "セキュリティ関連" 2>/dev/null || true
+          num="$(gh issue list --label "$label" --state open --json number -q '.[0].number')"
+          # 日付の行を除いた中身で比べ、変わった日だけコメントする
+          digest="$(tail -n +2 report.md | sha256sum | cut -c1-16)"
+          { cat report.md; echo; echo "<!-- report-digest: ${digest} -->"; } > body.md
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ "$ACTIONABLE" = true ]; then
+            if [ -z "$num" ]; then
+              gh issue create --title "セキュリティ点検: 要対応あり" --label "$label" --label security --body-file body.md
+            else
+              old="$(gh issue view "$num" --json body -q .body | sed -nE 's/.*report-digest: ([0-9a-f]+).*/\1/p')"
+              gh issue edit "$num" --body-file body.md
+              if [ "$old" != "$digest" ]; then
+                gh issue comment "$num" --body "点検の結果が変わりました（${run_url}）。本文を最新にしてあります。"
+              fi
+            fi
+          elif [ -n "$num" ]; then
+            gh issue comment "$num" --body "要対応が無くなったので閉じます（${run_url}）。"
+            gh issue close "$num"
+          fi

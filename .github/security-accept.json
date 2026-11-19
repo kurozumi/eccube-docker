@@ -1,0 +1,18 @@
+{
+  "_comment": "分かっていてあえてそうしているもの。毎日の点検（security-scan.yml）は「要対応」から外す。accept は保守が終わった版（review_by を過ぎると、また挙がる）、config は Docker の設定の決まりの例外（rule と target で当てる）。理由の無いものを足さないこと。",
+  "accept": [
+    {
+      "product": "php",
+      "cycle": "8.1",
+      "reason": "EC-CUBE 4.2 / 4.3 の対応一覧に 8.1 があり、選べるよう配っている（既定ではない）。Debian 側は apt-get upgrade で毎週直る",
+      "review_by": "2027-03-31"
+    }
+  ],
+  "config": [
+    {
+      "rule": "trivy:DS-0002",
+      "target": "docker/php/Dockerfile",
+      "reason": "entrypoint が root で起動し、PUID/PGID で www-data の uid を揃え・var の持ち主を直してから、php-fpm がワーカーを www-data で動かす（CLAUDE.md の PUID/PGID）。最後に USER www-data にすると、それができなくなる"
+    }
+  ]
+}

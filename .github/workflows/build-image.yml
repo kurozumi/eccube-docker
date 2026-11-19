@@ -10,7 +10,12 @@
 #                     焼かない。** いまの追跡タグ（<系列>-php<版>。直近の焼き直し＝同じ Dockerfile）に
 #                     -vX.Y.Z の名前を足すだけ（imagetools create。来歴と SBOM もそのまま付く）。
 #                     文書や bin/ だけのリリースで 9 通り × 4 分を回さないため。
-#   - 定期（毎週月曜 03:00 JST）… **PHP と Debian のパッチを取り込むため**の焼き直し。
+#   - 定期（毎日 03:00 JST）… **PHP と Debian のパッチを取り込むため**の焼き直し。
+#                     **月曜は全部**（Debian のパッチは apt upgrade で入るので、土台が同じでも焼く）。
+#                     **それ以外の日は、土台（php:<版>-fpm-bookworm）の digest が変わった組だけ**を焼く。
+#                     PHP の緊急リリースや公式イメージの作り直しを、次の月曜まで待たずに配るため。
+#                     焼いたイメージには土台の digest をラベル（org.opencontainers.image.base.digest）で
+#                     残し、翌日はそれと上流を比べる。ラベルの無い追跡タグは「変わった」とみなす。
 #                     Dockerfile は**最新リリースのタグ**のものを使う（main の未リリース分を
 #                     配らない）。追跡タグ（4.3 / 4.3-php8.2）と日付タグを動かす。
 #                     -vX.Y.Z は動かさない（あれは「そのリリースの時点」の固定）。
@@ -52,8 +57,8 @@ on:
   push:
     tags: ["v*"]
   schedule:
-    # 毎週月曜 03:00 JST（= 日曜 18:00 UTC）。PHP の月例パッチ（木曜）を翌週頭に取り込む
-    - cron: "0 18 * * 0"
+    # 毎日 03:00 JST（= 前日 18:00 UTC）。月曜（= 日曜 UTC）は全部、ほかの日は土台が変わった組だけ
+    - cron: "0 18 * * *"
   pull_request:
     types: [opened, reopened]
     paths:
@@ -105,6 +110,7 @@ jobs:
       ref: ${{ steps.ref.outputs.ref }}
       refresh: ${{ steps.ref.outputs.refresh }}
       mode: ${{ steps.mode.outputs.mode }}
+      targets: ${{ steps.base.outputs.matrix }}
       restore_from: ${{ github.event.inputs.restore_floating_from }}
     steps:
       - id: ref
@@ -189,9 +195,39 @@ jobs:
           fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
 
+      # 毎日の定期実行（月曜以外）は、土台の digest が変わった組だけに絞る。
+      # 月曜・手動の refresh・リリースは絞らない（steps.build の matrix のまま）。
+      - id: base
+        env:
+          MATRIX: ${{ steps.build.outputs.matrix }}
+        run: |
+          matrix="$MATRIX"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$(date -u +%u)" != 7 ]; then
+            img="ghcr.io/${{ github.repository }}/ec-cube"
+            changed='[]'
+            for row in $(printf '%s' "$MATRIX" | jq -c '.[]'); do
+              series="$(jq -r .series <<<"$row")"; php="$(jq -r .php <<<"$row")"
+              up="$(docker buildx imagetools inspect "php:${php}-fpm-bookworm" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty')"
+              # 追跡タグは来歴付きの index なので、.Image はプラットフォームごとの map になる
+              ours="$(docker buildx imagetools inspect "${img}:${series}-php${php}" --format '{{json .Image}}' 2>/dev/null \
+                | jq -r '(.config.Labels // .["linux/amd64"].config.Labels // {})["org.opencontainers.image.base.digest"] // empty')"
+              if [ -z "$up" ]; then
+                echo "${series}-php${php}: 上流の digest が取れない。焼かない"
+              elif [ "$up" != "$ours" ]; then
+                echo "${series}-php${php}: 土台が変わった（${ours:-ラベル無し} → ${up}）。焼く"
+                changed="$(jq -c --argjson r "$row" '. + [$r]' <<<"$changed")"
+              else
+                echo "${series}-php${php}: 土台は同じ"
+              fi
+            done
+            matrix="$changed"
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "焼く組: $(jq -r 'map("\(.series)-php\(.php)") | join(" ")' <<<"$matrix")"
+
   build-and-push:
     needs: setup
-    if: needs.setup.outputs.mode == 'build'
+    if: needs.setup.outputs.mode == 'build' && needs.setup.outputs.targets != '[]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -203,7 +239,7 @@ jobs:
       # 失敗した系列は次のリリースまで前のタグが残る（追跡タグは動かない）。
       fail-fast: false
       matrix:
-        target: ${{ fromJSON(needs.setup.outputs.matrix) }}
+        target: ${{ fromJSON(needs.setup.outputs.targets) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -254,6 +290,17 @@ jobs:
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "$tags" | tr ',' '\n'
 
+      # 土台の digest を控え、**その digest で焼く**（PHP_BASE）。タグで焼くと、調べた直後に上流が
+      # 変わったとき、ラベルと中身の土台がずれる。翌日の定期実行はラベルと上流を比べる
+      # （焼き直しは最新リリースの Dockerfile を使うので、PHP_BASE を知らない古い Dockerfile では
+      # 引数が無視され、タグで焼く。そのときだけ数秒のずれがありうる）
+      - name: 土台の digest
+        id: base
+        run: |
+          d="$(docker buildx imagetools inspect "php:${{ matrix.target.php }}-fpm-bookworm" --format '{{json .Manifest}}' | jq -r .digest)"
+          echo "digest=$d" >> "$GITHUB_OUTPUT"
+          echo "php:${{ matrix.target.php }}-fpm-bookworm = $d"
+
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
@@ -266,7 +313,11 @@ jobs:
             ECCUBE_VERSION=${{ matrix.target.eccube }}
             PHP_VERSION=${{ matrix.target.php }}
             PHPREDIS_VERSION=${{ matrix.target.phpredis }}
+            PHP_BASE=php:${{ matrix.target.php }}-fpm-bookworm@${{ steps.base.outputs.digest }}
           tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.base.name=docker.io/library/php:${{ matrix.target.php }}-fpm-bookworm
+            org.opencontainers.image.base.digest=${{ steps.base.outputs.digest }}
           # 焼き直しのときは土台を引き直し、キャッシュを使わない。apt の layer が
           # 当たると Debian のパッチが入らず、焼き直した意味が無い
           pull: true

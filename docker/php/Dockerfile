@@ -2,7 +2,10 @@
 
 # PHP のバージョン（EC-CUBE 4.1〜4.3 は 8.1〜8.3 で動く。既定 8.2）
 ARG PHP_VERSION=8.3
-FROM php:${PHP_VERSION}-fpm-bookworm
+# 土台。既定は PHP_VERSION から決まる浮動タグ。配布イメージの CI は digest 付き（php:8.3-fpm-bookworm@sha256:…）を
+# 渡し、焼いた土台とラベル org.opencontainers.image.base.digest を一致させる（build-image.yml）
+ARG PHP_BASE=php:${PHP_VERSION}-fpm-bookworm
+FROM ${PHP_BASE}
 
 # EC-CUBE のバージョン制約（composer create-project 用）。compose から渡す。
 ARG ECCUBE_VERSION=~4.3.0

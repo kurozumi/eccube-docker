@@ -59,7 +59,8 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   ただし **`.env` に `ECCUBE_IMAGE` があるときは build しないので、この値は使われない。**
   動くのはタグに焼かれたバージョンで、両者は簡単にずれる。`bin/upgrade.sh` は pull した
   イメージの実バージョンを表示して確認を求める。
-- **配布イメージは毎週月曜に焼き直される**（`build-image.yml` の `schedule`）。土台の
+- **配布イメージは毎日、土台が変わった組だけ焼き直される（月曜は全部）**（`build-image.yml` の `schedule`）。
+  土台の digest は焼いたイメージのラベル `org.opencontainers.image.base.digest` に残し、翌朝それと上流を比べる。土台の
   `php:8.x-fpm-bookworm` は浮動タグなので、**焼き直すだけで PHP と Debian のパッチが入る。**
   焼くのは**最新リリースのタグ**の Dockerfile（main を焼くと未リリースの変更が配られる）、
   **キャッシュ無し**（apt の layer が当たるとパッチが入らず、焼いた意味が無い）。
@@ -71,6 +72,16 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   （CVE-2026-109618/109619 の緊急焼き直しが届かずに発覚）。ローカル build の環境は焼き直しを
   受け取れないので `deploy.sh --rebuild`（docs/deploy.md「PHP のパッチを受け取る」）。
   緊急は `workflow_dispatch` の `refresh: true` で当日焼く。
+- **ミドルウェアの脆弱性と Docker の設定は「毎日の点検 → PR → 人がマージ」で追う**（`docs/security-updates.md`）。
+  設定の決まり（固め・公開範囲・秘密の渡し方・ヘッダ）は `.github/scripts/config_check.py` が展開後の compose で見て、
+  compose / docker/ を変える PR を `config-check.yml` が落とす。**決まりを変えたら、このファイルとあちらを揃える。**
+  `security-scan.yml` が全イメージを Trivy と保守期限（endoflife.date）で調べ、要対応ならラベル
+  `security-scan` の Issue を 1 つ開く。判断と PR は人（手元の Claude Code に Issue を渡してよい。定期のルーティンは費用の都合で止めてある）。**マージとリリースは人。**
+  **系列タグ（`nginx:1.30-alpine`）は名前が変わらないので、引き直さない限り古いまま。**
+  `bin/deploy.sh` は v1.0.16 まで ec-cube しか pull しておらず、nginx は最初に引いた日の版で
+  止まっていた。いまは `pull --ignore-buildable` で全部引き直す。
+  **保守が終わった系列はタグを追っても直らない**（`nginx:1.27-alpine` は 2025-04 から作り直されず、
+  NGINX2Root の修正が届かなかった）。あえて配る保守終了の版は `.github/security-accept.json` に理由と期限を書く。
 - **Dockerfile の `apt-get upgrade` を外さない。** 土台の `php:8.1` は EOL で二度と焼き直されず、
   upgrade 無しだと Debian の修正済み CVE が数百件残ったまま毎週配ることになる（v1.0.3 の Trivy）。
   vendor の advisories（twig / composer / symfony、4.2・4.3 で 31 件）は EC-CUBE 側の lock で、
@@ -414,6 +425,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 | `docs/scale.md` | 大規模アクセス、セッション・画像の共有、LB、メールの非同期化 |
 | `docs/monitoring.md` | 監視 |
 | `docs/testing.md` | ユニットテスト |
+| `docs/security-updates.md` | ミドルウェアの脆弱性と Docker の設定の毎日の点検（Trivy・設定の決まり・Dependabot） |
 | `docs/ide.md` | PhpStorm の設定 |
 
 ## よく使う操作
