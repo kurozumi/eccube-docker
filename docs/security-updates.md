@@ -1,4 +1,4 @@
-# ミドルウェアの脆弱性に即日で追いつく
+# ミドルウェアの脆弱性と Docker の設定を毎日点検する
 
 nginx・PHP・DB・Redis などに重大な脆弱性が出たとき、**その日のうちに「直す PR と影響の説明」が
 できていて、あとは人がマージしてリリースするだけ**、という状態を作る仕組み。
@@ -7,7 +7,8 @@ nginx・PHP・DB・Redis などに重大な脆弱性が出たとき、**その�
 
 ```
 03:00 JST  build-image（毎日）   土台の PHP イメージが変わった組だけ焼き直す（月曜は全部）
-04:00 JST  security-scan（毎日） 全イメージを Trivy で調べ、保守期限も見る → 要対応なら Issue
+04:00 JST  security-scan（毎日） 全イメージを Trivy で調べ、保守期限と Docker の設定も見る → 要対応なら Issue
+PR のたび  config-check            compose / docker/ を変える PR が決まりを破っていたら落とす
 05:00 JST  Dependabot（毎日）    版を固定して書いてあるイメージの版上げ PR
 06:00 JST  Claude ルーティン      Issue と PR を読み、うちの構成で効くかを調べ、直す PR と説明を書く
            人                    PR を見てマージ → 必要ならリリース
@@ -17,6 +18,7 @@ nginx・PHP・DB・Redis などに重大な脆弱性が出たとき、**その�
 | 役割 | 担当 | どこ |
 |---|---|---|
 | 見つける | GitHub Actions | `.github/workflows/security-scan.yml`・`.github/scripts/security_report.py` |
+| 設定を守る | GitHub Actions | `.github/workflows/config-check.yml`・`.github/scripts/config_check.py`（毎日の点検でも走る） |
 | 版上げの PR | Dependabot | `.github/dependabot.yml` |
 | 判断と説明 | Claude のルーティン（クラウドで毎朝） | 下の「ルーティンの指示」 |
 | PHP / Debian のパッチを焼く | GitHub Actions | `.github/workflows/build-image.yml` |
@@ -64,6 +66,28 @@ nginx・PHP・DB・Redis などに重大な脆弱性が出たとき、**その�
 同梱の構成で効くのは resolver の 1 件だけだった（HTTP/2・TLS は nginx で受けていない）。
 一方、`lb.conf.example` を写して nginx で HTTPS を受けている利用者には、深刻な 2 件が効いた。
 
+## Docker の設定の点検
+
+compose はファイルではなく **`docker compose config` で展開した結果**を見る（上書きとアンカーを経た、実際に効く値）。
+本番 3 通り（MariaDB / PostgreSQL / 外部 DB）・複数ホストのアプリ層・開発の 5 通りを展開する。
+
+| 決まり | 中身 | 由来 |
+|---|---|---|
+| `cap-drop-all` / `no-new-privileges` | 全サービスに `<<: *hardened` | #112 |
+| `cap-add` | 許可するのは CHOWN / DAC_OVERRIDE / FOWNER / SETUID / SETGID / KILL / NET_BIND_SERVICE / SYS_NICE だけ | #112 |
+| `privileged` / `host-namespace` / `docker-sock` | どれも禁止（ホストの root と同じになる） | |
+| `networks` / `backend-only` | ネットワークを明示する。DB / Redis / ec-cube / worker は公開層（frontend）に置かない | #117 |
+| `port-bind` | 127.0.0.1 に束縛する。例外は本番の caddy（80/443）と、複数ホストの nginx（LB から） | |
+| `image-tag` | 本番で `latest` や版の無いイメージを使わない | |
+| `secret-scope` | root パスワード・TUNNEL_TOKEN・BACKUP_* を持ち主以外に渡さない。公開層に秘密を渡さない | #107 |
+| `required-secret` | DB_PASSWORD / DB_ROOT_PASSWORD / ECCUBE_AUTH_MAGIC は `:?` で必須 | #110 |
+| `nginx-*` / `caddy-*` | Server の版を出さない・ドットファイルを 403・nosniff / X-Frame-Options / Referrer-Policy | |
+| `trivy:*` | Dockerfile の設定スキャン（CRITICAL / HIGH） | |
+
+開発の道具（mailpit / node / phpmyadmin）は固めが無くても警告どまり（127.0.0.1 にしか開かないことは見る）。
+**決まりの例外は `.github/security-accept.json` の `config` に、理由を付けて書く**（いまは Dockerfile が root で
+終わること。entrypoint が uid を揃えてから www-data に落とすため）。
+
 ## Claude のルーティン
 
 毎朝 06:00 JST にクラウドで動く。止める・変えるのは Claude Code の `/schedule`。
@@ -71,7 +95,7 @@ nginx・PHP・DB・Redis などに重大な脆弱性が出たとき、**その�
 **ルーティンの指示（要約）**
 
 1. ラベル `security-scan` の開いた Issue と、Dependabot の開いた PR を読む
-2. 項目ごとに、上の表のどれに当たるかを決める。そのとき `compose*.yaml`・`docker/nginx/*.conf`・
+2. 項目ごとに、上の表のどれに当たるかを決める（設定の違反なら、決まりを直すのか例外にするのか）。そのとき `compose*.yaml`・`docker/nginx/*.conf`・
    `docker/caddy/Caddyfile`・`docker/php/*` を読み、**うちの構成で本当に効くか**を書く
 3. リポジトリを書き換える必要があるものは、作業ブランチを切って PR を作る。本文には
    影響の表・確かめたこと／確かめていないこと（分けて書く）・リリースノートの下書き

@@ -1,9 +1,11 @@
-# 毎日のセキュリティ点検。使っているイメージ全部の脆弱性と保守期限を調べ、Issue にまとめる。
+# 毎日のセキュリティ点検。使っているイメージ全部の脆弱性と保守期限、Docker の設定を調べ、Issue にまとめる。
 #
 # 見るもの:
 #   - compose*.yaml の `image:`（`${VAR:-既定}` は既定値で）… nginx / redis / DB / caddy / cloudflared / 開発用
 #   - 配布イメージの追跡タグ（<系列>-php<版>）全部 … OS のパッケージだけ（vendor は EC-CUBE 本体の lock）
 #   - 保守期限（endoflife.date）… 終わった版と、60 日以内に終わる版
+#   - Docker の設定（.github/scripts/config_check.py）… compose を展開した結果の固め・公開範囲・秘密の渡し方、
+#     nginx / caddy のヘッダとドットファイル、Dockerfile（Trivy config）。設定を変える PR では config-check.yml が落とす
 #
 # 結果:
 #   - 要対応があれば、ラベル `security-scan` の Issue を 1 つだけ開いて本文を最新にする。
@@ -85,9 +87,27 @@ jobs:
             echo "::endgroup::"
           done < images.txt
 
+      - name: Docker の設定
+        id: config
+        run: |
+          docker run --rm -v trivy-cache:/root/.cache -v "$PWD:/repo:ro" -w /repo "$TRIVY_IMAGE" config \
+            --quiet --severity CRITICAL,HIGH --format json docker > trivy-config.json || echo "::warning::Trivy の設定スキャンが落ちました"
+          if python3 .github/scripts/config_check.py . .github/security-accept.json trivy-config.json; then
+            echo "violations=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "violations=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 報告を作る
         id: report
-        run: python3 .github/scripts/security_report.py images.txt trivy .github/security-accept.json
+        env:
+          CONFIG_VIOLATIONS: ${{ steps.config.outputs.violations }}
+        run: |
+          python3 .github/scripts/security_report.py images.txt trivy .github/security-accept.json
+          { echo; cat config-report.md; } >> report.md
+          if [ "$CONFIG_VIOLATIONS" = true ]; then
+            sed -i 's/^actionable=false$/actionable=true/' "$GITHUB_OUTPUT"
+          fi
 
       - name: Issue を更新する
         # PR では Issue を触らない（報告はログで見る）

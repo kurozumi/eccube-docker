@@ -1,0 +1,39 @@
+# Docker の設定を変える PR を点検する。決まり（固め・公開範囲・秘密の渡し方・ヘッダ）を破っていたら落とす。
+# 中身は .github/scripts/config_check.py。毎日の点検（security-scan.yml）でも同じものが走る。
+# 例外は .github/security-accept.json の config に、理由を付けて書く。
+name: config-check
+
+on:
+  pull_request:
+    paths:
+      - "compose*.yaml"
+      - ".env.example"
+      - "docker/**"
+      - ".github/scripts/config_check.py"
+      - ".github/security-accept.json"
+      - ".github/workflows/config-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Trivy（Dockerfile）
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -w /repo "$TRIVY_IMAGE" config \
+            --quiet --severity CRITICAL,HIGH --format json docker > trivy-config.json
+      - name: 決まりを点検
+        run: |
+          set +e
+          python3 .github/scripts/config_check.py . .github/security-accept.json trivy-config.json
+          rc=$?
+          cat config-report.md >> "$GITHUB_STEP_SUMMARY"
+          exit $rc

@@ -72,7 +72,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   （CVE-2026-109618/109619 の緊急焼き直しが届かずに発覚）。ローカル build の環境は焼き直しを
   受け取れないので `deploy.sh --rebuild`（docs/deploy.md「PHP のパッチを受け取る」）。
   緊急は `workflow_dispatch` の `refresh: true` で当日焼く。
-- **ミドルウェアの脆弱性は「毎日の点検 → PR → 人がマージ」で追う**（`docs/security-updates.md`）。
+- **ミドルウェアの脆弱性と Docker の設定は「毎日の点検 → PR → 人がマージ」で追う**（`docs/security-updates.md`）。
+  設定の決まり（固め・公開範囲・秘密の渡し方・ヘッダ）は `.github/scripts/config_check.py` が展開後の compose で見て、
+  compose / docker/ を変える PR を `config-check.yml` が落とす。**決まりを変えたら、このファイルとあちらを揃える。**
   `security-scan.yml` が全イメージを Trivy と保守期限（endoflife.date）で調べ、要対応ならラベル
   `security-scan` の Issue を 1 つ開く。Claude のルーティンがそれを読んで PR を作る。**マージとリリースは人。**
   **系列タグ（`nginx:1.30-alpine`）は名前が変わらないので、引き直さない限り古いまま。**
@@ -423,7 +425,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 | `docs/scale.md` | 大規模アクセス、セッション・画像の共有、LB、メールの非同期化 |
 | `docs/monitoring.md` | 監視 |
 | `docs/testing.md` | ユニットテスト |
-| `docs/security-updates.md` | ミドルウェアの脆弱性に即日で追いつく仕組み（点検・Dependabot・Claude ルーティン） |
+| `docs/security-updates.md` | ミドルウェアの脆弱性と Docker の設定の毎日の点検（Trivy・設定の決まり・Dependabot・Claude ルーティン） |
 | `docs/ide.md` | PhpStorm の設定 |
 
 ## よく使う操作
