@@ -163,7 +163,7 @@ services:
     networks:
       - backend
     logging: *default-logging
-    image: nginx:1.27-alpine
+    image: nginx:1.30-alpine
     # 複数ホスト構成では LB がここへ来るので、既定は全インターフェイス。
     # **LB からしか到達させないこと。** プライベート側の IP に束縛する
     # （HTTP_BIND=10.0.0.11 のようにホストごとに書く）か、ファイアウォールで LB の IP
