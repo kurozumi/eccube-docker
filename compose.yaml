@@ -363,7 +363,7 @@ services:
     logging: *default-logging
     # プロファイル redis のときだけ起動（.env の COMPOSE_PROFILES）。初回は無効。
     profiles: ["redis"]
-    image: redis:7-alpine
+    image: redis:8-alpine
     command:
       - "redis-server"
       # 認証。.env の REDIS_PASSWORD（bin/init.sh が生成）。空なら認証なし（古い .env のまま動く）
@@ -401,7 +401,7 @@ services:
     logging: *default-logging
     # redis と同じプロファイルで起動する（セッション共有はキャッシュ共有とセット）
     profiles: ["redis"]
-    image: redis:7-alpine
+    image: redis:8-alpine
     command:
       - "redis-server"
       # 認証。.env の REDIS_PASSWORD（bin/init.sh が生成）。空なら認証なし（古い .env のまま動く）
