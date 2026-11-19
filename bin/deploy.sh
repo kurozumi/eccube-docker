@@ -235,6 +235,17 @@ else
     log "イメージは手元で build したもの（${built:-作成日不明}）。PHP のパッチは作り直さないと入りません。"
     log "  取り込むには: bin/deploy.sh --rebuild（週に 1 回が目安。docs/deploy.md）"
 fi
+# ミドルウェア（nginx / redis / DB / caddy / cloudflared …）も引き直す。
+# **compose の `up -d` は、同じ名前のイメージが手元にあれば取りに行かない。** nginx:1.30-alpine の
+# ような系列タグは上流がパッチ版で作り直しても名前が変わらないので、引き直さない限り最初に
+# 引いた日の版のまま残る（NGINX2Root の 1.30.7 が出ても 1.30.x の古いままになる）。
+# build: を持つサービス（ec-cube / worker）は上で扱ったので除く。届かなくても止めない
+# （手元のイメージで動き続けられる。古いだけで、壊れはしない）。
+log "ミドルウェアのイメージを引き直します..."
+if ! "${dc[@]}" pull --quiet --ignore-buildable --ignore-pull-failures; then
+    log "注意: 一部のイメージを引き直せませんでした。手元にあるイメージのまま進めます。"
+fi
+
 img_new="$(docker image inspect --format '{{.Id}}' "$(image_ref)" 2>/dev/null || true)"
 if [ -n "$img_new" ] && [ -n "$img_running" ] && [ "$img_new" != "$img_running" ]; then
     log "  イメージが新しくなっています（${img_running#sha256:} → ${img_new#sha256:}）。4. で作り直します。" | sed -E 's/([0-9a-f]{12})[0-9a-f]{52}/\1/g'

@@ -1,0 +1,11 @@
+{
+  "_comment": "保守が終わっていると分かっていて、あえて配っている版。毎日の点検（security-scan.yml）はこれを「要対応」から外す。review_by を過ぎると、また挙がる。理由の無いものを足さないこと。",
+  "accept": [
+    {
+      "product": "php",
+      "cycle": "8.1",
+      "reason": "EC-CUBE 4.2 / 4.3 の対応一覧に 8.1 があり、選べるよう配っている（既定ではない）。Debian 側は apt-get upgrade で毎週直る",
+      "review_by": "2027-03-31"
+    }
+  ]
+}
