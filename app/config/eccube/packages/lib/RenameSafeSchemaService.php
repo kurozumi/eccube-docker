@@ -289,7 +289,10 @@ class RenameSafeSchemaService extends SchemaService
 
                     $columns = [];
                     foreach ($r->getProperties() as $p) {
-                        if (!$r->isTrait() && $p->getDeclaringClass()->getName() !== $class) {
+                        // 親クラスの分は親のテーブル。ただし MappedSuperclass の列は子のテーブルに載る
+                        $declaring = $p->getDeclaringClass();
+                        if (!$r->isTrait() && $declaring->getName() !== $class
+                            && !$declaring->getAttributes(ORM\MappedSuperclass::class)) {
                             continue;
                         }
                         if (null !== ($c = $attr($p, ORM\Column::class))) {
