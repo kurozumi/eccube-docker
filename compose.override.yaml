@@ -52,7 +52,7 @@ services:
     networks:
       - backend
     logging: *default-logging
-    image: node:20-bookworm-slim
+    image: node:26-bookworm-slim
     working_dir: /work
     volumes:
       - ./frontend:/work                                  # ソース（scss / package.json）
@@ -69,7 +69,7 @@ services:
     networks:
       - backend
     logging: *default-logging
-    image: node:20-bookworm
+    image: node:26-bookworm
     profiles: ["assets-core"]
     working_dir: /var/www/html
     volumes:
