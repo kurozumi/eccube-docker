@@ -13,7 +13,8 @@
   - 保守が終わった版（受け入れ済みを除く）
   - 60 日以内に保守が終わる版
   - 修正版のある CRITICAL / HIGH（Trivy の --ignore-unfixed）
-判断（うちの構成で本当に効くか、上流の作り直し待ちか）はここではしない。Claude のルーティンと人がやる。
+判断（うちの構成で本当に効くか、上流の作り直し待ちか）はここではしない。人がやる（docs/security-updates.md）。
+受け入れ済み（security-accept.json の accept）は、保守終了・まもなく終了のどちらでも「参考」に回す。
 """
 import datetime as dt
 import json
@@ -121,8 +122,12 @@ def main():
                 eol_rows.append(f"| {product} {ver} | `{img}` | **保守終了**（{eol}）。最新 {latest} |")
                 actionable = True
         elif isinstance(eol, str) and (dt.date.fromisoformat(eol) - TODAY).days <= SOON_DAYS:
-            eol_rows.append(f"| {product} {ver} | `{img}` | **まもなく保守終了**（{eol}） |")
-            actionable = True
+            a = accepted(accept, product, ver)
+            if a:
+                info_rows.append(f"| {product} {ver} | `{img}` | まもなく保守終了（{eol}）。受け入れ済み: {a.get('reason','')}（見直し {a.get('review_by','-')}） |")
+            else:
+                eol_rows.append(f"| {product} {ver} | `{img}` | **まもなく保守終了**（{eol}） |")
+                actionable = True
     out.append("## 保守期限\n")
     if eol_rows:
         out += ["| 系列 | イメージ | 状態 |", "|---|---|---|", *eol_rows, ""]

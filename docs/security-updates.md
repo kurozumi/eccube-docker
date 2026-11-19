@@ -31,7 +31,7 @@ PR のたび  config-check            compose / docker/ を変える PR が決�
 
 - **PHP / Debian のパッチ**: 公式の `php:<版>-fpm-bookworm` が作り直されると、翌朝の build-image が
   その組だけ焼き直し、追跡タグ（`4.3` など）が動く。利用者は `bin/deploy.sh` で受け取る。
-- **系列タグのミドルウェア**（`nginx:1.30-alpine`・`redis:7-alpine`・`mariadb:10.6` など）:
+- **系列タグのミドルウェア**（`nginx:1.30-alpine`・`redis:7-alpine`・`mariadb:10.11` など）:
   上流が作り直せば、利用者の `bin/deploy.sh` が引き直す。
 
 **人が要るもの（リポジトリを書き換える）**

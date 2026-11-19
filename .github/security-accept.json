@@ -6,6 +6,12 @@
       "cycle": "8.1",
       "reason": "EC-CUBE 4.2 / 4.3 の対応一覧に 8.1 があり、選べるよう配っている（既定ではない）。Debian 側は apt-get upgrade で毎週直る",
       "review_by": "2027-03-31"
+    },
+    {
+      "product": "php",
+      "cycle": "8.2",
+      "reason": "EC-CUBE 4.2 の既定で、4.2 が対応する PHP の上限（4.3 / 4.4 の既定は 8.3）。4.3 / 4.4 でも選べるよう配っている。PHP 自体の修正は 2026-12-31 で止まるので、4.2 の利用者には 4.3 以上への移行を案内する。Debian 側は apt-get upgrade で直る",
+      "review_by": "2027-03-31"
     }
   ],
   "config": [

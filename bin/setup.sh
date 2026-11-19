@@ -105,7 +105,7 @@ EOS
         pgv="$(env_get PG_VERSION)"; client="postgres:${pgv:-16}-alpine"
         docker run --rm --network "$net" -e PGPASSWORD="$pass" "$client" psql -h "$host" -p "$port" -U "$user" -d "$name" -c 'SELECT 1' >/dev/null 2>"$S_ERR" || { echo "[setup] 繋がりません: $(tail -1 "$S_ERR")" >&2; exit 1; }
     else
-        mv="$(env_get MARIADB_VERSION)"; mi="$(env_get MARIADB_IMAGE)"; client="${mi:-mariadb}:${mv:-10.6}"
+        mv="$(env_get MARIADB_VERSION)"; mi="$(env_get MARIADB_IMAGE)"; client="${mi:-mariadb}:${mv:-10.11}"
         docker run --rm --network "$net" -e MYSQL_PWD="$pass" "$client" mysql -h "$host" -P "$port" -u "$user" "$name" -e 'SELECT 1' >/dev/null 2>"$S_ERR" || { echo "[setup] 繋がりません: $(tail -1 "$S_ERR")" >&2; exit 1; }
     fi
     echo "[setup] 繋がりました。"
