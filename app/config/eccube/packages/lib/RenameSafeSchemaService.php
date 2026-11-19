@@ -127,6 +127,9 @@ class RenameSafeSchemaService extends SchemaService
         $schemaDiff = $comparator->compareSchemas($fromSchema, $toSchema);
 
         if ($saveMode) {
+            // 読めないエンティティがあったら null（どの列が誰のものか分からない）。
+            // そのときは列・索引・外部キーの削除を一切しない。消し損ねた列は残るだけだが、
+            // 消してしまった列はデータごと戻らない
             $owned = $this->installedPluginColumns();
             $altered = [];
             foreach ($schemaDiff->getAlteredTables() as $key => $tableDiff) {
@@ -155,37 +158,53 @@ class RenameSafeSchemaService extends SchemaService
     /**
      * 列・索引・外部キーの削除のうち、インストール済みのプラグインの列に掛かるものを外す。
      *
-     * @param array<string, array<string, true>> $owned テーブル => 列 => true（小文字）
+     * @param array<string, array<string, true>>|null $owned テーブル => 列 => true（小文字）。
+     *                                                       null は「分からない」で、削除を全部外す
      */
-    private function keepOwnedColumns(TableDiff $diff, array $owned): TableDiff
+    private function keepOwnedColumns(TableDiff $diff, ?array $owned): TableDiff
     {
-        $table = self::normalize($diff->getOldTable()->getName());
-        $cols = $owned[$table] ?? [];
-        if ([] === $cols) {
-            return $diff;
+        if (null === $owned) {
+            $keepAll = static fn (): bool => true;
+        } else {
+            $cols = $owned[self::normalize($diff->getOldTable()->getName())] ?? [];
+            if ([] === $cols) {
+                return $diff;
+            }
+            $keepAll = static function (array $columns) use ($cols): bool {
+                foreach ($columns as $c) {
+                    if (isset($cols[self::normalize((string) $c)])) {
+                        return true;
+                    }
+                }
+
+                return false;
+            };
         }
 
-        $touches = static function (array $columns) use ($cols): bool {
-            foreach ($columns as $c) {
-                if (isset($cols[self::normalize((string) $c)])) {
-                    return true;
-                }
+        // **同じ名前で足し直す索引・外部キーは外さない。** 定義を変えたときの DBAL の表し方は
+        // 「DROP して ADD」で、DROP だけ外すと ADD が「既にある」で落ちる
+        $readded = static function (array $assets): array {
+            $names = [];
+            foreach ($assets as $a) {
+                $names[self::normalize($a->getName())] = true;
             }
 
-            return false;
+            return $names;
         };
+        $readdedIndexes = $readded($diff->getAddedIndexes());
+        $readdedForeignKeys = $readded($diff->getAddedForeignKeys());
 
         $droppedColumns = array_filter(
             $diff->getDroppedColumns(),
-            static fn ($c) => !isset($cols[self::normalize($c->getName())])
+            static fn ($c) => !$keepAll([$c->getName()])
         );
         $droppedIndexes = array_filter(
             $diff->getDroppedIndexes(),
-            static fn ($i) => !$touches($i->getColumns())
+            static fn ($i) => isset($readdedIndexes[self::normalize($i->getName())]) || !$keepAll($i->getColumns())
         );
         $droppedForeignKeys = array_filter(
             $diff->getDroppedForeignKeys(),
-            static fn ($fk) => !$touches($fk->getLocalColumns())
+            static fn ($fk) => isset($readdedForeignKeys[self::normalize($fk->getName())]) || !$keepAll($fk->getLocalColumns())
         );
 
         if (count($droppedColumns) === count($diff->getDroppedColumns())
@@ -212,12 +231,13 @@ class RenameSafeSchemaService extends SchemaService
     /**
      * dtb_plugin に載っているプラグイン（有効・無効を問わない）のエンティティが宣言する列。
      *
-     * @return array<string, array<string, true>> テーブル => 列 => true（小文字）
+     * @return array<string, array<string, true>>|null テーブル => 列 => true（小文字）。
+     *                                                 読めないエンティティがあれば null
      */
-    private function installedPluginColumns(): array
+    private function installedPluginColumns(): ?array
     {
         if (null === $this->pluginDir) {
-            return [];
+            return null;
         }
 
         $codes = $this->entityManager->getConnection()->fetchFirstColumn('SELECT code FROM dtb_plugin');
@@ -247,42 +267,54 @@ class RenameSafeSchemaService extends SchemaService
                 }
                 $class = 'Plugin\\'.$code.'\\Entity\\'.str_replace('/', '\\', substr($file->getPathname(), strlen($dir) + 1, -4));
 
-                // 読めないものは守れないだけで、本体の挙動（消す）に戻る。スキーマ更新自体は止めない
+                // **読めないものがあったら、誰の列か分からないとして null を返す**（呼び出し側が
+                // 削除を全部外す）。飛ばすと、そのプラグインの列だけ守られずに消える
                 try {
                     if (!class_exists($class) && !trait_exists($class)) {
                         continue;
                     }
                     $r = new \ReflectionClass($class);
 
-                    $table = null;
+                    // EntityExtension は繰り返せる（1 つのトレイトを複数のエンティティへ）
+                    $tables = [];
                     foreach ($r->getAttributes() as $a) {
                         if (str_ends_with($a->getName(), '\\EntityExtension')) {
                             $args = $a->getArguments();
-                            $table = $tableOf($args[0] ?? $args['value']);
+                            $tables[] = $tableOf($args[0] ?? $args['value']);
                         }
                     }
-                    if (null === $table && $r->getAttributes(ORM\Entity::class)) {
-                        $table = $tableOf($class);
+                    if ([] === $tables && $r->getAttributes(ORM\Entity::class)) {
+                        $tables[] = $tableOf($class);
                     }
-                    if (null === $table) {
-                        continue;
-                    }
-                    $table = self::normalize($table);
 
+                    $columns = [];
                     foreach ($r->getProperties() as $p) {
                         if (!$r->isTrait() && $p->getDeclaringClass()->getName() !== $class) {
                             continue;
                         }
                         if (null !== ($c = $attr($p, ORM\Column::class))) {
-                            $owned[$table][self::normalize($c['name'] ?? $naming->propertyToColumnName($p->getName(), $class))] = true;
+                            $columns[] = $c['name'] ?? $c[0] ?? $naming->propertyToColumnName($p->getName(), $class);
                         }
                         if ($p->getAttributes(ORM\ManyToOne::class) || $p->getAttributes(ORM\OneToOne::class)) {
-                            $j = $attr($p, ORM\JoinColumn::class);
-                            $owned[$table][self::normalize($j['name'] ?? $naming->joinColumnName($p->getName(), $class))] = true;
+                            // 複合キーの関連は JoinColumn を複数並べる
+                            $joins = $p->getAttributes(ORM\JoinColumn::class, \ReflectionAttribute::IS_INSTANCEOF);
+                            if ([] === $joins) {
+                                $columns[] = $naming->joinColumnName($p->getName(), $class);
+                            }
+                            foreach ($joins as $j) {
+                                $args = $j->getArguments();
+                                $columns[] = $args['name'] ?? $args[0] ?? $naming->joinColumnName($p->getName(), $class);
+                            }
+                        }
+                    }
+
+                    foreach ($tables as $table) {
+                        foreach ($columns as $column) {
+                            $owned[self::normalize($table)][self::normalize($column)] = true;
                         }
                     }
                 } catch (\Throwable) {
-                    continue;
+                    return null;
                 }
             }
         }
