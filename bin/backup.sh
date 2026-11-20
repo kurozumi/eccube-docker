@@ -4,7 +4,7 @@
 #            BACKUP_DIR=/mnt/nas bin/backup.sh   # 保存先を変える
 #            BACKUP_KEEP=14 bin/backup.sh        # 保持世代数（既定 7）
 #   ほかのコマンドが「変える前の控え」を取るときは BACKUP_LABEL=<名前> を付ける
-#   （<日時>-before-<名前>/ に置く。毎日の世代とは別に数え、BACKUP_KEEP_SAFETY 世代（既定 10）残す）。
+#   （<日時>-before-<名前>/ に置く。毎日の世代とは別に、名前ごとに BACKUP_KEEP_SAFETY 世代（既定 10）残す）。
 #   cron 例（毎日 4:00、リポジトリ直下で）:
 #     0 4 * * * cd /path/to/eccube-docker && bin/backup.sh >> var/backup.log 2>&1
 #
@@ -291,4 +291,8 @@ prune() { # prune <ERE> <残す数>
     fi
 }
 prune '^[0-9]{8}-[0-9]{6}$' "$BACKUP_KEEP"
-prune '^[0-9]{8}-[0-9]{6}-before-[a-z0-9-]+$' "$BACKUP_KEEP_SAFETY"
+# 控えは**名前（restore / deploy / reset など）ごとに**数える。まとめて数えると、毎日の deploy の控えが
+# 1 回きりの restore や reset の控え（その時点の唯一の写し）を押し出していた
+for lb in $(cd "$BACKUP_DIR" && ls -1d */ 2>/dev/null | sed -n -E 's:^[0-9]{8}-[0-9]{6}-before-([a-z0-9-]+)/$:\1:p' | sort -u); do
+    prune "^[0-9]{8}-[0-9]{6}-before-${lb}\$" "$BACKUP_KEEP_SAFETY"
+done
