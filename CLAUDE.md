@@ -113,6 +113,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **リリースの添付（`eccube-docker-<ver>.tar.gz` / `SHA256SUMS` / attestation）を取り、sha256 と
   署名を確かめてから展開する**（`release-assets.yml` が publish 時に付ける。#120）。添付の
   無いリリースは codeload に落ちて「検証なし」と出す。
+  **書き換える前に、書き換える・消すファイルを `var/self-update/<日時>-from-<版>/before.tar` に控え**（`--force` で
+  上書きする店の変更もここに残る）、新しいファイルは同じディスクの置き場へ先に全部写してから `mv` で 1 つずつ入れ替える。
+  入れ替えの途中の失敗・Ctrl-C は `undo_apply` が控えから戻す。
   **`mapfile` を使わないこと。** bash 4 以降の組み込みで、**macOS の bash は 3.2**。
   `command not found` で `set -e` が働き、何も出さずに死ぬ。
 - **「更新」は 3 つあり、別物。** 自分のコードは `bin/deploy.sh`（毎日）、環境（`bin/` や
@@ -178,7 +181,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   列挙せず `.env.app` に逃がす。`DB_PASSWORD` / `DB_ROOT_PASSWORD` / `ECCUBE_AUTH_MAGIC`
   は `:?` で必須（既定値 `eccube_pass` で黙って立ち上がらない。#110）。
 - **`bin/reset.sh` と `bin/switch-version.sh` は `down -v` する。** DB・画像・
-  セッションが消え、**その場では戻せない。** 稼働中が本番構成なら
+  セッションが消える。**消す前に `backups/<日時>-before-<名前>/` へ退避し、取れなければ何も消さずに止まる**
+  （`guard_backup_before_destroy`。止まっているスタックは DB に繋がらず取れないので止まる。取らずに消すのは
+  `DESTROY_WITHOUT_BACKUP=<プロジェクト名>`）。`deploy.sh` も**メンテナンス表示を立ててから**退避する。 稼働中が本番構成なら
   `CONFIRM_DESTROY=<プロジェクト名>` が無いと止まる（`bin/lib/guard.sh`）。
   **停止中は判定できない**ので、止まっている本番で打てば消える。
   上げたいだけなら `upgrade.sh`。詳細は `docs/data-safety.md`。
@@ -189,6 +194,15 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   向こうが**止まっていて判定できないときは本番として扱う**（guard.sh と同じ）。開発/検証サーバーには
   掛からない。GitHub 側の PR 必須・承認必須は `bin/setup.sh protect`（**非公開リポジトリは有料プラン**が
   要る。無料なら 403 で止まり、手元とサーバーの壁だけになる）。詳細は `docs/deploy.md`。
+- **`bin/upgrade.sh` は失敗したら自動で元の版に戻す。** 止める前に `.env` を `var/upgrade/env.before` へ写し、
+  動いているイメージの ID を控え、**メンテナンス表示の中で**バックアップ（`-before-upgrade`）を取り、本体ボリュームを
+  `<プロジェクト>_eccube_app_before_upgrade` へ写す。新しい版のボリュームにも表示を置いて起動し、token の cookie で
+  中から開くかを見てから外す（確認前に注文が入って、戻したときに消えないように）。失敗・Ctrl-C は `rollback_upgrade` が
+  .env・タグ・本体を戻し、DB に書いていれば `restore.sh --rollback --db-only` で戻して、**`ECCUBE_SKIP_DB_INIT=1` で**
+  起動し直す（entrypoint の migration は失敗を握るので、失敗した独自 migration をもう一度当てて戻した DB を書き換える）。
+  差分の検査は削除に加えて**列の名前の変更**（`CHANGE a b` / `RENAME COLUMN`）も止める。
+  **pipefail の下で `docker compose … | grep -q` を書かない。** grep が先に終わると compose が SIGPIPE で落ち、
+  一致したのに「無い」になる（切り戻しが DB を起こさずに戻そうとして失敗した。5 回に 2 回）。変数に取ってから見る。
 - **本番を上げるときは `bin/upgrade.sh <制約> --prod`。** `--prod` を落とすと
   `compose.override.yaml`（開発用のポートと bind mount）が効いた状態で公開される。
   **画面は出るので気づきにくい。** 稼働中なら自動でも寄せるが、停止中に打つと効かない。

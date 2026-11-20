@@ -246,7 +246,8 @@ warm_cache() {
 # 剥がしてしまい、キャッシュ組み立て中の壊れた画面が公開される**（実際にそうなった）。
 clean_leftovers() {
     local pat="^auto_maintenance"
-    [ "${1:-}" = "--with-deploy" ] && pat="^(auto_maintenance|deploy:)"
+    # setup: は bin/setup.sh db が写している間に立てたもの（切り替える前に止まったなら、お店はいままでの DB のまま）
+    [ "${1:-}" = "--with-deploy" ] && pat="^(auto_maintenance|deploy:|setup:)"
     docker compose exec -T ec-cube bash -c '
         if [ -f /var/www/html/.maintenance ] && grep -qE "'"$pat"'" /var/www/html/.maintenance; then
             rm -f /var/www/html/.maintenance

@@ -19,6 +19,7 @@ if ! image_provision docker compose; then
     exit 1
 fi
 
+guard_backup_before_destroy reset
 docker compose down -v
 docker compose up -d
 echo "[reset] 完了。進捗: docker compose logs -f ec-cube"

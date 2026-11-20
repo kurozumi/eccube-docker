@@ -18,7 +18,14 @@
 #   「未インストール」と誤判定して既存 DB に eccube:install を撃ってしまう。
 #   これを避けるため、起動前にマーカーだけ先に置いて migration 経路へ寄せる。
 #   さらに、スキーマ（DDL）とデータ移行は別経路なので両方を流す（詳細は下の 7)）。
-set -euo pipefail
+#
+# **失敗したら、自動で元の版に戻す。** 止める前に .env をそのまま写し（var/upgrade/env.before）、
+# メンテナンス表示の中でバックアップを取り（backups/<日時>-before-upgrade/）、本体ボリュームを
+# <プロジェクト>_eccube_app_before_upgrade へ写してから入れ替える。途中で失敗したら、.env・イメージの
+# タグ・本体ボリュームを戻し、DB に手を付けていればバックアップから戻して、元の版で起動し直す。
+# 公開前の確認もメンテナンス表示の中でするので、確認が通るまでお客さんは注文できない
+# （戻したときに、その間の注文が消えることがない）。
+set -Eeuo pipefail
 # -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
 case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
@@ -70,7 +77,6 @@ redis_ver="$(image_phpredis_for_series "$series")"
 # いまの PHP は動いているイメージから読む（.env の PHP_VERSION は build にしか使われず、
 # 配布イメージではタグが正なので、どちらも実物とずれうる）。
 current_php="$(grep -E '^PHP_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
-had_php_key=0; grep -qE '^PHP_VERSION=' .env 2>/dev/null && had_php_key=1
 cid_now="$(docker compose ps -q ec-cube 2>/dev/null | head -1 || true)"
 running_php=""
 [ -n "$cid_now" ] && running_php="$(image_php_of_container "$cid_now")"
@@ -130,6 +136,7 @@ if [ "$want_prod" = "0" ]; then
 fi
 
 if [ "$want_prod" = "1" ]; then
+    # shellcheck disable=SC2207
     dc=(docker compose $(compose_files --prod))
 fi
 
@@ -142,11 +149,44 @@ if [ -z "$image" ]; then
     exit 1
 fi
 
+# 切り戻しに使う「いまのイメージ」。pull / build で同じタグが新しいものを指すようになる前に ID を控える。
+# 動いているならそのコンテナのイメージ（タグが先に動いていても、実際に動いているもの）。
+old_image_ref="$image"
+old_image_id=""
+[ -n "$cid_now" ] && old_image_id="$(docker inspect --format '{{.Image}}' "$cid_now" 2>/dev/null || true)"
+[ -n "$old_image_id" ] || old_image_id="$(docker image inspect --format '{{.Id}}' "$old_image_ref" 2>/dev/null || true)"
+
+# **前回の切り戻しが最後までいかなかったら、始めない。** 始めると、上げる前の本体の写し
+# （${app_vol}_before_upgrade。本体・vendor・コンテナ内 .env の唯一の残り）を、いまの壊れた本体で上書きする。
+if [ -f var/upgrade/rollback-failed ]; then
+    cat >&2 <<EOS
+エラー: 前回の bin/upgrade.sh の切り戻しが、最後までできていません（var/upgrade/rollback-failed）。
+       上げる前の本体の写し（${app_vol}_before_upgrade）を上書きしないよう、始めません。
+       そのときの表示に従って元に戻し、開くことを確かめてから、この印を消してください:
+         rm var/upgrade/rollback-failed
+EOS
+    exit 1
+fi
+
+# 手元に db サービスがあるか（外部 DB・複数ホストのアプリホストには無い）
+services_now="$("${dc[@]}" config --services 2>/dev/null || true)"
+has_local_db=0; printf '%s\n' "$services_now" | grep -qx db && has_local_db=1
 # DB ボリュームが無い＝まだ 1 度も構築していない。upgrade ではなく init の出番。
-if ! docker volume inspect "$db_vol" >/dev/null 2>&1; then
+# **外部 DB の環境では見ない**（手元に DB のボリュームが無いのが正しい。以前はアプリホストで必ず止まっていた）
+if [ "$has_local_db" = 1 ] && ! docker volume inspect "$db_vol" >/dev/null 2>&1; then
     echo "エラー: DB ボリューム（${db_vol}）がありません。まだ構築されていない環境です。" >&2
     echo "       初回セットアップは bin/init.sh を使ってください。" >&2
     exit 1
+fi
+# 複数ホストのアプリホストで、migration を流さない役（ECCUBE_SKIP_DB_INIT=1）なら、スキーマに触らない。
+# スキーマは init 役のホストで先に上げてある前提（docs/scale.md「EC-CUBE を上げる」）
+app_role=0
+if printf '%s\n' "$(compose_files_from_env)" | tr ':' '\n' | grep -qx compose.app.yaml; then
+    multihost=1
+    sk="$(env_get ECCUBE_SKIP_DB_INIT)"
+    [ "${sk:-1}" = 1 ] && app_role=1
+else
+    multihost=0
 fi
 
 cat <<EOS
@@ -159,50 +199,40 @@ cat <<EOS
   作り直し : 本体コード(${app_vol})。var/ 以下のログとキャッシュも消えます。
 
   注意:
-   - スキーマは doctrine:migrations:migrate で前進します。ダウングレードはできません。
-     元に戻すには .env を戻して再実行し、bin/restore.sh で DB を書き戻す必要があります。
+   - 途中で失敗したら、自動で元の版に戻します（DB に手を付けていれば、取ったバックアップから戻します）。
+   - 上げている間（バックアップ → 入れ替え → 確認）は、お客さんにはメンテナンス表示です。
+   - 終わったあとで戻したくなったら: bin/upgrade.sh <元の版> のあと bin/restore.sh <バックアップ>
    - マイナー/メジャーをまたぐ場合、既存プラグインが新バージョン非対応だと起動後に
      エラーになることがあります。事前に対応状況を確認してください。
 EOS
+if [ "$multihost" = 1 ]; then
+    if [ "$app_role" = 1 ]; then
+        echo "  複数ホストのアプリホスト（migration を流さない役）です。DB のスキーマには触りません。"
+        echo "  init 役のホストで先に上げてあることを確かめてください。"
+    else
+        echo "  **複数ホストの init 役です。ほかのアプリホストを先に止めてください**（止めていないと、上げている間も"
+        echo "  そちらで注文が入り、失敗して DB を戻したときに消えます。docs/scale.md「EC-CUBE を上げる」）。"
+    fi
+fi
 read -r -p "続行しますか? [y/N] " ans
 [ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
 
-# 1) 先にバックアップ。ここで失敗したら何も壊さずに終わる。
-echo "[upgrade] バックアップを取得します..."
-if ! bin/backup.sh; then
-    echo "[upgrade] エラー: バックアップに失敗しました。中止します。" >&2
-    exit 1
-fi
-backup_dir="$(ls -1d backups/*/ 2>/dev/null | sort | tail -1 || true)"
-echo "[upgrade] バックアップ: ${backup_dir:-(不明)}"
-
-# 2) .env を更新。以降の失敗時は元の値へ戻す。
+# 1) .env をそのまま写しておく。以降、元に戻すときはこれを書き戻す（値を 1 つずつ戻すと、足した行や
+#    書き換えた行の戻し忘れが起きる）。
+work="var/upgrade"
+mkdir -p "$work"
+cp -p .env "$work/env.before"
 restore_env() {
-    if [ -n "$current" ]; then
-        tmp="$(mktemp)"
-        sed "s|^ECCUBE_VERSION=.*|ECCUBE_VERSION=${current}|" .env > "$tmp" && mv "$tmp" .env
-        echo "[upgrade] .env の ECCUBE_VERSION を ${current} へ戻しました。" >&2
+    cp -p "$work/env.before" .env
+    echo "[upgrade] .env を上げる前の状態に戻しました。" >&2
+    # pull / build で同じタグが新しいものを指していたら、元に戻す（戻さないと、次の up や deploy が
+    # 新しいイメージで古い本体を動かす）
+    if [ -n "$old_image_id" ] && [ -n "$old_image_ref" ] && \
+       [ "$(docker image inspect --format '{{.Id}}' "$old_image_ref" 2>/dev/null || true)" != "$old_image_id" ]; then
+        docker tag "$old_image_id" "$old_image_ref" 2>/dev/null \
+            && echo "[upgrade] イメージ ${old_image_ref} を上げる前のものに戻しました。" >&2
     fi
-    if [ -n "$current_redis" ]; then
-        tmp="$(mktemp)"
-        sed "s|^PHPREDIS_VERSION=.*|PHPREDIS_VERSION=${current_redis}|" .env > "$tmp" && mv "$tmp" .env
-        echo "[upgrade] .env の PHPREDIS_VERSION を ${current_redis} へ戻しました。" >&2
-    fi
-    if [ -n "$current_image" ]; then
-        tmp="$(mktemp)"
-        sed "s|^ECCUBE_IMAGE=.*|ECCUBE_IMAGE=${current_image}|" .env > "$tmp" && mv "$tmp" .env
-        echo "[upgrade] .env の ECCUBE_IMAGE を ${current_image} へ戻しました。" >&2
-    fi
-    # 元から行が無かったなら、足した行を消す（値だけ戻すと、無かったものが残る）
-    if [ "$had_php_key" = 0 ]; then
-        tmp="$(mktemp)"
-        grep -vE '^PHP_VERSION=' .env > "$tmp" || true
-        mv "$tmp" .env
-    elif [ "$current_php" != "$php_ver" ]; then
-        tmp="$(mktemp)"
-        sed "s|^PHP_VERSION=.*|PHP_VERSION=${current_php}|" .env > "$tmp" && mv "$tmp" .env
-        echo "[upgrade] .env の PHP_VERSION を ${current_php} へ戻しました。" >&2
-    fi
+    return 0
 }
 if grep -qE '^ECCUBE_VERSION=' .env 2>/dev/null; then
     tmp="$(mktemp)"
@@ -309,11 +339,7 @@ if printf '%s' "$preflight" | grep -q 'Fatal error'; then
     exit 1
 fi
 
-# 4) 停止（-v は付けない = DB と画像は残る）→ 本体ボリュームだけ破棄
-echo "[upgrade] コンテナを停止します（ボリュームは残します）..."
-"${dc[@]}" down
-
-# 消す前に、管理画面がコンテナ内 .env に書いた値を控える。テーマ切替と
+# 止める前に、管理画面がコンテナ内 .env に書いた値を控える（読むだけ。動いたままでよい）。テーマ切替と
 # セキュリティ設定はここに書かれ、ボリュームと一緒に消える。ホストの .env に
 # 書いてあるものは環境変数で渡るので影響しない。それ以外だけ挙げる。
 kept="$(docker run --rm -v "${app_vol}:/app:ro" alpine:3 sh -c '
@@ -388,19 +414,229 @@ if [ -n "$extra_lost" ]; then
     echo '             { "require": { "<名前>": "<バージョン>" } }'
     printf '           このまま続けますか? [y/N] '
     read -r ans_extra
-    [ "$ans_extra" = "y" ] || { echo "[upgrade] 中止しました。何も変えていません。"; exit 1; }
+    [ "$ans_extra" = "y" ] || { echo "[upgrade] 中止しました。稼働中の環境には触れていません。"; restore_env; exit 1; }
+fi
+# 4) メンテナンス表示にしてから、バックアップを取る。
+#    **表示より先に取ると、取ってから止めるまでの間に入った注文がバックアップに無い。** 失敗して DB を
+#    戻したときに、その注文が消える。表示の中で取り、公開前の確認もその中でする。
+MAINT=/var/www/html/.maintenance
+token="$(openssl rand -hex 16 2>/dev/null || date +%s)"
+maint_on=0
+# 手で入れていた表示の中身。新しい版のボリュームにも同じものを置き、終わっても外さない
+manual_maint=""
+if [ -n "$("${dc[@]}" ps -q --status running ec-cube 2>/dev/null)" ]; then
+    if "${dc[@]}" exec -T ec-cube sh -c "test -f $MAINT" 2>/dev/null; then
+        # 手で入れたメンテナンス中。その token を借りて確認する（あとで外さない）
+        manual_maint="$("${dc[@]}" exec -T ec-cube sh -c "head -1 $MAINT" 2>/dev/null | tr -d '\r\n' || true)"
+        token="${manual_maint#*:}"
+        echo "[upgrade] メンテナンス表示はすでに有効です（そのまま進めます。終わっても外しません）"
+    elif "${dc[@]}" exec -T ec-cube runuser -u www-data -- sh -c "printf 'upgrade:%s' '$token' > $MAINT"; then
+        maint_on=1
+        echo "[upgrade] メンテナンス ON（お客さんには「メンテナンス中」。ログイン中の管理者は見えます）"
+    else
+        # 立てられないまま進むと、お客さんが注文できる状態でバックアップを取り、その後の注文が戻すときに消える
+        echo "[upgrade] エラー: メンテナンス表示を立てられませんでした。中止します。稼働中の環境には触れていません。" >&2
+        restore_env
+        exit 1
+    fi
+fi
+maint_off_running() {
+    [ "$maint_on" = 1 ] || return 0
+    "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' $MAINT && rm -f $MAINT" 2>/dev/null \
+        && echo "[upgrade] メンテナンス OFF"
+    return 0
+}
+
+# バックアップの途中で Ctrl-C・ssh の切断があっても、表示と .env を残さない（まだ何も壊していない）
+worker_stopped=0
+worker_back() { [ "$worker_stopped" = 1 ] && "${dc[@]}" start worker >/dev/null 2>&1; return 0; }
+backup_interrupted() {
+    trap - INT TERM HUP
+    worker_back
+    cp -p "$work/env.new" .env 2>/dev/null || true
+    maint_off_running
+    restore_env
+    echo "[upgrade] バックアップの途中で止められました。稼働中の環境には触れていません。" >&2
+    exit 1
+}
+trap backup_interrupted INT TERM HUP
+# メールの worker を止める。戻すと送ったはずのメールが DB に戻り、もう一度送られる（注文確認の二重送信）
+if printf '%s\n' "$services_now" | grep -qx worker && [ -n "$("${dc[@]}" ps -q --status running worker 2>/dev/null)" ]; then
+    "${dc[@]}" stop worker >/dev/null 2>&1 && worker_stopped=1 && echo "[upgrade] メールの worker を止めました（終われば起動し直します）"
+fi
+echo "[upgrade] バックアップを取得します（上げる前の .env で）..."
+# バックアップの host.env は「上げる前」のものにする（戻すときの突き合わせと記録のため）
+cp -p .env "$work/env.new"
+cp -p "$work/env.before" .env
+rf="$work/backup-result"; rm -f "$rf"
+backup_ok=1
+BACKUP_LABEL=upgrade BACKUP_RESULT_FILE="$rf" bin/backup.sh || backup_ok=0
+cp -p "$work/env.new" .env
+if [ "$backup_ok" != 1 ] || [ ! -s "$rf" ]; then
+    echo "[upgrade] エラー: バックアップに失敗しました。中止します。稼働中の環境には触れていません。" >&2
+    trap - INT TERM HUP
+    worker_back
+    maint_off_running
+    restore_env
+    exit 1
+fi
+backup_dir="$(cat "$rf")"
+trap - INT TERM HUP
+echo "[upgrade] バックアップ: ${backup_dir}"
+
+# ── ここから先で失敗したら、自動で元の版に戻す ──
+prev_vol="${app_vol}_before_upgrade"
+vol_saved=0      # 本体ボリュームを写した
+vol_removed=0    # 本体ボリュームを消した（消せていなければ、戻す必要は無い）
+db_touched=0     # DB に書いた（スキーマ更新を始めた）
+# site_code <path> … メンテナンス中でも token の cookie で中を見る（deploy.sh と同じ）
+site_code() {
+    local port
+    port="$("${dc[@]}" port nginx 80 2>/dev/null | tail -1 | sed -E 's/^(0\.0\.0\.0|\[::\]):/localhost:/')"
+    [ -n "$port" ] || port="localhost:$(env_get HTTP_PORT)"
+    case "$port" in *:) port="${port}8080" ;; esac
+    # X-Forwarded-Proto: https を付ける。付けないと ECCUBE_FORCE_SSL の店は https への転送（301/302）を返し、
+    # 画面を組み立てずに「開いた」ことになる
+    curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' -b "maintenance_token=${token}" "http://${port}${1}" || echo 000
+}
+wait_site() { # wait_site <秒>
+    local deadline=$(( $(date +%s) + $1 )) code path
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        # 200 だけを通す（転送は画面を組み立てていない）。トップと商品一覧の両方（DB とテンプレートを通る）
+        code="$(site_code /)"
+        if [ "$code" = 200 ]; then
+            code="$(site_code /products/list)"
+            [ "$code" = 200 ] && return 0
+            path=/products/list
+        else
+            path=/
+        fi
+        sleep 5
+    done
+    echo "[upgrade] 応答: ${code:-000}（${path:-/}）" >&2
+    return 1
+}
+# 公開前（メンテナンス表示の中）に開くかを見る時間。大きな店はキャッシュの組み立てに数分かかる
+health_wait="${UPGRADE_HEALTH_TIMEOUT:-600}"
+
+rollback_upgrade() {
+    # パイプの中の子プロセスで呼ばれても、戻すのは親だけ
+    [ "${BASH_SUBSHELL:-0}" = 0 ] || exit 1
+    trap - ERR
+    # 戻している間の Ctrl-C・切断は受けない（DB を戻している最中に止まると、表を消したところで終わる）
+    trap '' INT TERM HUP
+    local ok=1
+    echo >&2
+    echo "[upgrade] 失敗しました。元の版（${current:-?}）に戻します..." >&2
+    "${dc[@]}" down >/dev/null 2>&1 || true
+    cp -p "$work/env.before" .env
+    echo "[upgrade]   .env を上げる前の状態に戻しました" >&2
+    if [ -n "$old_image_id" ] && [ -n "$old_image_ref" ]; then
+        if docker tag "$old_image_id" "$old_image_ref"; then
+            echo "[upgrade]   イメージ ${old_image_ref} を上げる前のもの（${old_image_id#sha256:}）に戻しました" | sed -E 's/([0-9a-f]{12})[0-9a-f]{52}/\1/' >&2
+        else
+            ok=0; echo "[upgrade]   注意: 上げる前のイメージに戻せませんでした" >&2
+        fi
+    fi
+    if [ "$vol_saved" = 1 ] && [ "$vol_removed" = 1 ]; then
+        if docker volume rm -f "$app_vol" >/dev/null 2>&1 &&
+           docker volume create --label "com.docker.compose.project=${proj}" --label com.docker.compose.volume=eccube_app "$app_vol" >/dev/null &&
+           docker run --rm -v "${prev_vol}:/from:ro" -v "${app_vol}:/to" alpine:3 sh -c 'cp -a /from/. /to/'; then
+            echo "[upgrade]   本体（${app_vol}）を上げる前のものに戻しました" >&2
+        else
+            ok=0; echo "[upgrade]   注意: 本体を戻せませんでした（上げる前のものは ${prev_vol} に残っています）" >&2
+        fi
+    fi
+    if [ "$db_touched" = 1 ]; then
+        echo "[upgrade]   DB を ${backup_dir} から戻します..." >&2
+        "${dc[@]}" up --no-start >/dev/null 2>&1 || true
+        # 一覧を変数に取ってから見る（pipefail の下で grep -q が先に終わると、前のコマンドが SIGPIPE で
+        # 落ちて「無い」と判定し、DB を起こさずに戻そうとしていた。試験で踏んだ）
+        services="$("${dc[@]}" config --services 2>/dev/null || true)"
+        if printf '%s\n' "$services" | grep -qx db; then
+            "${dc[@]}" up -d --wait db >/dev/null 2>&1 || true
+        fi
+        if bin/restore.sh --rollback --db-only "$backup_dir"; then
+            echo "[upgrade]   DB を戻しました" >&2
+        else
+            ok=0; echo "[upgrade]   注意: DB を戻せませんでした" >&2
+        fi
+    else
+        echo "[upgrade]   DB には書いていないので、そのままです" >&2
+    fi
+    # 元の版で起動し直す。**起動時の migration は流させない**（ECCUBE_SKIP_DB_INIT=1）。戻した DB は元の版の
+    # 状態そのもので、流すものは無い。流すと、上げる途中で失敗した migration（app/DoctrineMigrations の
+    # 独自のもの）をもう一度当てて、戻したばかりの DB を書き換える（entrypoint は失敗を握る）。
+    local started=0
+    if [ "$ok" = 1 ] && ECCUBE_SKIP_DB_INIT=1 "${dc[@]}" up -d && started=1 && wait_site "$health_wait"; then
+        if [ "$maint_on" = 1 ]; then
+            "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' $MAINT && rm -f $MAINT" 2>/dev/null || true
+        fi
+        cat >&2 <<EOS
+[upgrade] **元の版（${current:-?}）に戻して、開くことを確かめました。**$([ "$maint_on" = 1 ] && printf ' メンテナンス表示も外しました。')
+          上げられなかった原因は、上のエラーを見てください。
+          上げる前のバックアップ: ${backup_dir}
+EOS
+    elif [ "$started" = 1 ]; then
+        cat >&2 <<EOS
+[upgrade] **.env・イメージ・本体・DB は上げる前に戻しましたが、元の版でも開きません。メンテナンス表示のままです。**
+          上げる前から開かなかったか、上げる前後で変わらないもの（app/template・app/Customize・プラグイン・
+          設定）に原因があります。ログ: docker compose logs ec-cube
+          直したら: bin/plugin.sh reload のあと docker compose exec ec-cube rm /var/www/html/.maintenance
+          上げる前のバックアップ: ${backup_dir}
+EOS
+    else
+        # 次の bin/upgrade.sh が上げる前の本体の写しを上書きしないよう、印を置く
+        date > "$work/rollback-failed" 2>/dev/null || true
+        cat >&2 <<EOS
+[upgrade] **元に戻すのも、最後まではできませんでした。メンテナンス表示のままです。**
+          上げる前の状態は、ここに残っています（消さないでください）:
+            .env       ${work}/env.before
+            本体       ボリューム ${prev_vol}
+            DB・画像   ${backup_dir}
+          原因を直してから、この順で（compose の指定はこのサーバーのもの。本番なら本番構成）:
+            cp ${work}/env.before .env
+            ${dc[*]} down
+            docker volume rm ${app_vol}
+            docker volume create --label com.docker.compose.project=${proj} --label com.docker.compose.volume=eccube_app ${app_vol}
+            docker run --rm -v ${prev_vol}:/from:ro -v ${app_vol}:/to alpine:3 sh -c 'cp -a /from/. /to/'
+            ${dc[*]} up -d db            （外部 DB なら要らない）
+            bin/restore.sh ${backup_dir}   （DB の退避が取れずに止まるなら RESTORE_WITHOUT_BACKUP=${proj} を前に付ける）
+            ECCUBE_SKIP_DB_INIT=1 ${dc[*]} up -d
+          開くことを確かめたら: rm ${work}/rollback-failed
+EOS
+    fi
+    exit 1
+}
+
+# 5) 停止（-v は付けない = DB と画像は残る）→ 本体ボリュームを写してから作り直す
+echo "[upgrade] コンテナを停止します（ボリュームは残します）..."
+trap rollback_upgrade ERR INT TERM HUP
+"${dc[@]}" down
+
+# 本体ボリュームを写しておく（元の版の本体・vendor・コンテナ内 .env・var/）。戻すときはこれを書き戻す。
+# 前回の upgrade の写しは、ここで置き換える（その時点のバックアップは backups/ にある）。
+if docker volume inspect "$app_vol" >/dev/null 2>&1; then
+    echo "[upgrade] 本体ボリュームを ${prev_vol} へ写します（失敗したときに戻すため）..."
+    docker volume rm -f "$prev_vol" >/dev/null 2>&1 || true
+    docker volume create --label "com.docker.compose.project=${proj}" --label eccube-docker.role=before-upgrade "$prev_vol" >/dev/null
+    docker run --rm -v "${app_vol}:/from:ro" -v "${prev_vol}:/to" alpine:3 sh -c 'cp -a /from/. /to/'
+    vol_saved=1
 fi
 echo "[upgrade] 本体ボリューム ${app_vol} を作り直します..."
-docker volume rm "$app_vol" >/dev/null 2>&1 || true
+docker volume rm "$app_vol" >/dev/null
+vol_removed=1
 
-# 5) 起動前にマーカーを置く。
+# 6) 起動前にマーカーを置く。
 #    ここで eccube_app が新イメージの内容で作られ、同時に .eccube_installed を置くことで
 #    entrypoint の eccube:install 分岐（既存 DB を壊す）を回避して migration 経路に入る。
+#    **メンテナンス表示も一緒に置く。** 新しいボリュームには表示が無いので、置かないと up した瞬間に
+#    公開され、確認が終わる前に注文が入る（失敗して DB を戻すと、その注文が消える）。
 echo "[upgrade] インストール済みマーカーを設定します..."
 "${dc[@]}" run --rm --no-deps --entrypoint sh ec-cube \
-    -c 'mkdir -p /var/www/html/var && touch /var/www/html/var/.eccube_installed'
+    -c "mkdir -p /var/www/html/var && touch /var/www/html/var/.eccube_installed && printf '%s' '${manual_maint:-upgrade:${token}}' > ${MAINT} && chown www-data:www-data ${MAINT}"
 
-# 6) 公開する前にスキーマとデータを合わせる。
+# 7) 公開する前にスキーマとデータを合わせる。
 #
 #    ここで先に up -d してしまうと、新コード + 旧スキーマの状態で nginx が公開され、
 #    スキーマ更新が終わるまで全ページ 500 を返す。そこで nginx を上げずに、db だけを
@@ -430,12 +666,8 @@ offline() { # offline <表示名> <console の引数...>
     if ! "${dc[@]}" run --rm \
             -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
             ec-cube runuser -u www-data -- php bin/console "$@"; then
-        cat <<EOS >&2
-[upgrade] エラー: ${label}に失敗しました。サイトはまだ公開していません。
-  ログ: docker compose logs ec-cube
-  切り戻し: bin/upgrade.sh ${current:-元の値} のあと bin/restore.sh ${backup_dir:-backups/<日時>}
-EOS
-        exit 1
+        echo "[upgrade] エラー: ${label}に失敗しました。サイトはまだ公開していません。" >&2
+        rollback_upgrade
     fi
 }
 
@@ -447,20 +679,32 @@ EOS
 echo "[upgrade] エンティティ proxy を生成します..."
 offline "proxy の生成" eccube:generate:proxies
 
+if [ "$app_role" = 1 ]; then
+    echo "[upgrade] アプリホスト（ECCUBE_SKIP_DB_INIT=1）なので、スキーマと migration には触りません（init 役で上げてある前提）。"
+else
 echo "[upgrade] 本体スキーマの差分:"
 diff_sql="$("${dc[@]}" run --rm -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
     ec-cube runuser -u www-data -- php bin/console doctrine:schema:update --dump-sql 2>&1 || true)"
 printf '%s\n' "$diff_sql" | sed 's/^/    /'
 
-# 列やテーブルの削除が混じっていないか確かめる。
+# 列やテーブルの削除・名前の変更が混じっていないか確かめる。
 # DROP INDEX / DROP FOREIGN KEY / DROP PRIMARY KEY は索引の貼り直しで普通に出るので
 # 除外し、それ以外の DROP（＝列・テーブルの削除）だけを危険と見なす。
+# **名前の変更も止める。** Doctrine DBAL 4（EC-CUBE 4.4）の比較器は、同じ表で「消える列」と「増える列」の
+# 型が同じだと名前の変更とみなし、`CHANGE 古い 新しい`（MySQL）/ `RENAME COLUMN`（PostgreSQL）を打つ。
+# データはそのまま別の列へ移る（CLAUDE.md「プラグインを入れ替えると、列のデータが別のプラグインへ移る」）。
+# MySQL の CHANGE は型を変えるだけでも `CHANGE a a` と打つので、名前が違うものだけを拾う。
+# 索引の名前の変更（RENAME INDEX / ALTER INDEX … RENAME TO）は普通に出るので外す。
 risky="$(printf '%s' "$diff_sql" |
     sed -E 's/DROP (INDEX|FOREIGN KEY|PRIMARY KEY)[^,;]*//gi' |
     grep -iE 'DROP ' || true)"
-if [ -n "$risky" ] && [ "${UPGRADE_ALLOW_DROP:-0}" != "1" ]; then
-    cat <<EOS >&2
-[upgrade] エラー: スキーマ差分に列・テーブルの削除が含まれています。中止します。
+renamed="$(printf '%s\n' "$diff_sql" | grep -oiE '(^|[ ,])CHANGE +(COLUMN +)?`?[A-Za-z0-9_]+`? +`?[A-Za-z0-9_]+`?' | sed -E 's/^[ ,]//' |
+    tr -d '`' | awk '{ if (tolower($(NF-1)) != tolower($NF)) print }' || true)"
+nl=$'\n'
+renamed="${renamed:+${renamed}${nl}}$(printf '%s\n' "$diff_sql" | grep -iE 'RENAME +(COLUMN|TO) ' | grep -viE 'RENAME +INDEX|^[[:space:]]*ALTER +INDEX' || true)"
+if { [ -n "$risky" ] && [ "${UPGRADE_ALLOW_DROP:-0}" != "1" ]; } || { [ -n "$renamed" ] && [ "${UPGRADE_ALLOW_RENAME:-0}" != "1" ]; }; then
+    [ -z "$risky" ] || cat <<EOS >&2
+[upgrade] エラー: スキーマ差分に列・テーブルの削除が含まれています。
 
 $(printf '%s\n' "$risky" | sed 's/^/    /')
 
@@ -469,53 +713,57 @@ $(printf '%s\n' "$risky" | sed 's/^/    /')
    - プラグインが新バージョン非対応で、エンティティ拡張が読み込めていない
   該当プラグインを有効なまま新バージョン対応版へ更新するか、列が不要なら
   手動で削除してから再実行してください。
-
-  内容を確認のうえ意図的に適用する場合のみ:
-    UPGRADE_ALLOW_DROP=1 bin/upgrade.sh ${ver}
-
-  サイトはまだ公開しておらず、DB にも書き込んでいません。
-  切り戻し: bin/upgrade.sh ${current:-元の値}
+  内容を確認のうえ意図的に適用する場合のみ: UPGRADE_ALLOW_DROP=1 bin/upgrade.sh ${ver}
 EOS
-    exit 1
+    [ -z "$renamed" ] || cat <<EOS >&2
+[upgrade] エラー: スキーマ差分に列の名前の変更が含まれています。
+
+$(printf '%s\n' "$renamed" | sed 's/^/    /')
+
+  消える列と増える列を「名前の変更」とみなしたもので、適用すると古い列のデータが新しい列へ移ります
+  （別のプラグインの列へ、ほかの意味の値が入る）。よくある原因は削除と同じです。
+  内容を確認のうえ意図的に適用する場合のみ: UPGRADE_ALLOW_RENAME=1 bin/upgrade.sh ${ver}
+EOS
+    echo "[upgrade] DB にはまだ書き込んでいません。元の版に戻します。" >&2
+    rollback_upgrade
 fi
 
 echo "[upgrade] スキーマを更新します（未公開）..."
+db_touched=1
 offline "スキーマ更新" doctrine:schema:update --force
 
 echo "[upgrade] データ移行（migration）を適用します（未公開）..."
 offline "migration の適用" doctrine:migrations:migrate --no-interaction --allow-no-migration
+fi
 
-# 7) ここまで整合してから公開する。entrypoint が cache:clear を行う。
-echo "[upgrade] 公開します..."
+# 8) ここまで整合してから起動する。entrypoint が cache:clear を行う。
+#    **まだメンテナンス表示の中。** token の cookie で中から開くかを確かめ、通ったら外す。
+echo "[upgrade] 起動します（メンテナンス表示のまま）..."
 "${dc[@]}" up -d
 
-# 8) 応答するまで待つ
-echo "[upgrade] 起動を待っています..."
-for i in $(seq 1 60); do
-    if bin/healthcheck.sh >/dev/null 2>&1; then
-        echo "[upgrade] 完了。${current:-?} -> ${ver} へ更新しました。"
-        bin/healthcheck.sh
-        # オリジナルテーマを写してあるなら、本体側で変わった静的物を挙げる。
-        # 写しはフォールバック無しで勝ち続けるので、**ここで見せないと誰も気づかない**。
-        # **.base があるだけでは出さない。** テーマを default のまま使っている店にも
-        # 写しが残っていることがあり（試しに init した、など）、無関係な差分で驚かせる。
-        if [ -f html/template/original/.base ] && [ "$(env_get ECCUBE_TEMPLATE_CODE)" = "original" ]; then
-            echo "[upgrade] オリジナルテーマの写しと、新しい本体との差分:"
-            bin/theme.sh diff || true
-        fi
-        echo "[upgrade] 管理画面とフロントの表示、受注データを必ず目視で確認してください。"
-        exit 0
-    fi
-    sleep 5
-done
-
-cat <<EOS >&2
-
-[upgrade] エラー: 起動を確認できませんでした。
-  ログ: docker compose logs ec-cube
-  切り戻し:
-    1) .env の ECCUBE_VERSION を ${current:-元の値} に戻す
-    2) bin/upgrade.sh ${current:-元の値}   （本体コードを戻す）
-    3) 必要なら bin/restore.sh ${backup_dir:-backups/<日時>}   （DB を書き戻す）
-EOS
-exit 1
+echo "[upgrade] 開くかを確かめています（最大 ${health_wait} 秒。キャッシュの組み立てに数分かかることがあります）..."
+if ! wait_site "$health_wait"; then
+    echo "[upgrade] エラー: 新しい版が開きませんでした（ログ: docker compose logs ec-cube）。" >&2
+    rollback_upgrade
+fi
+trap - ERR INT TERM HUP
+# メンテナンス表示を外す。手で入れていたものは、新しい版にも同じものを置いたので残す
+if [ "$maint_on" = 1 ] && "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' $MAINT && rm -f $MAINT" 2>/dev/null; then
+    echo "[upgrade] メンテナンス OFF"
+elif [ -n "$manual_maint" ]; then
+    echo "[upgrade] メンテナンス表示は、手で入れていたものなので残しています。"
+fi
+echo "[upgrade] 完了。${current:-?} -> ${ver} へ更新しました。"
+bin/healthcheck.sh || true
+# オリジナルテーマを写してあるなら、本体側で変わった静的物を挙げる。
+# 写しはフォールバック無しで勝ち続けるので、**ここで見せないと誰も気づかない**。
+# **.base があるだけでは出さない。** テーマを default のまま使っている店にも
+# 写しが残っていることがあり（試しに init した、など）、無関係な差分で驚かせる。
+if [ -f html/template/original/.base ] && [ "$(env_get ECCUBE_TEMPLATE_CODE)" = "original" ]; then
+    echo "[upgrade] オリジナルテーマの写しと、新しい本体との差分:"
+    bin/theme.sh diff || true
+fi
+echo "[upgrade] 管理画面とフロントの表示、受注データを必ず目視で確認してください。"
+echo "          上げる前の状態: バックアップ ${backup_dir} / 本体 ${prev_vol}（次の upgrade で置き換わります）"
+echo "          戻すなら: bin/upgrade.sh ${current:-<元の版>} のあと bin/restore.sh ${backup_dir}"
+exit 0

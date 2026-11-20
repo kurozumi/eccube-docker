@@ -58,7 +58,10 @@ fi
 # DB だけ先に上げ、使い捨てのコンテナで判定してから公開層を含む全体を起動する
 # （全部上げてから判定すると、止めた時点でもう公開されている）。判定スクリプトは
 # 標準入力で php に渡す（イメージに焼かない。配布済みの古いイメージでも動くように）。
-if [ "${FORCE_PUBLISH:-0}" != "1" ] && "${dc[@]}" config --services 2>/dev/null | grep -qx db; then
+# サービスの一覧は変数に取ってから見る。**pipefail の下で `compose … | grep -q` と書くと、grep が先に終わったときに
+# compose が SIGPIPE で落ち、一致したのに「無い」になる**（手元で 5 回に 2 回）。ここでは検査ごと飛ばしていた。
+services="$("${dc[@]}" config --services 2>/dev/null || true)"
+if [ "${FORCE_PUBLISH:-0}" != "1" ] && printf '%s\n' "$services" | grep -qx db; then
     "${dc[@]}" up -d --wait db >/dev/null 2>&1 || true
     verdict="$("${dc[@]}" run --rm --no-deps -T --entrypoint php ec-cube < "$(dirname "$0")/lib/admin-password-check.php" 2>/dev/null | tail -1 || true)"
     case "$verdict" in
