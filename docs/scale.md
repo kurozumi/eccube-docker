@@ -43,6 +43,11 @@ HTML はキャッシュしません（カート・ログイン状態・CSRF ト�
 
 5 分でも、中継点から元のサーバーに届くのは「中継点の数 × ファイルの数」が 5 分に 1 回だけです。
 
+**Cloudflare の Browser Cache TTL を「Respect Existing Headers」にしておく**（Caching → Configuration）。
+ここに 4 時間などの値が入っていると、Cloudflare は元の `max-age=300` をその値まで引き上げてブラウザへ渡し、
+直した CSS がブラウザに何時間も残ります（商品画像の 30 日は元のほうが長いので、そのまま）。
+下の確かめ方で、公開している名前から見た `cache-control` が `max-age=300` になっていれば大丈夫です。
+
 **確かめ方**（2 回目で `HIT` になれば効いている）:
 
 ```bash
@@ -56,6 +61,11 @@ curl -sI https://shop.example.com/html/template/default/assets/css/style.css | g
 
 すぐに反映したいとき（CSS を直してすぐ見せたい・テーマを入れ替えた）は、Cloudflare の画面の
 Caching → Configuration → **Purge Cache**（URL を指定するか、全部）。5 分待てば、何もしなくても入れ替わります。
+
+**Purge で消えるのは中継点の写しだけで、お客さんのブラウザの写しは消えません。** v1.0.17 以前（30 日）から
+上げた直後は、それまでに来たお客さんのブラウザに古い CSS・JS が最長 30 日残ります。新しい `max-age` は、
+ブラウザが次に取り直したときから効きます。すぐ全員に届けたいときは、そのファイルの URL を変えます
+（読み込んでいる自分のテンプレートで `?v=2` を付ける、ファイル名を変える、など）。
 
 ### caddy で 80/443 を直接受けているとき
 
@@ -82,8 +92,9 @@ Caching → Configuration → **Purge Cache**（URL を指定するか、全部�
    **DB の接続数に気をつける**: 全ホストの `PHP_FPM_MAX_CHILDREN` の合計 + 余裕が、DB の `max_connections`
    （既定 200）を超えると「Too many connections」で落ちます（下の「単一ホスト強化」の式）。
 
-`docker compose up -d --scale ec-cube=N`（1 台の中で ec-cube のコンテナを増やす）もできますが、同じ CPU を
-分け合うだけなので、2 の `PHP_FPM_MAX_CHILDREN` と効き目はほぼ同じです（下の「水平スケール」）。
+1 台の中で ec-cube のコンテナを増やす（`--scale`）こともできますが、同じ CPU を分け合うだけなので、
+2 の `PHP_FPM_MAX_CHILDREN` と効き目はほぼ同じです。やるなら、下の「水平スケール」の手順どおりに
+（素の `--scale` だと、増えたコンテナの起動時の `cache:clear` が動いているほうのキャッシュを消し、500 を出します）。
 
 ## 3. DB の読み取りを振り分ける・ページをキャッシュする（まだ無い）
 
