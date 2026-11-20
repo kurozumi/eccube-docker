@@ -159,6 +159,7 @@ root が要るのはパッケージの導入など限られた場面だけで、
 | [バックアップ / 復元](docs/backup.md) | DB と画像の保全。**バージョンアップの前に必ず取る** |
 | [データを失わないために](docs/data-safety.md) | **`down` と `down -v` の違い**、消えるコマンド、消したときの復旧 |
 | [大規模アクセス / スケール](docs/scale.md) | 1台で捌く → 状態を外へ出す → 複数ホスト。セッション共有・画像共有・LB・メールの非同期化 |
+| [負荷試験](docs/loadtest.md) | 何 PV/秒まで耐えるか・どこが先に詰まるかを測る（`bin/loadtest.sh`、k6） |
 | [監視 / 可観測性](docs/monitoring.md) | ログの見方と死活監視 |
 | [ユニットテスト](docs/testing.md) | `bin/test.sh` の使い方と、素の phpunit を使ってはいけない理由 |
 | [IDE の設定](docs/ide.md) | PhpStorm でコード補完を効かせる |
