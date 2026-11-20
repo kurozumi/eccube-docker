@@ -493,8 +493,10 @@ ok=0
 for i in $(seq 1 20); do
     ok=1
     for path in / /products/list; do
-        code="$(curl -s -o /dev/null -w '%{http_code}' -b "maintenance_token=${token}" "${base_url}${path}" || echo 000)"
-        case "$code" in 200|301|302) ;; *) ok=0; last="${code} ${path}" ;; esac
+        # HTTPS として聞き、200 だけを通す。ECCUBE_FORCE_SSL の店は http のままだと https への転送（301/302）を
+        # 返し、画面を組み立てずに「開いた」ことになっていた（upgrade.sh と同じ）
+        code="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' -b "maintenance_token=${token}" "${base_url}${path}" || echo 000)"
+        [ "$code" = 200 ] || { ok=0; last="${code} ${path}"; }
     done
     [ "$ok" = 1 ] && break
     sleep 3

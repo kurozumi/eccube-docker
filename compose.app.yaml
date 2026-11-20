@@ -9,7 +9,8 @@ x-logging: &default-logging
 # 共有サービス」を指す（このファイルには db/redis を含めない）。
 #
 #   使い方（各アプリホスト）:
-#     docker compose -f compose.app.yaml pull ec-cube && docker compose -f compose.app.yaml up -d
+#     .env に COMPOSE_FILE=compose.app.yaml を書いてから docker compose pull && docker compose up -d
+#     （-f で直接指定しない。bin/*.sh は COMPOSE_FILE を見るので、-f で起こすと別のスタックとして扱われる）
 #
 #   前提: .env に外部エンドポイントを設定しておく（.env.example の「複数ホスト」節を参照）:
 #     DB_HOST / DB_USER / DB_PASSWORD / DB_NAME  … 共有 DB
@@ -54,12 +55,12 @@ services:
     logging: *default-logging
     # 本番は CI（.github/workflows/build-image.yml）が push した GHCR イメージを使う。
     #   .env で ECCUBE_IMAGE=ghcr.io/<owner>/<repo>/ec-cube:<系列>-<リリース> を指定し、
-    #   docker compose -f compose.app.yaml pull ec-cube && up -d --no-build
+    #   docker compose pull ec-cube && docker compose up -d --no-build（.env の COMPOSE_FILE=compose.app.yaml）
     # ECCUBE_IMAGE 未指定ならローカル build（従来どおり）。
     # **`latest` は作っていない。** 4.2/4.3/4.4 が並行して現役なので、
     # 単一の「最新」を置くと系列をまたぐ更新を黙って引き当てることになる。
     image: ${ECCUBE_IMAGE:-eccube-ec-cube}
-    build:
+    build: &app-build
       context: .
       dockerfile: docker/php/Dockerfile
       args:
@@ -178,6 +179,8 @@ services:
     logging: *default-logging
     profiles: ["messenger"]
     image: ${ECCUBE_IMAGE:-eccube-ec-cube}
+    # ローカル build の環境でも worker のイメージを作れるように、ec-cube と同じ build を持つ
+    build: *app-build
     env_file: *app-env-file
     environment:
       <<: *app-environment
@@ -210,13 +213,12 @@ services:
       - backend
     logging: *default-logging
     image: nginx:1.30-alpine
-    # 複数ホスト構成では LB がここへ来るので、既定は全インターフェイス。
-    # **LB からしか到達させないこと。** プライベート側の IP に束縛する
-    # （HTTP_BIND=10.0.0.11 のようにホストごとに書く）か、ファイアウォールで LB の IP
-    # だけ許可する。0.0.0.0 のまま公開 IP にも開いていると LB をバイパスして直接叩ける
-    # （TRUSTED_PROXIES で信頼している X-Forwarded-* を詐称できる）。
+    # **LB からしか届かないこと。** nginx は X-Forwarded-For を信じるので、直接届くと IP を詐称でき、
+    # 管理画面の IP 制限とログインの回数制限が抜ける（試験で確かめた）。
+    # **HTTP_BIND は必須**（既定の 0.0.0.0 だと公開 IP にも開く）。そのホストのプライベート側の IP を
+    # 書き（HTTP_BIND=10.0.0.11）、ファイアウォールでも HTTP_PORT を LB の IP にだけ開ける。
     ports:
-      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8080}:80"
+      - "${HTTP_BIND:?HTTP_BIND が .env に無い（nginx を束縛するプライベート側の IP。docs/scale.md「複数ホスト + ロードバランサ」）}:${HTTP_PORT:-8080}:80"
     volumes:
       - eccube_app:/var/www/html:ro
       - ./html/user_data:/var/www/html/html/user_data:ro

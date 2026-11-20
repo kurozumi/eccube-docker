@@ -428,6 +428,11 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **性能/スケール（Tier 1）**: php-fpm は `.env` の `PHP_FPM_*`、OPcache は entrypoint が
   `APP_ENV` で切替、Redis 共有キャッシュは `optional/redis/redis_cache.yaml`（任意）、DB は
   `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は `docs/scale.md`。
+- **nginx の `real_ip_recursive` は off、PHP へ渡す `X-Forwarded-For` は `$remote_addr` に置き換える。** on だと
+  信じる範囲が全アドレスなので左端（お客さんが書ける値）まで遡り、ヘッダーを変えるだけでログインの回数制限が一度も
+  効かなかった（試験で確かめた）。`trusted_proxies.yaml` は `X-Forwarded-Host` / `-Port` を信じない（ALB・Cloudflare LB
+  は素通しするので、パスワード再設定のリンクを別ドメインへ向けられる）。nginx に**直接**届けば今も詐称できるので、
+  公開層・LB 以外から届かないことが前提（本番は 127.0.0.1、`compose.app.yaml` は `HTTP_BIND` 必須）。
 - **静的ファイルのキャッシュは、名前の変わらないもの（CSS・JS・テーマの画像）を 5 分、商品画像（`save_image`）だけ 30 日。**
   nginx と caddy の両方で揃える。EC-CUBE 4.2 / 4.3 は URL に版を付けず、`customize.css` は管理画面の「CSS 管理」と
   deploy が同じ名前のまま書き換えるので、長くすると直した CSS がブラウザと CDN の中継点に残る（v1.0.17 までは 30 日で、
