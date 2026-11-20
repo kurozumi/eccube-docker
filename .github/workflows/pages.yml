@@ -51,9 +51,10 @@ jobs:
           fi
           [ -n "$tag" ] || { echo "Release がありません。先に Release を出してください" >&2; exit 1; }
           ver="${tag#v}"
-          sed -i "s/__TAG__/${tag}/g; s/__VER__/${ver}/g" site/index.html
+          # ページは複数ある（index / guide / ops / scale）。全部を置き換える
+          sed -i "s/__TAG__/${tag}/g; s/__VER__/${ver}/g" site/*.html
           echo "tag=${tag} ver=${ver}"
-          grep -c '__TAG__\|__VER__' site/index.html && { echo "置き換え漏れ" >&2; exit 1; } || true
+          grep -l '__TAG__\|__VER__' site/*.html && { echo "置き換え漏れ" >&2; exit 1; } || true
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

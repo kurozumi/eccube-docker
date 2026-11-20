@@ -152,6 +152,14 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **`ECCUBE_AUTH_MAGIC` は全パスワードのハッシュの鍵。** 違う値で DB を戻すと誰も
   ログインできず、エラーも出ない。`restore.sh` が DB を戻す前に突き合わせて止める。
   引っ越しは「clone → `bin/init.sh` → AUTH_MAGIC を合わせる → `bin/restore.sh`」。
+  **消す・書き換えるコマンドは、先に退避して、退避できなければ始めない。失敗したら退避から戻す。**
+  `restore.sh` は戻す前にいまの状態を `backups/<日時>-before-restore/` へ取り（`BACKUP_LABEL`）、
+  メンテナンス表示の中で戻し、途中で失敗したら `--rollback` でそこから戻す。**ダンプは完了の行
+  （`-- Dump completed` / `-- PostgreSQL database dump complete`）があるかを先に見る。** 途中で切れた
+  ダンプを psql に流すと、入力の終わりを正常な終わりとみなし、空の表のまま 0 で終わる（1 つの
+  トランザクションでも防げない。試験で踏んだ）。`plugin.sh remove` も退避 → uninstall（失敗したら
+  止まる）→ フォルダは `var/removed-plugins/` へ移す。`backup.sh` の世代管理は自分が付けた名前だけを
+  数え、`-before-` の控えは別勘定（`BACKUP_KEEP_SAFETY`）、`BACKUP_PROTECT` は数から外す。
   **DB は MariaDB / MySQL か PostgreSQL**（`.env` の `DB_ENGINE`。イメージは両方の拡張を持つ）。
   backup / restore はそれを見て mysqldump / pg_dump を使い分ける。外部 DB でも同じ
   （`db` サービスが無ければ同じ DB のクライアントを使い捨てコンテナで起動し `.env` の `DB_*` で繋ぐ）。
@@ -414,7 +422,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   ローカルデータは消えるので事前バックアップ。詳細は `docs/scale.md`。
 - **複数ホスト + LB（Tier 2）**: 各アプリホストは `compose.app.yaml`（db/redis を含まない
   app 層のみ、外部共有サービスを参照）。init ロール 1 台だけ `ECCUBE_SKIP_DB_INIT=0` で
-  migrate、他は 1。HTTPS 終端 LB では `TRUSTED_PROXIES` 必須（本体未配線を
+  migrate、他は 1。**entrypoint は印（`var/.eccube_installed`）が無くても、DB に店（`dtb_base_info`）が
+  あれば `eccube:install` を打たない**（install は `schema:drop --force` から始まる。印はボリュームの中にしか
+  無いので、新しいホストやボリュームの作り直しで共有の DB を消していた。v1.0.20）。HTTPS 終端 LB では `TRUSTED_PROXIES` 必須（本体未配線を
   `app/config/eccube/packages/trusted_proxies.yaml` で補う）。LB 例は `docker/nginx/lb.conf.example`。
 - **どこまで強くするかは `bin/loadtest.sh` で測ってから決める**（k6、`docs/loadtest.md`）。到着数を固定して流す
   （VU 固定だと遅くなるほど送る数も減り、限界の手前で余裕があるように見える）。**注文は流さない**（本物の受注と

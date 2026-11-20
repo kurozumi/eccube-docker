@@ -14,7 +14,8 @@
 #   bin/plugin.sh watch [秒]            変更を見張って自動で reload（既定 2 秒間隔）
 #   bin/plugin.sh enable  <Code>
 #   bin/plugin.sh disable <Code>
-#   bin/plugin.sh remove  <Code>        uninstall して app/Plugin/<Code> も削除
+#   bin/plugin.sh remove  <Code>        退避 → uninstall → app/Plugin/<Code> を var/removed-plugins/ へ移す
+#                                       （消えるものを見せてコードを打たせる。非対話は CONFIRM_REMOVE=<Code>）
 #   bin/plugin.sh list                  導入状況（ファイル + dtb_plugin）を表示
 #   bin/plugin.sh doctor                システムエラーが出たときの点検と修復
 #
@@ -41,6 +42,25 @@ cd "$(dirname "$0")/.."
 
 ec()  { docker compose exec -T ec-cube runuser -u www-data -- php bin/console "$@"; }
 die() { echo "[plugin] エラー: $*" >&2; exit 1; }
+# plugin_state <Code> … dtb_plugin での状態を出す: enabled / disabled / missing。DB を読めなければ失敗
+plugin_state() {
+    docker compose exec -T -e PLUGIN_CODE="$1" ec-cube php <<'PHP'
+<?php
+$u = parse_url((string) getenv('DATABASE_URL'));
+if (!$u) { exit(2); }
+$pg = in_array($u['scheme'] ?? '', ['postgresql', 'postgres', 'pgsql'], true);
+try {
+    $pdo = new PDO(
+        sprintf('%s:host=%s;port=%d;dbname=%s', $pg ? 'pgsql' : 'mysql', $u['host'], $u['port'] ?? ($pg ? 5432 : 3306), ltrim($u['path'] ?? '', '/')),
+        urldecode($u['user'] ?? ''), urldecode($u['pass'] ?? ''), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $st = $pdo->prepare('SELECT enabled FROM dtb_plugin WHERE code = ?');
+    $st->execute([getenv('PLUGIN_CODE')]);
+    // fetchColumn() は「行が無い」と「値が false」（PostgreSQL の boolean）を区別できないので、行で取る
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $e) { exit(2); }
+echo $row === false ? 'missing' : (in_array($row['enabled'], [true, 1, '1', 't'], true) ? 'enabled' : 'disabled');
+PHP
+}
 
 # テスト環境のキャッシュも明示的に消す。
 #
@@ -527,13 +547,68 @@ PHP
   disable)  prepare_plugin_command; ec eccube:plugin:disable --code="${1:?Code}"; settle;;
 
   remove)
+    # **消す前に、何が消えるかを見せて、名前を打たせる。** uninstall はそのプラグインの表と列を中身ごと
+    # 消し、以前は app/Plugin/<Code> も .git ごと rm -rf していた（push していない作業も消える）。
+    # いまは: DB を含めて退避してから uninstall し、フォルダは消さずに var/removed-plugins/ へ移す。
+    # uninstall が失敗したら、そこで止める（ファイルを消すと、DB に残った行を誰も片付けられない）。
     code="${1:?Code を指定してください}"
+    case "$code" in *[!A-Za-z0-9_]*) die "プラグインのコードは英数字と _ だけです（${code}）" ;; esac
+    dir="app/Plugin/$code"
+    state="$(plugin_state "$code")" || die "DB を読めないので、${code} がインストールされているか確かめられません。何も変えずに中止します。"
+    [ -d "$dir" ] || [ "$state" != missing ] || die "${code} は app/Plugin にも DB にもありません"
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    keep="var/removed-plugins/${code}-${stamp}"
+    echo "[plugin] ${code} を削除します。消えるもの・移すもの:"
+    if [ "$state" != missing ]; then
+        echo "  - DB: uninstall します（いま: ${state}）。**このプラグインが作った表と列は、中身ごと消えます**"
+    fi
+    if [ -d "$dir" ]; then
+        echo "  - ファイル: ${dir} は消さずに ${keep}/ へ移します（.git ごと）"
+        if [ -d "$dir/.git" ]; then
+            dirty="$(git -C "$dir" status --porcelain 2>/dev/null || true)"
+            [ -z "$dirty" ] || echo "    （コミットしていない変更があります: $(printf '%s\n' "$dirty" | wc -l | tr -d ' ') 件）"
+            if up="$(git -C "$dir" rev-parse --abbrev-ref '@{u}' 2>/dev/null)"; then
+                ahead="$(git -C "$dir" rev-list --count "${up}..HEAD" 2>/dev/null || echo 0)"
+                [ "$ahead" = 0 ] || echo "    （push していないコミットがあります: ${ahead} 件）"
+            else
+                echo "    （push 先が設定されていません。コミットはここにしかないかもしれません）"
+            fi
+        fi
+    fi
+    echo "  - その前に、DB・画像・管理画面が書いたファイルを backups/ へ退避します"
+    if [ -n "${CONFIRM_REMOVE:-}" ]; then
+        [ "$CONFIRM_REMOVE" = "$code" ] || die "CONFIRM_REMOVE がコード（${code}）と違います。何も変えずに中止します。"
+    else
+        read -r -p "よければ、コード（${code}）を打ってください: " ans
+        [ "$ans" = "$code" ] || { echo "中止しました（何も変えていません）"; exit 1; }
+    fi
+    rf="$(mktemp)"
+    if ! BACKUP_LABEL=plugin-remove BACKUP_RESULT_FILE="$rf" bin/backup.sh >"${rf}.log" 2>&1; then
+        tail -5 "${rf}.log" >&2; rm -f "$rf" "${rf}.log"
+        die "退避できませんでした。何も変えずに中止します（bin/backup.sh を単体で打って原因を見てください）。"
+    fi
+    saved="$(cat "$rf")"; rm -f "$rf" "${rf}.log"
+    echo "[plugin] 退避しました: ${saved}"
     prepare_plugin_command
-    ec eccube:plugin:disable   --code="$code" || true
-    ec eccube:plugin:uninstall --code="$code" || true
-    rm -rf "app/Plugin/$code"
+    if [ "$state" = enabled ]; then
+        ec eccube:plugin:disable --code="$code" \
+            || die "無効化に失敗しました。DB もファイルも消していません（退避: ${saved}）。"
+    fi
+    if [ "$state" != missing ]; then
+        if ! ec eccube:plugin:uninstall --code="$code"; then
+            settle || true
+            die "uninstall に失敗しました。ファイルは消していません（${dir}）。いまは無効です。
+       戻すなら bin/plugin.sh enable ${code}、DB ごと戻すなら bin/restore.sh ${saved}"
+        fi
+    fi
+    if [ -d "$dir" ]; then
+        mkdir -p var/removed-plugins
+        mv "$dir" "$keep"
+    fi
     settle
     echo "[plugin] 削除完了: $code"
+    [ -d "$keep" ] && echo "         ファイルは ${keep}/ に残してあります（要らなければ消してください）。"
+    echo "         DB を含めた削除前の状態: ${saved}（戻すなら bin/restore.sh ${saved}）"
     ;;
 
   doctor)
