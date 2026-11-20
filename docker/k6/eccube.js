@@ -45,11 +45,14 @@ const cartAdded = new Counter('cart_added');
 // 1 段 = 上り 30 秒 + 保つ 2 分。各リクエストに「いまの段」（目標の PV/秒）の印を付ける
 const STRESS_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5];
 const STEP_SEC = 150;
-const stepLabels = STRESS_STEPS.map((x) => String(Math.max(1, Math.round(RATE * x))));
+// 印は段の番号（s1〜s6）。目標の値は表示にだけ使う（--rate が小さいと丸めた目標が重なるため）。
+// 最後の下り 30 秒は cooldown にして、表から外す（混ぜると最後の段の件/秒が多く出る）
+const stepIds = STRESS_STEPS.map((_, i) => `s${i + 1}`);
+const stepTargets = STRESS_STEPS.map((x) => Math.max(1, Math.round(RATE * x)));
 function markStep() {
   if (PROFILE !== 'stress') return;
-  const sec = (Date.now() - exec.scenario.startTime) / 1000;
-  exec.vu.tags.step = stepLabels[Math.min(stepLabels.length - 1, Math.max(0, Math.floor(sec / STEP_SEC)))];
+  const i = Math.floor((Date.now() - exec.scenario.startTime) / 1000 / STEP_SEC);
+  exec.vu.tags.step = i >= stepIds.length ? 'cooldown' : stepIds[Math.max(0, i)];
 }
 
 // ── 流し方 ──
@@ -119,7 +122,7 @@ export const options = {
     ),
     // 段ごとの行を出すためだけのしきい値（合否には効かない）
     PROFILE === 'stress'
-      ? Object.fromEntries(stepLabels.flatMap((s) => [
+      ? Object.fromEntries(stepIds.flatMap((s) => [
         [`http_req_duration{step:${s}}`, ['max>=0']],
         [`http_reqs{step:${s}}`, ['count>=0']],
         [`http_req_failed{step:${s}}`, ['rate>=0']],
@@ -290,11 +293,12 @@ function textSummary(data) {
     lines.push('');
     lines.push('段ごと（目標は閲覧の PV/秒。実際はカートの分も入る。崩れ始めた段の 1 つ前が、安心して受けられる量）');
     lines.push('  目標 PV/秒   実際 件/秒    中央値      p95     失敗');
-    for (const s of stepLabels) {
+    for (const [i, s] of stepIds.entries()) {
+      const label = String(stepTargets[i]);
       const n = v(`http_reqs{step:${s}}`, 'count');
-      if (!n) { lines.push(`  ${s.padStart(9)}        -   （届かなかった）`); continue; }
+      if (!n) { lines.push(`  ${label.padStart(9)}        -   （届かなかった）`); continue; }
       const f = v(`http_req_failed{step:${s}}`, 'rate') || 0;
-      lines.push(`  ${s.padStart(9)}   ${(n / STEP_SEC).toFixed(1).padStart(9)}   ${ms(v(`http_req_duration{step:${s}}`, 'med')).padStart(7)}  ${ms(v(`http_req_duration{step:${s}}`, 'p(95)')).padStart(7)}  ${(f * 100).toFixed(1).padStart(6)}%`);
+      lines.push(`  ${label.padStart(9)}   ${(n / STEP_SEC).toFixed(1).padStart(9)}   ${ms(v(`http_req_duration{step:${s}}`, 'med')).padStart(7)}  ${ms(v(`http_req_duration{step:${s}}`, 'p(95)')).padStart(7)}  ${(f * 100).toFixed(1).padStart(6)}%`);
     }
   }
   lines.push('');

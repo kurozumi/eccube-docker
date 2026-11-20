@@ -33,8 +33,20 @@ Cloudflare などの前段が攻撃と見て止めることもあります。
 シナリオが動くかと、大まかな形（どこが先に詰まるか）を見るためだけにしてください。
 
 本番のデータを持ち込むなら `bin/backup.sh` → 検証環境で `bin/restore.sh`（[バックアップ](backup.md)）。
-**そのときは `.env` の `MAILER_DSN=null://null` にする。** 会員の本物のアドレスへメールが飛びます。
-DB には個人情報が入っているので、検証環境も本番と同じだけ守ってください。
+**戻す前に、メールを送れないようにする。** 会員の本物のアドレスが入っていて、Messenger の待ち行列に
+送る前のメールが残っていれば、戻した瞬間に worker が送り始めます。`.env` を書き換えただけでは、
+動いているコンテナには効きません。この順番で:
+
+```bash
+docker compose stop worker                                  # 1. 送る係を止める
+# 2. .env の MAILER_DSN=null://null にする
+docker compose up -d --force-recreate ec-cube worker        # 3. 新しい値でコンテナを作り直す
+docker compose exec ec-cube printenv MAILER_DSN             # 4. null://null と出ることを確かめる
+docker compose exec worker  printenv MAILER_DSN             #    worker も（messenger を使っているとき）
+bin/restore.sh backups/<日時>                                # 5. ここで初めて戻す
+```
+
+SMTP の値が残った worker を動かしたままにしないこと。DB には個人情報が入っているので、検証環境も本番と同じだけ守ってください。
 
 `bin/loadtest.sh` は、相手が手元（127.0.0.1 / localhost）でないときは、相手のホスト名を打たないと流しません
 （非対話なら `CONFIRM_LOADTEST=<ホスト名>`）。手元でも、相手がこのプロジェクトの nginx のポートで

@@ -60,8 +60,22 @@ case "$url" in http://*|https://*) ;; *) die "--url は http:// か https:// で
 case "$rate" in ''|*[!0-9]*) die "--rate は整数で: $rate" ;; esac
 [ "$rate" -ge 1 ] || die "--rate は 1 以上で"
 
-hostport="${url#*://}"; hostport="${hostport%%/*}"
-host="${hostport%%:*}"
+# 相手のホストとポートを取り出す。**ユーザー情報（user:pass@）付きの URL は受けない。**
+# `http://localhost:x@staging.example:8080` は、ここで素朴に切ると localhost に見えるが、k6 は
+# staging.example へ行く（手元の確認を素通りして別のサイトへ流れる）
+hostport="${url#*://}"; hostport="${hostport%%/*}"; hostport="${hostport%%\?*}"; hostport="${hostport%%#*}"
+case "$hostport" in *@*) die "--url にユーザー情報（…@）は付けないでください: $url" ;; esac
+case "$hostport" in
+    \[*\]:*) host="${hostport%%]:*}]"; port="${hostport##*]:}" ;;
+    \[*\])   host="$hostport"; port="" ;;
+    *:*)     host="${hostport%%:*}"; port="${hostport#*:}" ;;
+    *)       host="$hostport"; port="" ;;
+esac
+[ -n "$host" ] || die "--url からホストを読めません: $url"
+case "$port" in ''|*[!0-9]*) [ -z "$port" ] || die "--url のポートが数字ではありません: $url" ;; esac
+if [ -z "$port" ]; then
+    case "$url" in https://*) port=443 ;; *) port=80 ;; esac
+fi
 case "$host" in
     127.0.0.1|localhost|::1|\[::1\]) local_target=1 ;;
     *) local_target=0 ;;
@@ -88,7 +102,7 @@ fi
 # ポートが違えば、**このプロジェクトではないサイトへ流す**ことになるので止める
 if [ "$local_target" = 1 ]; then
     mine="$(docker compose port nginx 80 2>/dev/null | sed 's/.*://' || true)"
-    want="${hostport##*:}"; [ "$want" = "$hostport" ] && want=80
+    want="$port"
     if [ "$mine" != "$want" ]; then
         if [ -z "$mine" ]; then
             log "注意: このプロジェクトの nginx が動いていません（docker compose ps）。${url} は別のスタックかもしれません。"
@@ -170,7 +184,8 @@ trap cleanup EXIT
 
 log "流します（結果: ${out}/）..."
 set +e
-docker run --rm -i ${net_opts[@]+"${net_opts[@]}"} \
+# 手元のユーザーで動かす（k6 のイメージは UID 12345 で動くので、Linux では結果のディレクトリに書けない）
+docker run --rm -i --user "$(id -u):$(id -g)" ${net_opts[@]+"${net_opts[@]}"} \
     -v "$PWD/docker/k6:/scripts:ro" -v "$PWD/$out:/out" \
     -e BASE_URL="$target" -e PROFILE="$profile" -e RATE="$rate" -e DURATION="$duration" -e RAMP="$ramp" \
     -e CART_RATIO="$cart_ratio" -e P95_MS="$p95" ${max_vus:+-e MAX_VUS="$max_vus"} -e OUT_DIR=/out \
@@ -184,7 +199,10 @@ if [ "$local_target" = 1 ] && [ -s "$out/docker-stats.csv" ]; then
     echo "コンテナごとの CPU の最大（100% = 1 コア）:"
     awk -F, 'NR > 1 { gsub(/%/, "", $3); if ($3 + 0 > max[$2]) max[$2] = $3 + 0 } END { for (k in max) printf "  %-32s %6.1f%%\n", k, max[k] }' "$out/docker-stats.csv" | sort
     # php-fpm の子プロセスが足りなくなると、ここに出る。出ていれば PHP_FPM_MAX_CHILDREN か台数が先
-    n="$(docker compose logs --no-color --since "$started" ec-cube 2>/dev/null | grep -c 'max_children' || true)"
+    # 記録そのものも結果に残す（あとで比べるとき、画面の数字だけでは追えない）
+    docker compose logs --no-color --since "$started" ec-cube 2>/dev/null | grep 'max_children' > "$out/php-fpm-max-children.log" || true
+    n="$(wc -l < "$out/php-fpm-max-children.log" | tr -d ' ')"
+    echo "max_children に達した記録: ${n} 件" >> "$out/conditions.txt"
     if [ "${n:-0}" -gt 0 ]; then
         echo "php-fpm: 子プロセスが上限（max_children）に達した記録が ${n} 件。PHP の枠が先に詰まっています（docs/loadtest.md「読み方」）。"
     fi
