@@ -105,6 +105,8 @@ def vuln_accepted(vaccept, img, pkg, vid):
             review = a.get("review_by")
             if not review or dt.date.fromisoformat(review) < TODAY:
                 return None  # 期限の無いもの・期限切れは受け入れない。もう一度挙げる
+            if not str(a.get("reason") or "").strip():
+                return None  # 理由の無いものは受け入れない
             return a
     return None
 
@@ -125,6 +127,8 @@ def main():
 
     # ── 保守期限 ──
     eol_rows, info_rows, seen = [], [], set()
+    # 本番の構成で使う系列。ここに無い系列（開発でだけ使うイメージのもの）は、保守が終わっても参考に回す
+    prod_targets = {eol_target(i) for i in images if i not in dev_images}
     for img in images:
         t = eol_target(img)
         if not t or t in seen:
@@ -146,6 +150,8 @@ def main():
             a = accepted(accept, product, ver)
             if a:
                 info_rows.append(f"| {product} {ver} | `{img}` | 保守終了（{eol}）。受け入れ済み: {a.get('reason','')}（見直し {a.get('review_by','-')}） |")
+            elif t not in prod_targets:
+                info_rows.append(f"| {product} {ver} | `{img}` | 保守終了（{eol}）。開発でだけ使う（本番の構成では動かない）。最新 {latest} |")
             else:
                 eol_rows.append(f"| {product} {ver} | `{img}` | **保守終了**（{eol}）。最新 {latest} |")
                 actionable = True
@@ -153,6 +159,8 @@ def main():
             a = accepted(accept, product, ver)
             if a:
                 info_rows.append(f"| {product} {ver} | `{img}` | まもなく保守終了（{eol}）。受け入れ済み: {a.get('reason','')}（見直し {a.get('review_by','-')}） |")
+            elif t not in prod_targets:
+                info_rows.append(f"| {product} {ver} | `{img}` | まもなく保守終了（{eol}）。開発でだけ使う（本番の構成では動かない） |")
             else:
                 eol_rows.append(f"| {product} {ver} | `{img}` | **まもなく保守終了**（{eol}） |")
                 actionable = True
