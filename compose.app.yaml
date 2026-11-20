@@ -18,6 +18,8 @@ x-logging: &default-logging
 #
 #   スキーマの install / migrate は「init ロールの 1 台」でだけ行う:
 #     ECCUBE_SKIP_DB_INIT=0 で 1 度起動して migrate 済ませてから、app ホストを増やす。
+#     **v1.0.19 までのイメージでは、店のある DB に新しいホストを 0 で起動すると eccube:install が
+#     全部の表を消す。** v1.0.20 からは entrypoint が DB に店があるのを見て install しない。
 #
 #   アップロード画像(eccube_upload)は NFS/EFS ドライバで全ホスト共有にすること
 #   （下部 volumes 参照。ローカルボリュームのままだとホストごとに別物になる）。

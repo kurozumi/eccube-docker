@@ -265,6 +265,13 @@ DB=外部）になっているので、**アプリホストを N 台並べて前
 を書き換えて起動し直す）。手元の `db` は止まるがボリュームは残る。`bin/backup.sh` / `restore.sh` は
 `.env` の `DB_*` を見て外部 DB に繋ぐので、そのまま使える。
 
+写すときは:
+- **写す先にもう店があれば止まり、データベース名を打たせる。** 打てば、写す前にその DB の中身を
+  `backups/<日時>-before-setup-db-target/db.sql.gz` へ取ってから上書きする（向き先の取り違えで別の店の DB を消さない）。
+- **写している間はメンテナンス表示。** 切り替えて起動し直したあとに外す（写してから切り替えるまでの注文が、
+  古い DB にだけ残って新しい店から消える、を防ぐ）。
+- PostgreSQL は 1 つのトランザクションで流し、エラーで止める。写せなければ `.env` は変えない。
+
 ## ネットワークと権限
 
 - `frontend`（公開層と nginx）と `backend`（nginx・アプリ・DB・Redis）の 2 つ。公開層
@@ -315,6 +322,11 @@ DB が外部になっても `bin/backup.sh` はそのまま使える（`db` サ�
 3. **スキーマ移行は 1 台だけ**: どこか 1 台を `ECCUBE_SKIP_DB_INIT=0` で起動して
    `migrate` を済ませ、以降の app ホストは `ECCUBE_SKIP_DB_INIT=1`（既定）で起動する
    （全台が一斉に migrate すると競合するため）。
+   **v1.0.19 までの配布イメージでは、DB に店がある状態で新しいホスト（新しいボリューム）を
+   `ECCUBE_SKIP_DB_INIT=0` で起動すると、`eccube:install` が共有の DB の表を全部消して作り直す。**
+   v1.0.20 からは、起動時に DB に店（`dtb_base_info`）があれば install せずに migration へ回る
+   （繋がらなくて確かめられないときも install しない）。古いイメージのままなら、init ロールは
+   最初にデータを入れた 1 台から動かさないこと。
 4. **前段の LB**:
    - 自前 nginx: `docker/nginx/lb.conf.example` を参照（`upstream` に各 app ホストを列挙）。
    - Cloudflare Load Balancing: 各 app ホスト（の nginx:80/443）をオリジンプールに登録。

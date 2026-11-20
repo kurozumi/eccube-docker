@@ -237,7 +237,7 @@ image_ref_php() { # image_ref_php <参照>
 # 落ちると「dev が無い」と誤って判定して、正しい指定を止めてしまう（実際に踏んだ）。
 # 判定できないことで作業を止めない。
 image_check_version() { # image_check_version <制約> [再実行の例] → 解決できなさそうなら説明して 1
-    local want="$1" hint="${2:-}" series url stable_json dev_json stable pre dev
+    local want="$1" hint="${2:-}" series url stable_json dev_json stable pre dev all_vers
     series="$(image_series "$want")"
     case "$series" in [0-9]*.[0-9]*) ;; *) return 0 ;; esac   # 系列を取り出せない形は composer に任せる
     url="https://repo.packagist.org/p2/ec-cube/ec-cube"
@@ -253,7 +253,9 @@ image_check_version() { # image_check_version <制約> [再実行の例] → 解
         *@*) return 0 ;;   # stability を明示している。composer に任せる
     esac
     # 版そのもの（4.4.0-alpha-1 など）。あれば通す
-    if vers_of "$stable_json" | grep -qxF "$want"; then
+    # 一覧は変数に取ってから見る（pipefail の下で grep -q が先に終わると、前の cut が SIGPIPE で落ちて「無い」になる）
+    all_vers="$(vers_of "$stable_json")"
+    if printf '%s\n' "$all_vers" | grep -qxF "$want"; then
         return 0
     fi
 

@@ -22,14 +22,16 @@ docker compose down -v     # ★ボリュームごと消す
 | セッション（`redis` 有効時） | ボリューム `redis_session_data` | 残る | 消える | 消える |
 | セッション（既定） | `eccube_app` ボリュームの `var/sessions` | 残る | 消える | 消える |
 | EC-CUBE 本体・vendor | ボリューム `eccube_app` | 残る | 消える | 消える |
-| **独自コード**<br>`app/Customize` `app/template` `app/Plugin` `app/DoctrineMigrations` | **ホストのファイル**（bind mount） | 消えない | **消えない** | Git にあれば残る |
+| **独自コード**<br>`app/Customize` `app/template` `app/DoctrineMigrations` | **ホストのファイル**（bind mount） | 消えない | **消えない** | Git にあれば残る |
+| **プラグイン** `app/Plugin` | **ホストのファイル**（bind mount） | 消えない | **消えない** | プラグインごとの git か backup にあれば残る |
 | **独自 CSS/JS** `html/user_data` | **ホストのファイル**（bind mount） | 消えない | **消えない** | Git にあれば残る |
 
 **自分で書いたものは Docker の操作では消えません。** bind mount なので、実体は
 ホスト側の Git 管理下にあります。
 
-**本体とプラグインの実体は消えても困りません。** `eccube_app` は再ビルドで戻り、
-プラグインは `app/Plugin` に残ります。
+**本体は消えても困りません。** `eccube_app` は再ビルドで戻ります。プラグインの実体は
+`app/Plugin` に残りますが、**このリポジトリの git には入りません**（プラグインごとの git か、
+`backup.sh` の `admin-files.tar.gz` で運ばれます。買ったプラグインは backup にしかありません）。
 
 **本当に危ないのは DB と画像の 2 つだけ**です。この 2 つはバックアップでしか戻せません。
 
@@ -72,8 +74,18 @@ DB を戻しても誰もログインできない**（全パスワードのハッ
 
 判定は稼働中のコンテナに残る `com.docker.compose.project.config_files` ラベルを
 見ています。**コンテナが停止していると判定できない**ので、そのときは
-「判定できません」と出したうえで通常の確認に進みます。**止まっている本番で
-打てば消えます。**
+「判定できません」と出したうえで通常の確認に進みます。
+
+### 消す前に退避します
+
+**`down -v` の前に、いまの DB・画像・管理画面が書いたファイルを `backups/<日時>-before-reset/`
+（`-before-switch-version/`）へ退避します。取れなければ何も消さずに止まります。** 消したあとで
+「やっぱり要った」となったら、`bin/restore.sh backups/<日時>-before-reset` で戻せます。
+
+スタックが止まっていると DB に繋がらず退避が取れないので、止まります（止まっている本番で打っても、
+退避の無いまま消えることはありません）。`docker compose up -d db` してからやり直してください。
+消えてよいと分かっているときだけ、`DESTROY_WITHOUT_BACKUP=<プロジェクト名>` で退避を飛ばせます。
+DB のボリュームがまだ無い（一度も起動していない）ときは、消えるものが無いので取りません。
 
 ---
 
@@ -85,6 +97,14 @@ DB を戻しても誰もログインできない**（全パスワードのハッ
 ```bash
 bin/restore.sh backups/20260721-040000
 ```
+
+`restore.sh` は戻す前にいまの状態を `backups/<日時>-before-restore/` へ退避し、途中で失敗したら
+そこから元に戻します（[バックアップ](backup.md)「戻す前に、いまの状態を退避する」）。
+
+**`bin/plugin.sh remove` も、消す前に退避します。** 消えるもの（プラグインの表と列、コミット・push
+していない作業）を見せてコードを打たせ、DB を含めて `backups/<日時>-before-plugin-remove/` へ退避して
+から uninstall します。フォルダは消さずに `var/removed-plugins/<Code>-<日時>/` へ移します（.git ごと）。
+uninstall が失敗したら、ファイルは消さずに止まります。
 
 だから、次の 2 つは**運用を始める前に**済ませてください。
 

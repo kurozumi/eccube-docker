@@ -194,6 +194,35 @@ db_ready() {
             php -r 'exit(@mysqli_connect(getenv("DB_HOST"), getenv("DB_USER"), getenv("DB_PASSWORD"), getenv("DB_NAME"), (int) (getenv("DB_PORT") ?: 3306)) ? 0 : 1);' 2>/dev/null ;;
     esac
 }
+# DB にもう店があるか（EC-CUBE の表 dtb_base_info があるか）。0 = ある、1 = 無い、2 = 分からない（繋がらない）。
+# **eccube:install は最初に doctrine:schema:drop --force を打ち、全部の表を消してから作り直す。**
+# 印（var/.eccube_installed）はボリュームの中にしか無いので、ボリュームが新しいだけで DB には店がある
+# ことがある（複数ホストで新しいホストを init ロールにした、アプリのボリュームだけ作り直した、など）。
+# そのまま install すると、受注も会員も消える。だから install の前にここを見る。
+db_has_shop() {
+    local out
+    case "${DB_ENGINE:-mysql}" in
+        postgresql)
+            out="$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT to_regclass('dtb_base_info') IS NOT NULL" 2>/dev/null)" || return 2 ;;
+        *)
+            out="$(php -r '$c = @mysqli_connect(getenv("DB_HOST"), getenv("DB_USER"), getenv("DB_PASSWORD"), getenv("DB_NAME"), (int) (getenv("DB_PORT") ?: 3306)); if (!$c) { exit(2); } $r = mysqli_query($c, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '"'"'dtb_base_info'"'"'"); if (!$r) { exit(2); } echo mysqli_fetch_row($r)[0] > 0 ? "t" : "f";' 2>/dev/null)" || return 2 ;;
+    esac
+    case "$out" in t) return 0 ;; f) return 1 ;; *) return 2 ;; esac
+}
+# DB の指紋。**店の表（dtb_base_info）そのものが作られた印**で、表を作り直すたびに必ず変わる
+# （MariaDB / MySQL は information_schema の CREATE_TIME、PostgreSQL は表の oid）。
+# **店の基本情報の create_date は使わない。** 初期データの CSV に書かれた固定の値で、何度 install しても
+# 同じになり、別のホストが作り直した店を見分けられなかった（検証で、その店を消した）。読めなければ "unknown"
+db_shop_stamp() {
+    local out
+    case "${DB_ENGINE:-mysql}" in
+        postgresql)
+            out="$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT COALESCE(to_regclass('dtb_base_info')::oid::text, '')" 2>/dev/null)" || { echo unknown; return; } ;;
+        *)
+            out="$(php -r '$c = @mysqli_connect(getenv("DB_HOST"), getenv("DB_USER"), getenv("DB_PASSWORD"), getenv("DB_NAME"), (int) (getenv("DB_PORT") ?: 3306)); if (!$c) { exit(2); } $r = @mysqli_query($c, "SELECT CREATE_TIME FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '"'"'dtb_base_info'"'"'"); if (!$r) { exit(2); } $row = mysqli_fetch_row($r); echo $row ? (string) $row[0] : "";' 2>/dev/null)" || { echo unknown; return; } ;;
+    esac
+    printf 'stamp:%s' "$out"
+}
 until db_ready; do
     i=$((i + 1))
     if [ "$i" -ge 60 ]; then
@@ -208,6 +237,97 @@ done
 #    「app ロール（ECCUBE_SKIP_DB_INIT=1）」はスキーマに触らず cache:clear だけ行う
 #    （全 app ホストが一斉に migrate すると競合するため）。単一ホストなら未設定でよい。
 MARKER="$APP_DIR/var/.eccube_installed"
+# 起動時の migration（インストール済みのとき）。
+# **未適用が無ければ何もしない。** あれば、流す前に DB を var/migrate-backup/ へ取る（取れなければ流さない）。
+# **失敗を握らない。** 以前は `|| true` で、途中まで当たった DB のままお店を開けていた。失敗したら
+# メンテナンス表示（entrypoint:）にして止める。ふだんの反映は bin/deploy.sh（先に退避してから流す）で、
+# ここを通るのは「git pull して docker compose up」のように deploy を通らなかったときだけ。
+# 表示は bin/deploy.sh が成功したときに外す（bin/plugin.sh doctor は外さない。壊れた DB を公開しないため）。
+migrate_backup_dir="$APP_DIR/var/migrate-backup"
+entry_maint_on() {
+    if [ ! -f "$APP_DIR/.maintenance" ]; then
+        printf 'entrypoint:%s' "$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$APP_DIR/.maintenance"
+        chown www-data:www-data "$APP_DIR/.maintenance" 2>/dev/null || true
+    fi
+    log "メンテナンス表示にしました（お客さんには「メンテナンス中」。ログイン中の管理者は見えます）。"
+}
+dump_before_migrate() { # 標準出力へ gzip 前のダンプ
+    case "${DB_ENGINE:-mysql}" in
+        postgresql)
+            PGPASSWORD="$DB_PASSWORD" pg_dump --clean --if-exists -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" "$DB_NAME" ;;
+        *)
+            MYSQL_PWD="$DB_PASSWORD" mysqldump --single-transaction --triggers --no-tablespaces \
+                -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" "$DB_NAME" ;;
+    esac
+}
+migrate_installed() {
+    # DB に繋がらないとき（起動が遅い・止まっている）は、確かめられないので何もしない。メンテナンスにもしない
+    # （次の起動でまた見る。以前の版のように、繋がらないことを「未適用あり」と取り違えて止めない）
+    if [ "${shop:-0}" = 2 ]; then
+        log "注意: DB に繋がらないので、未適用の migration があるか確かめられません。今回は流しません（次の起動でまた見ます）。"
+        return 0
+    fi
+    # deploy.sh の最中は流さない。deploy が退避を取ってから自分で流す（同時に流すと、同じ migration が二重に当たる）
+    if grep -q '^deploy:' "$APP_DIR/.maintenance" 2>/dev/null; then
+        log "bin/deploy.sh の最中なので、migration は deploy に任せます。"
+        return 0
+    fi
+    # 古いコンパイル済みコンテナで確かめない（git pull で消えたクラスを指していると、コンソールが起動しない）。
+    # このあと cache:clear で作り直すので、ここで消してよい
+    rm -rf "$APP_DIR/var/cache/${APP_ENV:-prod}" 2>/dev/null || true
+    local st
+    st="$(runuser -u www-data -- php bin/console doctrine:migrations:up-to-date --no-interaction 2>&1)" && {
+        log "インストール済み。未適用の migration はありません。"
+        # 前に起動時の migration で止めた表示が残っていて、いまは未適用が無い（直された）なら外す
+        if grep -q '^entrypoint:' "$APP_DIR/.maintenance" 2>/dev/null; then
+            rm -f "$APP_DIR/.maintenance"
+            log "前の起動で立てたメンテナンス表示を外しました（未適用の migration はもうありません）。"
+        fi
+        return 0
+    }
+    # 失敗は「未適用がある」だけではない（コンソールが起動しない、など）。Out-of-date と言ったときだけ流す
+    if ! printf '%s' "$st" | grep -q 'Out-of-date'; then
+        log "注意: 未適用の migration があるか確かめられませんでした。今回は流しません:"
+        printf '%s\n' "$st" | grep -v '^ *$' | tail -3 | sed 's/^/  /'
+        return 0
+    fi
+    log "インストール済み。未適用の migration があります。流す前に DB を取ります..."
+    mkdir -p "$migrate_backup_dir"; chmod 700 "$migrate_backup_dir"
+    local out rcf
+    out="$migrate_backup_dir/$(date +%Y%m%d-%H%M%S)-$$.sql.gz"
+    # このファイルは /bin/sh（dash）で動くので pipefail が無い。ダンプの終了コードはファイルで受け取る
+    rcf="$migrate_backup_dir/.dump-rc-$$"
+    # 圧縮の失敗（ディスクがいっぱい、など）でも set -e で落ちず、下のエラーの道を通る
+    if ! { dump_before_migrate; echo $? > "$rcf"; } | gzip > "$out" ||
+       [ "$(cat "$rcf" 2>/dev/null)" != 0 ] ||
+       ! gunzip -c "$out" | tail -c 1024 | grep -qE -- '-- (PostgreSQL database dump complete|Dump completed)'; then
+        rm -f "$rcf" "$out"
+        log "エラー: DB を取れなかったので、migration は流しません（取れないまま流すと、失敗したときに戻せない）。"
+        log "  （PostgreSQL 16 以上は、イメージの pg_dump（15）では取れません。bin/deploy.sh で反映してください）"
+        entry_maint_on
+        log "bin/deploy.sh で反映してください（先に退避してから流します。終われば表示も外れます）。"
+        return 0
+    fi
+    rm -f "$rcf"
+    chmod 600 "$out"
+    log "取りました: ${out#"$APP_DIR"/}（コンテナの中）"
+    if runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration; then
+        # 成功したら消す（会員の個人情報をボリュームに溜めない。長く持つのは bin/backup.sh の役目）
+        rm -f "$out"
+        return 0
+    fi
+    # 失敗したときの分は残す。古いものは新しい 3 つまで
+    ls -1 "$migrate_backup_dir"/*.sql.gz 2>/dev/null | sort | head -n -3 | xargs -r rm -f 2>/dev/null || true
+    log "エラー: migration が失敗しました。途中まで当たった DB でお店を開けないよう、止めます。"
+    entry_maint_on
+    log "流す前の DB: ${out#"$APP_DIR"/}（docker compose cp で取り出せます）。原因を直して bin/deploy.sh で反映し直すか、bin/restore.sh で戻してください。"
+    return 0
+}
+# このボリュームで始めた eccube:install が途中で失敗した印。中身は**失敗した時点の DB の指紋**
+# （db_shop_stamp。店の基本情報の作成日時）。次の起動で DB の指紋が**同じときだけ**やり直す
+# （このボリュームが作りかけた DB のまま、ということ）。違えば、そのあいだに別のホストが同じ DB で
+# 店を作ったかもしれないので、やり直さない（やり直すと schema:drop でその店を消す）。
+INSTALL_FAILED="$APP_DIR/var/.eccube_install_failed"
 # EC-CUBE 4.4 のコンパイル済みテンプレート（var/runtime/<env>/twig）は cache:clear が
 # 消さない。本番モードの Twig は更新を見ないので、残すとテンプレートを直しても
 # 古い画面が出続ける（bin/plugin.sh の clear_twig_runtime と同じ理由）。
@@ -227,28 +347,81 @@ if [ "${ECCUBE_SKIP_DB_INIT:-0}" = "1" ]; then
         clear_twig_runtime
         runuser -u www-data -- php bin/console cache:clear --no-interaction || true
     fi
-elif [ ! -f "$MARKER" ]; then
-    log "eccube:install（初回セットアップ）"
-    if runuser -u www-data -- php bin/console eccube:install --no-interaction; then
-        runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true
+else
+    # **install するかは、DB を見て決める。** eccube:install は最初に doctrine:schema:drop --force を打つ。
+    #   DB が空（店の表が無い）          → install（消すものが無い。印があっても。DB を空にしてやり直す道）
+    #   DB に店があり、印がある           → インストール済み（migration とキャッシュ）
+    #   DB に店があり、印が無い           → install しない。印を置いて migration へ（新しいホスト・作り直したボリューム）
+    #   DB に店があり、失敗の印の指紋が同じ → このボリュームが作りかけた DB なので install をやり直す
+    #   DB に店があり、失敗の印があるが指紋が読めない → 何もしない（install も印もなし。次の起動でまた見る）
+    #   DB に繋がらない                   → install しない（印があれば、今までどおり migration とキャッシュへ）
+    shop=0; db_has_shop || shop=$?
+    do_install=0; hold=0
+    if [ "$shop" = 1 ]; then
+        do_install=1
+    elif [ "$shop" = 0 ] && [ -f "$INSTALL_FAILED" ]; then
+        # 指紋は**両方とも読めたときだけ**比べる。どちらかが読めない（unknown）なら、同じ DB だとも
+        # 違う DB だとも言えないので、install もしないし失敗の印も消さない（次の起動でまた見る）。
+        saved="$(cat "$INSTALL_FAILED" 2>/dev/null || true)"
+        cur="$(db_shop_stamp)"
+        case "$saved|$cur" in
+            stamp:?*\|stamp:?*)
+                if [ "$saved" = "$cur" ]; then
+                    log "前回このボリュームで途中まで進んだインストールを、最初からやり直します（DB はそのときのまま）。"
+                    do_install=1
+                else
+                    log "前回のインストールは途中で失敗しましたが、そのあと DB が変わっています（別のホストが店を作った可能性）。"
+                    log "消してしまわないよう、eccube:install はやり直しません。"
+                    rm -f "$INSTALL_FAILED"
+                fi ;;
+            stamp:*\|stamp:?*)
+                # 失敗した時点では店の表が無かったのに、いまはある → 別のホストが作った
+                log "前回のインストールは途中で失敗しましたが、そのあと別のところで店の表が作られています。"
+                log "消してしまわないよう、eccube:install はやり直しません。"
+                rm -f "$INSTALL_FAILED"
+                ;;
+            *)
+                hold=1 ;;
+        esac
+    fi
+    if [ "$do_install" = 1 ]; then
+        log "eccube:install（初回セットアップ）"
+        if runuser -u www-data -- php bin/console eccube:install --no-interaction; then
+            rm -f "$INSTALL_FAILED"
+            runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true
+            clear_twig_runtime
+            runuser -u www-data -- php bin/console cache:clear --no-interaction || true
+            touch "$MARKER"
+            log "セットアップ完了"
+            log "管理画面: /${ECCUBE_ADMIN_ROUTE:-admin}/  ログイン ID: ${ECCUBE_ADMIN_USER:-admin}  パスワード: .env の ECCUBE_ADMIN_PASS"
+            if [ -z "${ECCUBE_ADMIN_PASS:-}" ] || [ "${ECCUBE_ADMIN_PASS:-}" = "password" ]; then
+                log "警告: 管理者が既定の admin / password です。公開前に必ず変えてください（bin/publish.sh は止まります）"
+            fi
+        else
+            rm -f "$MARKER"
+            db_shop_stamp > "$INSTALL_FAILED"
+            log "eccube:install が失敗しました。ログを確認してください。直して起動し直すと、最初からやり直します。"
+        fi
+    elif [ "$hold" = 1 ]; then
+        log "エラー: 前回のインストールが途中で失敗しています。DB が同じものかを確かめられなかったので、"
+        log "消してしまわないよう eccube:install は打たず、インストール済みの印も置きません（起動し直すとまた確かめます）。"
+        log "DB に繋がるようにして起動し直してください。それでも続くなら、DB を空にしてから起動し直すと最初からインストールします。"
+    elif [ "$shop" = 2 ] && [ ! -f "$MARKER" ]; then
+        log "エラー: DB に店があるかを確かめられませんでした（繋がらない）。消してしまわないよう、eccube:install は打ちません。"
+        log "DB の設定（DB_HOST / DB_USER / DB_PASSWORD / DB_NAME）を確かめて、コンテナを起動し直してください。"
+    else
+        # 店がある（0）か、印があって一時的に繋がらない（2。今までどおり migration とキャッシュへ）
+        if [ ! -f "$MARKER" ]; then
+            log "DB にはもう店があります（dtb_base_info）。eccube:install は打ちません（打つと全部の表を消して作り直します）。"
+            log "（別の場所で始めたインストールが途中で止まった DB なら、DB を空にしてから起動し直すと、最初からインストールします）"
+            touch "$MARKER"
+        fi
+        migrate_installed
+        # bind-mount した app/config・app/Customize の変更を prod のコンパイル済み
+        # コンテナへ反映するため、毎起動でキャッシュを作り直す（dev では無害）。
         clear_twig_runtime
         runuser -u www-data -- php bin/console cache:clear --no-interaction || true
-        touch "$MARKER"
-        log "セットアップ完了"
-        log "管理画面: /${ECCUBE_ADMIN_ROUTE:-admin}/  ログイン ID: ${ECCUBE_ADMIN_USER:-admin}  パスワード: .env の ECCUBE_ADMIN_PASS"
-        if [ -z "${ECCUBE_ADMIN_PASS:-}" ] || [ "${ECCUBE_ADMIN_PASS:-}" = "password" ]; then
-            log "警告: 管理者が既定の admin / password です。公開前に必ず変えてください（bin/publish.sh は止まります）"
-        fi
-    else
-        log "eccube:install が失敗しました。ログを確認してください。"
     fi
-else
-    log "インストール済み。未適用の migration を適用します。"
-    runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true
-    # bind-mount した app/config・app/Customize の変更を prod のコンパイル済み
-    # コンテナへ反映するため、毎起動でキャッシュを作り直す（dev では無害）。
-    clear_twig_runtime
-    runuser -u www-data -- php bin/console cache:clear --no-interaction || true
 fi
 
 exec "$@"

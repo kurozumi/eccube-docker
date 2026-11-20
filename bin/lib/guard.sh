@@ -52,8 +52,8 @@ guard_destructive() {
     local tag="$1" what="$2" proj
     proj="$(guard_project_name)"
 
-    echo "[${tag}] ${what}を削除します。**元に戻せません。**"
-    echo "[${tag}] 残したいものがあれば、先に bin/backup.sh を実行してください。"
+    echo "[${tag}] ${what}を削除します。"
+    echo "[${tag}] 消す前に backups/<日時>-before-<名前>/ へ退避します（取れなければ何も消さずに止まります）。"
 
     # **戻り値は `|| prod=$?` で受ける。** 呼び出し側（switch-version.sh / reset.sh）は
     # set -e で動いている。素で呼ぶと、本番でない（1）・停止中（2）を返した時点で
@@ -89,3 +89,41 @@ guard_destructive() {
     read -r -p "続行しますか? [y/N] " ans
     [ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
 }
+
+# 消す直前に、いまの DB・画像・ファイルを backups/<日時>-before-<名前>/ へ取る。取れなければ止める。
+#   guard_backup_before_destroy <名前（英小文字・数字・-）>
+# **このプロジェクトのボリュームが 1 つも無ければ取らない**（消えるものが無い）。止まっているスタックでは DB に繋がらず
+# 取れないので、そのときは「db を起こしてから」と言って止める。取らずに消すのは
+# DESTROY_WITHOUT_BACKUP=<プロジェクト名> のときだけ。
+guard_backup_before_destroy() {
+    local label="$1" proj vols
+    proj="$(guard_project_name)"
+    # **このプロジェクトのボリュームが 1 つでもあれば取る。** DB のボリュームだけを見ていると、外部 DB の店
+    # （compose.externaldb.yaml・compose.app.yaml。手元に DB のボリュームが無い）で「消えるものが無い」と
+    # 判断し、画像（eccube_upload）を退避なしで消していた
+    vols="$(docker volume ls -q --filter "label=com.docker.compose.project=${proj}" 2>/dev/null || true)"
+    if [ -z "$vols" ]; then
+        echo "[${label}] このプロジェクト（${proj}）のボリュームがまだ無いので、退避は取りません。"
+        return 0
+    fi
+    if [ -n "${DESTROY_WITHOUT_BACKUP:-}" ]; then
+        [ "$DESTROY_WITHOUT_BACKUP" = "$proj" ] || { echo "[${label}] エラー: DESTROY_WITHOUT_BACKUP がプロジェクト名（${proj}）と違います。何も消していません。" >&2; exit 1; }
+        echo "[${label}] 注意: DESTROY_WITHOUT_BACKUP が付いているので、退避を取らずに消します。"
+        return 0
+    fi
+    echo "[${label}] 消す前に、いまの DB・画像・管理画面が書いたファイルを退避します..."
+    local rf
+    rf="$(mktemp)"
+    if ! BACKUP_LABEL="$label" BACKUP_RESULT_FILE="$rf" bin/backup.sh >"${rf}.log" 2>&1; then
+        tail -5 "${rf}.log" >&2; rm -f "$rf" "${rf}.log"
+        cat >&2 <<EOS
+[${label}] エラー: 退避を取れませんでした。**何も消していません。**
+  止まっているなら DB を起こしてから、もう一度: docker compose up -d db
+  消えてよいと分かっているときだけ: DESTROY_WITHOUT_BACKUP=${proj} bin/${label}.sh
+EOS
+        exit 1
+    fi
+    echo "[${label}] 退避しました: $(cat "$rf")（戻すなら bin/restore.sh $(cat "$rf")）"
+    rm -f "$rf" "${rf}.log"
+}
+
