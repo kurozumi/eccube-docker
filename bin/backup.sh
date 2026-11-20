@@ -276,7 +276,9 @@ protect=""
 if [ -n "${BACKUP_PROTECT:-}" ] && [ -d "$BACKUP_PROTECT" ]; then protect="$(cd "$BACKUP_PROTECT" && pwd -P)"; fi
 prune() { # prune <ERE> <残す数>
     local list total
-    list="$(cd "$BACKUP_DIR" && ls -1d */ 2>/dev/null | sed 's:/$::' | grep -E "$1" | sort | while read -r d; do
+    # **該当が 0 件でも失敗にしない。** grep は一致が無いと 1 を返し、pipefail でこの代入ごと失敗して、
+    # バックアップは取れているのに終了コード 1 で終わっていた（控えが 1 つも無い環境の毎日の backup で必ず）
+    list="$(cd "$BACKUP_DIR" && ls -1d */ 2>/dev/null | sed 's:/$::' | { grep -E "$1" || [ $? = 1 ]; } | sort | while read -r d; do
         [ -n "$protect" ] && [ "$(cd "$d" && pwd -P)" = "$protect" ] && continue
         printf '%s\n' "$d"
     done)"

@@ -53,9 +53,10 @@ try {
         urldecode($u['user'] ?? ''), urldecode($u['pass'] ?? ''), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $st = $pdo->prepare('SELECT enabled FROM dtb_plugin WHERE code = ?');
     $st->execute([getenv('PLUGIN_CODE')]);
-    $r = $st->fetchColumn();
+    // fetchColumn() は「行が無い」と「値が false」（PostgreSQL の boolean）を区別できないので、行で取る
+    $row = $st->fetch(PDO::FETCH_ASSOC);
 } catch (Throwable $e) { exit(2); }
-echo $r === false ? 'missing' : (in_array($r, [true, 1, '1', 't'], true) ? 'enabled' : 'disabled');
+echo $row === false ? 'missing' : (in_array($row['enabled'], [true, 1, '1', 't'], true) ? 'enabled' : 'disabled');
 PHP
 }
 

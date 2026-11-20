@@ -122,6 +122,51 @@ if [ "$rollback" = 0 ]; then
     fi
 fi
 
+# ── 同じプロジェクトで restore を同時に走らせない ──
+# 重なると、あとの restore が先の restore のメンテナンス表示を「前回の残り」とみなして引き取り、
+# どちらかが、もう一方が DB を書き換えている最中に表示を外してしまう。内部の --rollback は親の鍵のまま動く。
+lock="var/restore.lock"
+if [ "$rollback" = 0 ]; then
+    mkdir -p var
+    if ! mkdir "$lock" 2>/dev/null; then
+        other="$(cat "$lock/pid" 2>/dev/null || true)"
+        if [ -n "$other" ] && kill -0 "$other" 2>/dev/null; then
+            echo "[restore] エラー: ほかの restore が動いています（pid ${other}）。終わってからやり直してください。" >&2
+            exit 1
+        fi
+        echo "[restore] 前の restore の鍵が残っていました（pid ${other:-?} はもういません）。引き取ります。"
+        rm -rf "$lock"; mkdir "$lock"
+    fi
+    echo "$$" > "$lock/pid"
+    trap 'rm -rf "$lock"' EXIT
+fi
+
+# ── メンテナンス表示。**退避を取る前に立てる。** ──
+# 退避を取り始めてから表示を立てるまでに入った注文は、退避に無い。戻すのに失敗して退避から戻すと、
+# その注文が消える。立てられなければ何も変えずに止める（お客さんが注文できる状態で DB を書き換えない）。
+# deploy.sh と同じ仕組み。restore: を付けたものだけ自分で消す。手で入れたものは残す。
+MAINT=/var/www/html/.maintenance
+maint_mine=0
+if [ "$rollback" = 0 ] && [ -n "$(docker compose ps -q --status running ec-cube 2>/dev/null)" ]; then
+    if docker compose exec -T ec-cube sh -c "grep -q '^restore:' $MAINT" 2>/dev/null; then
+        maint_mine=1   # 前の restore が失敗して残したもの（鍵を取れたので、動いている restore のものではない）
+        echo "[restore] メンテナンス表示は前回の restore から ON のままです（そのまま進めます）"
+    elif docker compose exec -T ec-cube test -f "$MAINT" 2>/dev/null; then
+        echo "[restore] メンテナンス表示はすでに有効です（手で入れたもの。終わっても外しません）"
+    elif docker compose exec -T ec-cube runuser -u www-data -- sh -c "printf 'restore:%s' '$(openssl rand -hex 16)' > $MAINT"; then
+        maint_mine=1
+        echo "[restore] メンテナンス ON（お客さんには「メンテナンス中」）"
+    else
+        echo "[restore] エラー: メンテナンス表示を立てられませんでした。注文を受けたまま DB を書き換えないよう、何も変えずに中止します。" >&2
+        exit 1
+    fi
+fi
+maint_off() {
+    if [ "$maint_mine" = 1 ] && docker compose exec -T ec-cube sh -c "grep -q '^restore:' $MAINT" 2>/dev/null; then
+        docker compose exec -T ec-cube rm -f "$MAINT" && echo "[restore] メンテナンス OFF"
+    fi
+}
+
 # ── いまの状態を退避する。できなければ何も変えずに止める ──
 # 戻す元を間違えた・古すぎた、というときに戻れる場所がここしか無い。backup.sh の世代管理が
 # 「いまから戻す元」を押し出さないよう、BACKUP_PROTECT で守る。
@@ -135,6 +180,7 @@ if [ "$rollback" = 0 ]; then
         rf="$(mktemp)"
         if ! BACKUP_LABEL=restore BACKUP_PROTECT="$src" BACKUP_RESULT_FILE="$rf" bin/backup.sh >"${rf}.log" 2>&1; then
             tail -5 "${rf}.log" >&2; rm -f "$rf" "${rf}.log"
+            maint_off
             cat >&2 <<EOS
 [restore] エラー: いまの状態を退避できませんでした。**何も変えずに中止します。**
           bin/backup.sh を単体で打って原因を見てください。
@@ -147,27 +193,6 @@ EOS
         echo "[restore] 退避しました: ${safety}"
     fi
 fi
-
-# ── メンテナンス表示（戻している間に注文が入ると、その注文は戻した DB に無い）──
-# deploy.sh と同じ仕組み。restore: を付けたものだけ自分で消す。手で入れたものは残す。
-MAINT=/var/www/html/.maintenance
-maint_mine=0
-if [ "$rollback" = 0 ] && [ -n "$(docker compose ps -q --status running ec-cube 2>/dev/null)" ]; then
-    if docker compose exec -T ec-cube sh -c "grep -q '^restore:' $MAINT" 2>/dev/null; then
-        maint_mine=1   # 前の restore が失敗して残したもの。今回うまくいけば外す
-        echo "[restore] メンテナンス表示は前回の restore から ON のままです（そのまま進めます）"
-    elif ! docker compose exec -T ec-cube test -f "$MAINT" 2>/dev/null; then
-        if docker compose exec -T ec-cube runuser -u www-data -- sh -c "printf 'restore:%s' '$(openssl rand -hex 16)' > $MAINT"; then
-            maint_mine=1
-            echo "[restore] メンテナンス ON（お客さんには「メンテナンス中」）"
-        fi
-    fi
-fi
-maint_off() {
-    if [ "$maint_mine" = 1 ] && docker compose exec -T ec-cube sh -c "grep -q '^restore:' $MAINT" 2>/dev/null; then
-        docker compose exec -T ec-cube rm -f "$MAINT" && echo "[restore] メンテナンス OFF"
-    fi
-}
 
 # ── 途中で失敗したら、退避から元に戻す ──
 on_fail() {
@@ -226,12 +251,16 @@ SQL
 # PostgreSQL はダンプと同じトランザクションの中で消す（失敗すれば消したことも取り消される）
 read -r -d '' pg_clear <<'SQL' || true
 DO $$ DECLARE r record; BEGIN
-  FOR r IN SELECT viewname AS n FROM pg_views WHERE schemaname = current_schema() LOOP
-    EXECUTE format('DROP VIEW IF EXISTS %I CASCADE', r.n); END LOOP;
-  FOR r IN SELECT tablename AS n FROM pg_tables WHERE schemaname = current_schema() LOOP
-    EXECUTE format('DROP TABLE IF EXISTS %I CASCADE', r.n); END LOOP;
-  FOR r IN SELECT sequence_name AS n FROM information_schema.sequences WHERE sequence_schema = current_schema() LOOP
-    EXECUTE format('DROP SEQUENCE IF EXISTS %I CASCADE', r.n); END LOOP;
+  -- 拡張が持つもの（pg_stat_statements のビューなど）は単独では消せない（CASCADE でも拒まれる）ので除く。
+  -- ダンプの CREATE EXTENSION が扱う
+  FOR r IN SELECT c.relname AS n, c.relkind AS k FROM pg_class c JOIN pg_namespace ns ON ns.oid = c.relnamespace
+      WHERE ns.nspname = current_schema() AND c.relkind IN ('v', 'm', 'r', 'p', 'S')
+        AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e')
+      ORDER BY CASE c.relkind WHEN 'v' THEN 0 WHEN 'm' THEN 0 WHEN 'S' THEN 2 ELSE 1 END
+  LOOP
+    EXECUTE format('DROP %s IF EXISTS %I CASCADE',
+      CASE r.k WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' WHEN 'S' THEN 'SEQUENCE' ELSE 'TABLE' END, r.n);
+  END LOOP;
 END $$;
 SQL
 dump_with() { # dump_with <先に流す SQL> … それに続けてダンプの平文を標準出力へ
@@ -321,7 +350,14 @@ fi
 
 if [ "${need_reload:-0}" = 1 ]; then
     echo "[restore] プラグインの実体が戻ったので、キャッシュを組み立て直します（数分。止めないでください）..."
-    bin/plugin.sh reload || echo "[restore] 注意: reload に失敗しました。bin/plugin.sh doctor を実行してください" >&2
+    if ! bin/plugin.sh reload; then
+        # 元に戻している最中なら、失敗として親へ返す（親はメンテナンス表示を外さず、戻し切れなかったと伝える）
+        if [ "$rollback" = 1 ] && [ -n "$(docker compose ps -q --status running ec-cube 2>/dev/null)" ]; then
+            echo "[restore] キャッシュを組み立て直せませんでした。" >&2
+            exit 1
+        fi
+        echo "[restore] 注意: reload に失敗しました。bin/plugin.sh doctor を実行してください" >&2
+    fi
 else
     echo "[restore] キャッシュをクリアしています..."
     docker compose exec -T ec-cube runuser -u www-data -- php bin/console cache:clear --no-interaction >/dev/null 2>&1 || true
