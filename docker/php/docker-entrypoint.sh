@@ -261,37 +261,66 @@ dump_before_migrate() { # 標準出力へ gzip 前のダンプ
     esac
 }
 migrate_installed() {
-    if runuser -u www-data -- php bin/console doctrine:migrations:up-to-date --no-interaction >/dev/null 2>&1; then
-        log "インストール済み。未適用の migration はありません。"
+    # DB に繋がらないとき（起動が遅い・止まっている）は、確かめられないので何もしない。メンテナンスにもしない
+    # （次の起動でまた見る。以前の版のように、繋がらないことを「未適用あり」と取り違えて止めない）
+    if [ "${shop:-0}" = 2 ]; then
+        log "注意: DB に繋がらないので、未適用の migration があるか確かめられません。今回は流しません（次の起動でまた見ます）。"
         return 0
     fi
-    log "インストール済み。未適用の migration があります（または確かめられませんでした）。流す前に DB を取ります..."
+    # deploy.sh の最中は流さない。deploy が退避を取ってから自分で流す（同時に流すと、同じ migration が二重に当たる）
+    if grep -q '^deploy:' "$APP_DIR/.maintenance" 2>/dev/null; then
+        log "bin/deploy.sh の最中なので、migration は deploy に任せます。"
+        return 0
+    fi
+    # 古いコンパイル済みコンテナで確かめない（git pull で消えたクラスを指していると、コンソールが起動しない）。
+    # このあと cache:clear で作り直すので、ここで消してよい
+    rm -rf "$APP_DIR/var/cache/${APP_ENV:-prod}" 2>/dev/null || true
+    local st
+    st="$(runuser -u www-data -- php bin/console doctrine:migrations:up-to-date --no-interaction 2>&1)" && {
+        log "インストール済み。未適用の migration はありません。"
+        # 前に起動時の migration で止めた表示が残っていて、いまは未適用が無い（直された）なら外す
+        if grep -q '^entrypoint:' "$APP_DIR/.maintenance" 2>/dev/null; then
+            rm -f "$APP_DIR/.maintenance"
+            log "前の起動で立てたメンテナンス表示を外しました（未適用の migration はもうありません）。"
+        fi
+        return 0
+    }
+    # 失敗は「未適用がある」だけではない（コンソールが起動しない、など）。Out-of-date と言ったときだけ流す
+    if ! printf '%s' "$st" | grep -q 'Out-of-date'; then
+        log "注意: 未適用の migration があるか確かめられませんでした。今回は流しません:"
+        printf '%s\n' "$st" | grep -v '^ *$' | tail -3 | sed 's/^/  /'
+        return 0
+    fi
+    log "インストール済み。未適用の migration があります。流す前に DB を取ります..."
     mkdir -p "$migrate_backup_dir"; chmod 700 "$migrate_backup_dir"
-    local out
-    out="$migrate_backup_dir/$(date +%Y%m%d-%H%M%S).sql.gz"
+    local out rcf
+    out="$migrate_backup_dir/$(date +%Y%m%d-%H%M%S)-$$.sql.gz"
     # このファイルは /bin/sh（dash）で動くので pipefail が無い。ダンプの終了コードはファイルで受け取る
-    local rcf="$migrate_backup_dir/.dump-rc"
-    { dump_before_migrate; echo $? > "$rcf"; } | gzip > "$out"
-    if [ "$(cat "$rcf" 2>/dev/null)" != 0 ] ||
+    rcf="$migrate_backup_dir/.dump-rc-$$"
+    # 圧縮の失敗（ディスクがいっぱい、など）でも set -e で落ちず、下のエラーの道を通る
+    if ! { dump_before_migrate; echo $? > "$rcf"; } | gzip > "$out" ||
+       [ "$(cat "$rcf" 2>/dev/null)" != 0 ] ||
        ! gunzip -c "$out" | tail -c 1024 | grep -qE -- '-- (PostgreSQL database dump complete|Dump completed)'; then
-        rm -f "$rcf"
-        rm -f "$out"
+        rm -f "$rcf" "$out"
         log "エラー: DB を取れなかったので、migration は流しません（取れないまま流すと、失敗したときに戻せない）。"
+        log "  （PostgreSQL 16 以上は、イメージの pg_dump（15）では取れません。bin/deploy.sh で反映してください）"
         entry_maint_on
-        log "DB に繋がるか確かめてから、bin/deploy.sh で反映してください（先に退避してから流します）。"
+        log "bin/deploy.sh で反映してください（先に退避してから流します。終われば表示も外れます）。"
         return 0
     fi
     rm -f "$rcf"
     chmod 600 "$out"
-    # 新しい 3 つだけ残す（ボリュームの中なので、溜めない。長く持つのは bin/backup.sh の役目）
-    ls -1 "$migrate_backup_dir"/*.sql.gz 2>/dev/null | sort | head -n -3 2>/dev/null | xargs -r rm -f 2>/dev/null || true
-    log "取りました: ${out#"$APP_DIR"/}（コンテナの中。戻すなら docker compose cp で取り出して流し込む）"
+    log "取りました: ${out#"$APP_DIR"/}（コンテナの中）"
     if runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration; then
+        # 成功したら消す（会員の個人情報をボリュームに溜めない。長く持つのは bin/backup.sh の役目）
+        rm -f "$out"
         return 0
     fi
+    # 失敗したときの分は残す。古いものは新しい 3 つまで
+    ls -1 "$migrate_backup_dir"/*.sql.gz 2>/dev/null | sort | head -n -3 | xargs -r rm -f 2>/dev/null || true
     log "エラー: migration が失敗しました。途中まで当たった DB でお店を開けないよう、止めます。"
     entry_maint_on
-    log "流す前の DB: ${out#"$APP_DIR"/}。原因を直して bin/deploy.sh で反映し直すか、bin/restore.sh で戻してください。"
+    log "流す前の DB: ${out#"$APP_DIR"/}（docker compose cp で取り出せます）。原因を直して bin/deploy.sh で反映し直すか、bin/restore.sh で戻してください。"
     return 0
 }
 # このボリュームで始めた eccube:install が途中で失敗した印。中身は**失敗した時点の DB の指紋**
