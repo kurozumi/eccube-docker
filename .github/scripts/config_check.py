@@ -73,10 +73,12 @@ def bad(rule, target, msg):
 def env_file() -> str:
     """.env.example を元に、必須の秘密だけ仮の値を入れ、全プロファイルを有効にした .env を作る。"""
     src = (ROOT / ".env.example").read_text()
-    lines = [l for l in src.splitlines() if not re.match(r"^#?\s*(DB_PASSWORD|DB_ROOT_PASSWORD|ECCUBE_AUTH_MAGIC|COMPOSE_PROFILES|COMPOSE_FILE)=", l)]
+    lines = [l for l in src.splitlines() if not re.match(r"^#?\s*(DB_PASSWORD|DB_ROOT_PASSWORD|ECCUBE_AUTH_MAGIC|COMPOSE_PROFILES|COMPOSE_FILE|HTTP_BIND)=", l)]
     lines += [
         "DB_PASSWORD=dummy", "DB_ROOT_PASSWORD=dummy", "ECCUBE_AUTH_MAGIC=dummy",
         "COMPOSE_PROFILES=redis,messenger,caddy,tunnel",
+        # 複数ホストのアプリ層は nginx を束縛する IP が必須（compose.app.yaml。使うのはこのファイルだけ）
+        "HTTP_BIND=10.0.0.11",
     ]
     f = tempfile.NamedTemporaryFile("w", suffix=".env", delete=False)
     f.write("\n".join(lines) + "\n")
