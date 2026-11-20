@@ -445,7 +445,9 @@ apply_proxy_conf nginx docker/nginx/default.conf nginx -t
 apply_proxy_conf caddy docker/caddy/Caddyfile caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 # PostgreSQL の db はこの設定を mount していないので、言わない（再起動しても何も変わらない）
 db_id="$("${dc[@]}" ps -q --status running db 2>/dev/null || true)"
-if [ -n "$db_id" ] && docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$db_id" 2>/dev/null | grep -q '/etc/mysql/conf.d'; then
+db_mounts=""; [ -z "$db_id" ] || db_mounts="$(docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$db_id" 2>/dev/null || true)"
+case "$db_mounts" in *'/etc/mysql/conf.d'*) db_has_conf=1 ;; *) db_has_conf=0 ;; esac
+if [ "$db_has_conf" = 1 ]; then
     db_now="$(conf_hash docker/mariadb/conf.d/*.cnf)" || { echo "[deploy] エラー: docker/mariadb/conf.d の設定を読めません（持ち主と権限を確かめてください）。" >&2; false; }
     db_old="$(cat "${conf_stamp_dir}/db.sha256" 2>/dev/null || true)"
     if [ -n "$db_old" ] && [ "$db_now" != "$db_old" ]; then
