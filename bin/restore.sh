@@ -35,9 +35,17 @@ vol_rw() { # vol_rw <ボリューム名> <マウント先> <コマンド…>
     docker run --rm -i -v "${proj}_$1:$2" alpine:3 "${@:3}"
 }
 
-# --rollback は restore.sh 自身が失敗の後始末に使う（確認・退避・メンテナンスを親に任せる）
-rollback=0
-if [ "${1:-}" = "--rollback" ]; then rollback=1; shift; fi
+# --rollback は restore.sh 自身と upgrade.sh が失敗の後始末に使う（確認・退避・メンテナンスを親に任せる）
+# --db-only は DB だけ戻す（upgrade.sh の切り戻し。アプリは止まっていて、画像とファイルは触っていない）
+rollback=0; db_only=0
+while :; do
+    case "${1:-}" in
+        --rollback) rollback=1; shift ;;
+        --db-only)  db_only=1; shift ;;
+        *) break ;;
+    esac
+done
+[ "$db_only" = 0 ] || [ "$rollback" = 1 ] || { echo "[restore] エラー: --db-only は --rollback と一緒にだけ使えます（内部用）" >&2; exit 1; }
 src="${1:-}"
 src="${src%/}"
 
@@ -297,6 +305,12 @@ case "$db_engine" in
     fi
     ;;
 esac
+
+if [ "$db_only" = 1 ]; then
+    trap - ERR
+    echo "[restore] DB を戻しました（DB だけ）。"
+    exit 0
+fi
 
 if has upload.tar.gz; then
     echo "[restore] アップロード画像を復元しています..."

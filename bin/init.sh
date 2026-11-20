@@ -205,7 +205,10 @@ i=0; ok=0
 while [ "$i" -lt 180 ]; do
     code="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${port}/" 2>/dev/null || true)"
     if [ "$code" = 200 ]; then ok=1; break; fi
-    if ! docker compose ps --status running --format '{{.Service}}' 2>/dev/null | grep -qx ec-cube; then
+    # 一覧は変数に取ってから見る（pipefail の下で grep -q が先に終わると、compose が SIGPIPE で落ちて
+    # 動いているのに「止まった」と判定する）
+    running="$(docker compose ps --status running --format '{{.Service}}' 2>/dev/null || true)"
+    if ! printf '%s\n' "$running" | grep -qx ec-cube; then
         echo; echo "[init] ec-cube コンテナが止まりました。理由: docker compose logs --tail 40 ec-cube" >&2; exit 1
     fi
     printf '.'; sleep 5; i=$((i + 1))

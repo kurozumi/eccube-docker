@@ -31,8 +31,9 @@
 # やること（順番に意味がある）:
 #   0. イメージ              配布イメージなら引き直す（--rebuild ならローカル build し直す）。
 #                            **メンテナンスより前に**やる（数分かかりうるので、古いサイトのまま待つ）
-#   1. bin/backup.sh         管理画面が本番で書いたものを含めて退避（戻せる状態を先に作る）
-#   2. メンテナンス ON        .maintenance を deploy:<token> で作る。ログイン中の管理者は素通り
+#   1. メンテナンス ON        .maintenance を deploy:<token> で作る。ログイン中の管理者は素通り
+#   2. bin/backup.sh         管理画面が本番で書いたものを含めて退避（backups/<日時>-before-deploy/）。
+#                            **表示の中で取る**（取ってから表示までの注文が退避から漏れないように）
 #   3. git pull --ff-only    自分のリポジトリから取り込む。衝突したら何も変えずに OFF して止まる
 #   4. docker compose up -d  compose / .env / イメージが変わっていれば作り直す（同じなら何もしない）
 #   4b. 設定ファイル         nginx / caddy の設定が前回と違えば、確かめてから再起動（up -d は作り直さない）。
@@ -287,24 +288,48 @@ on_fail() {
     if [ -n "${before:-}" ] && [ "${before:-}" != "${after:-}" ]; then
         echo "         直前のコードに戻すなら: git checkout ${before} && bin/deploy.sh --no-pull" >&2
     fi
+    if [ -n "${backup_dir:-}" ]; then
+        echo "         DB も始める前に戻すなら: bin/restore.sh ${backup_dir}" >&2
+        echo "         （メンテナンス表示の中で取ったので、その後の注文はありません）" >&2
+    fi
 }
 
-# ── 1. 退避 ──
+# ── 1. メンテナンス ON → 退避 ──
+# **表示を先に立ててから退避を取る。** 逆だと、取ってから表示までの間に入った注文が退避に無く、
+# migration が壊れて退避から戻したときに、その注文が消える。
+maint_on
+# 退避の途中で Ctrl-C・ssh の切断があっても、表示を出しっぱなしにしない（まだ何も変えていない）
+backup_interrupted() {
+    trap - INT TERM HUP
+    rm -f "${bk_result:-}"
+    maint_off
+    deploy_record "${planned:-?}" "$([ -d .git ] && echo pull || echo push)" "$by" "failed${sent_note:-} (backup interrupted)"
+    die "退避の途中で止められました。何も変えていません。"
+}
 if [ "$do_backup" = 1 ]; then
+    trap backup_interrupted INT TERM HUP
     log "退避します（DB・画像・管理画面が書いたファイル）..."
     # **出力を捨てない。** backup.sh は「管理画面が書いたのにコミットされていないファイル」を
     # 挙げる。deploy はそれを上書きしない（pull は同じファイルを触らない限り通る）が、
     # サーバーにしか無い状態が続く。ここで見せて、手元へ取り込む導線を出す。
-    out="$(bin/backup.sh 2>&1)" || { printf '%s\n' "$out" | tail -5 >&2; die "退避に失敗しました。何も変えていません。bin/backup.sh を単体で打って原因を見てください。"; }
+    # 退避は backups/<日時>-before-deploy/（毎日の世代とは別に数える。backup.sh の BACKUP_LABEL）
+    bk_result="$(mktemp)"
+    if ! out="$(BACKUP_LABEL=deploy BACKUP_RESULT_FILE="$bk_result" bin/backup.sh 2>&1)"; then
+        printf '%s\n' "$out" | tail -5 >&2
+        rm -f "$bk_result"
+        trap - INT TERM HUP
+        maint_off
+        deploy_record "${planned:-?}" "$([ -d .git ] && echo pull || echo push)" "$by" "failed${sent_note:-} (backup)"
+        die "退避に失敗しました。何も変えていません。bin/backup.sh を単体で打って原因を見てください。"
+    fi
     if printf '%s\n' "$out" | grep -q 'コミットされていない変更'; then
         printf '%s\n' "$out" | sed -n '/コミットされていない変更/,/入っています/p'
         log "  手元へ取り込むには（あなたのパソコンで）: bin/pull-admin-files.sh <host>:<path>"
     fi
-    log "退避先: $(ls -1d backups/*/ 2>/dev/null | sort | tail -1)"
+    backup_dir="$(cat "$bk_result")"; rm -f "$bk_result"
+    trap - INT TERM HUP
+    log "退避先: ${backup_dir}"
 fi
-
-# ── 2. メンテナンス ON ──
-maint_on
 trap on_fail ERR
 
 # ── 3. pull ──
@@ -422,7 +447,9 @@ apply_proxy_conf nginx docker/nginx/default.conf nginx -t
 apply_proxy_conf caddy docker/caddy/Caddyfile caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 # PostgreSQL の db はこの設定を mount していないので、言わない（再起動しても何も変わらない）
 db_id="$("${dc[@]}" ps -q --status running db 2>/dev/null || true)"
-if [ -n "$db_id" ] && docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$db_id" 2>/dev/null | grep -q '/etc/mysql/conf.d'; then
+db_mounts=""; [ -z "$db_id" ] || db_mounts="$(docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$db_id" 2>/dev/null || true)"
+case "$db_mounts" in *'/etc/mysql/conf.d'*) db_has_conf=1 ;; *) db_has_conf=0 ;; esac
+if [ "$db_has_conf" = 1 ]; then
     db_now="$(conf_hash docker/mariadb/conf.d/*.cnf)" || { echo "[deploy] エラー: docker/mariadb/conf.d の設定を読めません（持ち主と権限を確かめてください）。" >&2; false; }
     db_old="$(cat "${conf_stamp_dir}/db.sha256" 2>/dev/null || true)"
     if [ -n "$db_old" ] && [ "$db_now" != "$db_old" ]; then
