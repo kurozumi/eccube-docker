@@ -59,7 +59,7 @@ services:
       - frontend
     logging: *default-logging
     # latest は使わない（#114）。上げるときはここを変えてリリースする
-    image: cloudflare/cloudflared:2026.11.0
+    image: cloudflare/cloudflared:2026.11.1
     profiles: ["tunnel"]
     command: tunnel --no-autoupdate run
     environment:
