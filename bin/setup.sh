@@ -200,7 +200,7 @@ EOS
             fi
         }
         trap setup_on_exit EXIT
-        if [ "$smine" = 1 ] && ! maint_drain docker compose; then
+        if ! maint_drain docker compose; then
             echo "[setup] 注意: 処理中の要求が 30 秒で終わりませんでした（ログイン中の管理者の操作かもしれません）。このまま写します。"
         fi
         echo "[setup] 写しています..."

@@ -108,7 +108,8 @@ fi
 # 先にイメージを用意する。ここで落ちても既存の環境とデータは無傷なので、
 # .env だけ戻して終わる。
 if ! image_provision docker compose; then
-    rm -f "$env_before"
+    # まず写しから .env を丸ごと戻す（下の値ごとの戻しでは、足した行が消えない）。戻せたときだけ写しを消す
+    cat "$env_before" > .env && rm -f "$env_before"
     echo "[switch] エラー: イメージを用意できませんでした。既存の環境とデータはそのままです。" >&2
     if [ -n "$current" ]; then
         tmp="$(mktemp)"

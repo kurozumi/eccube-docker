@@ -467,7 +467,7 @@ if printf '%s\n' "$services_now" | grep -qx worker && [ -n "$("${dc[@]}" ps -q -
     "${dc[@]}" stop worker >/dev/null 2>&1 && worker_stopped=1 && echo "[upgrade] メールの worker を止めました（終われば起動し直します）"
 fi
 # 表示を立てる前に受け付けた要求（注文の確定など）が終わるのを待ってから取る
-if [ "$maint_on" = 1 ] && ! maint_drain "${dc[@]}"; then
+if ! maint_drain "${dc[@]}"; then
     echo "[upgrade] 注意: 処理中の要求が 30 秒で終わりませんでした（ログイン中の管理者の操作かもしれません）。このまま取ります。"
 fi
 echo "[upgrade] バックアップを取得します（上げる前の .env で）..."

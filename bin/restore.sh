@@ -187,7 +187,7 @@ if [ "$rollback" = 0 ]; then
         echo "[restore] 注意: RESTORE_WITHOUT_BACKUP が付いているので、いまの状態を退避せずに戻します（失敗しても自動では戻せません）。"
     else
         # 表示を立てる前に受け付けた要求（注文の確定など）が終わるのを待ってから取る
-        if [ "$maint_mine" = 1 ] && ! maint_drain docker compose; then
+        if ! maint_drain docker compose; then
             echo "[restore] 注意: 処理中の要求が 30 秒で終わりませんでした（ログイン中の管理者の操作かもしれません）。このまま取ります。"
         fi
         echo "[restore] 戻す前に、いまの状態を退避します..."
