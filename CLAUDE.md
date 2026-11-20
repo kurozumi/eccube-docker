@@ -189,6 +189,11 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   向こうが**止まっていて判定できないときは本番として扱う**（guard.sh と同じ）。開発/検証サーバーには
   掛からない。GitHub 側の PR 必須・承認必須は `bin/setup.sh protect`（**非公開リポジトリは有料プラン**が
   要る。無料なら 403 で止まり、手元とサーバーの壁だけになる）。詳細は `docs/deploy.md`。
+- **起動時の migration は、未適用があるときだけ、DB を取ってから流す。** entrypoint は `doctrine:migrations:up-to-date`
+  で見て、未適用があればコンテナ内の `var/migrate-backup/`（新しい 3 つ）へダンプしてから流す。取れない・失敗したら
+  メンテナンス表示（`entrypoint:`）にして止める（以前は `|| true` で、途中まで当たった DB のまま開けていた）。
+  表示は `bin/deploy.sh` が成功したときに外す（`doctor` は外さない）。**entrypoint は `/bin/sh`（dash）で、
+  `pipefail` が無い**（`set -o pipefail` はエラーになり、ダンプが毎回「失敗」に見えた）。
 - **本番を上げるときは `bin/upgrade.sh <制約> --prod`。** `--prod` を落とすと
   `compose.override.yaml`（開発用のポートと bind mount）が効いた状態で公開される。
   **画面は出るので気づきにくい。** 稼働中なら自動でも寄せるが、停止中に打つと効かない。

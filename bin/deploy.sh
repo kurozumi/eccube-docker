@@ -270,8 +270,10 @@ maint_on() {
     log "メンテナンス ON（お客さんには「メンテナンス中」。ログイン中の管理者は見えます）"
 }
 maint_off() {
-    # deploy: が付いているものだけ消す。手で入れたものは残す（doctor と同じ区別）
-    if docker compose exec -T ec-cube sh -c "grep -q '^deploy:' $MAINT" 2>/dev/null; then
+    # deploy: が付いているものだけ消す。手で入れたものは残す（doctor と同じ区別）。
+    # entrypoint: は起動時の migration が失敗した・DB を取れなかった印。deploy が退避して migration を
+    # 流し終えたここでは、もう要らない
+    if docker compose exec -T ec-cube sh -c "grep -qE '^(deploy|entrypoint):' $MAINT" 2>/dev/null; then
         ec rm -f "$MAINT"
         log "メンテナンス OFF"
     fi

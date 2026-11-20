@@ -237,6 +237,63 @@ done
 #    「app ロール（ECCUBE_SKIP_DB_INIT=1）」はスキーマに触らず cache:clear だけ行う
 #    （全 app ホストが一斉に migrate すると競合するため）。単一ホストなら未設定でよい。
 MARKER="$APP_DIR/var/.eccube_installed"
+# 起動時の migration（インストール済みのとき）。
+# **未適用が無ければ何もしない。** あれば、流す前に DB を var/migrate-backup/ へ取る（取れなければ流さない）。
+# **失敗を握らない。** 以前は `|| true` で、途中まで当たった DB のままお店を開けていた。失敗したら
+# メンテナンス表示（entrypoint:）にして止める。ふだんの反映は bin/deploy.sh（先に退避してから流す）で、
+# ここを通るのは「git pull して docker compose up」のように deploy を通らなかったときだけ。
+# 表示は bin/deploy.sh が成功したときに外す（bin/plugin.sh doctor は外さない。壊れた DB を公開しないため）。
+migrate_backup_dir="$APP_DIR/var/migrate-backup"
+entry_maint_on() {
+    if [ ! -f "$APP_DIR/.maintenance" ]; then
+        printf 'entrypoint:%s' "$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$APP_DIR/.maintenance"
+        chown www-data:www-data "$APP_DIR/.maintenance" 2>/dev/null || true
+    fi
+    log "メンテナンス表示にしました（お客さんには「メンテナンス中」。ログイン中の管理者は見えます）。"
+}
+dump_before_migrate() { # 標準出力へ gzip 前のダンプ
+    case "${DB_ENGINE:-mysql}" in
+        postgresql)
+            PGPASSWORD="$DB_PASSWORD" pg_dump --clean --if-exists -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" "$DB_NAME" ;;
+        *)
+            MYSQL_PWD="$DB_PASSWORD" mysqldump --single-transaction --triggers --no-tablespaces \
+                -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" "$DB_NAME" ;;
+    esac
+}
+migrate_installed() {
+    if runuser -u www-data -- php bin/console doctrine:migrations:up-to-date --no-interaction >/dev/null 2>&1; then
+        log "インストール済み。未適用の migration はありません。"
+        return 0
+    fi
+    log "インストール済み。未適用の migration があります（または確かめられませんでした）。流す前に DB を取ります..."
+    mkdir -p "$migrate_backup_dir"; chmod 700 "$migrate_backup_dir"
+    local out
+    out="$migrate_backup_dir/$(date +%Y%m%d-%H%M%S).sql.gz"
+    # このファイルは /bin/sh（dash）で動くので pipefail が無い。ダンプの終了コードはファイルで受け取る
+    local rcf="$migrate_backup_dir/.dump-rc"
+    { dump_before_migrate; echo $? > "$rcf"; } | gzip > "$out"
+    if [ "$(cat "$rcf" 2>/dev/null)" != 0 ] ||
+       ! gunzip -c "$out" | tail -c 1024 | grep -qE -- '-- (PostgreSQL database dump complete|Dump completed)'; then
+        rm -f "$rcf"
+        rm -f "$out"
+        log "エラー: DB を取れなかったので、migration は流しません（取れないまま流すと、失敗したときに戻せない）。"
+        entry_maint_on
+        log "DB に繋がるか確かめてから、bin/deploy.sh で反映してください（先に退避してから流します）。"
+        return 0
+    fi
+    rm -f "$rcf"
+    chmod 600 "$out"
+    # 新しい 3 つだけ残す（ボリュームの中なので、溜めない。長く持つのは bin/backup.sh の役目）
+    ls -1 "$migrate_backup_dir"/*.sql.gz 2>/dev/null | sort | head -n -3 2>/dev/null | xargs -r rm -f 2>/dev/null || true
+    log "取りました: ${out#"$APP_DIR"/}（コンテナの中。戻すなら docker compose cp で取り出して流し込む）"
+    if runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration; then
+        return 0
+    fi
+    log "エラー: migration が失敗しました。途中まで当たった DB でお店を開けないよう、止めます。"
+    entry_maint_on
+    log "流す前の DB: ${out#"$APP_DIR"/}。原因を直して bin/deploy.sh で反映し直すか、bin/restore.sh で戻してください。"
+    return 0
+}
 # このボリュームで始めた eccube:install が途中で失敗した印。中身は**失敗した時点の DB の指紋**
 # （db_shop_stamp。店の基本情報の作成日時）。次の起動で DB の指紋が**同じときだけ**やり直す
 # （このボリュームが作りかけた DB のまま、ということ）。違えば、そのあいだに別のホストが同じ DB で
@@ -330,8 +387,7 @@ else
             log "（別の場所で始めたインストールが途中で止まった DB なら、DB を空にしてから起動し直すと、最初からインストールします）"
             touch "$MARKER"
         fi
-        log "インストール済み。未適用の migration を適用します。"
-        runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true
+        migrate_installed
         # bind-mount した app/config・app/Customize の変更を prod のコンパイル済み
         # コンテナへ反映するため、毎起動でキャッシュを作り直す（dev では無害）。
         clear_twig_runtime
