@@ -125,22 +125,22 @@
 
     <h3 style="font-family:var(--f-display);font-size:20px;margin:48px 0 6px">よくある疑問</h3>
     <div class="two faq">
-      <div class="box"><h3>DB も複数台に分けるの？</h3><ul>
+      <div class="box"><h4>DB も複数台に分けるの？</h4><ul>
         <li><strong>分けません。1 台のまま大きくします。</strong>増やすのはアプリのサーバーだけで、全台が同じ DB を見ます。</li>
         <li>読み取り用の複製（リードレプリカ）は、EC-CUBE がリクエストのたびに書き込み用の接続を使うので効きません。データを複数の DB に分けるのも、EC-CUBE の作りでは現実的ではありません。</li>
         <li>DB が詰まったら、遅い SQL を直す → Redis で問い合わせを減らす → DB を大きくする、の順です。</li>
       </ul></div>
-      <div class="box"><h3>1 台で動いている店から、途中で分けられる？</h3><ul>
+      <div class="box"><h4>1 台で動いている店から、途中で分けられる？</h4><ul>
         <li><strong>分けられます。部品を 1 つずつ、別の日に外へ出します。</strong></li>
         <li>DB（<code>bin/setup.sh db</code>）→ Redis（<code>.env</code> を書き換える）→ 商品画像（NFS / EFS）→ アプリのサーバーを足して LB を置く、の順。</li>
         <li>アプリを増やすときは、先に今のサーバーの前に LB を置き、そこへ 2 台目を足すので、止めずにできます。</li>
       </ul></div>
-      <div class="box"><h3>お店が止まる時間は？</h3><ul>
+      <div class="box"><h4>お店が止まる時間は？</h4><ul>
         <li>毎日の反映・PHP の更新: 複数台なら <strong>0</strong>（1 台ずつ LB から外して反映）。</li>
         <li>EC-CUBE 本体の更新: <strong>数分</strong>。古い版と新しい版を同時に動かせないので、全台を止めます。</li>
-        <li>DB を外へ移す（1 回だけ）: <strong>数分〜数十分</strong>（データの量しだい）。Redis を入れる瞬間は止まりませんが、全員ログアウトになります。</li>
+        <li>DB を外へ移す（1 回だけ）: <strong>数分〜数十分</strong>（データの量しだい）。Redis を入れるとき: <code>bin/deploy.sh</code> のメンテナンス表示の間（1 分ほど）止まり、全員ログアウトになります。</li>
       </ul></div>
-      <div class="box"><h3>AWS を使えば考えなくてよくなる？</h3><ul>
+      <div class="box"><h4>AWS を使えば考えなくてよくなる？</h4><ul>
         <li><strong>減るのは「機械の面倒を見る手間」で、「どう分けるか」は残ります。</strong></li>
         <li>任せられる: DB のバックアップと故障時の切り替え（RDS）、Redis（ElastiCache）、画像の共有（EFS）、LB と証明書（ALB）。</li>
         <li>残る: DB は 1 台のまま。ログイン・画像・管理画面が書くファイルを共有する設計。EC-CUBE の更新は全台を止める。台数の自動の増減は、この環境の docker compose のままではできません（ECS などへの載せ替えが要る）。料金も上がります。</li>
