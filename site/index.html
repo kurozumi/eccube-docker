@@ -388,15 +388,18 @@ COMPOSE_PROFILES=tunnel,redis
 bin/deploy.sh</pre><p>キャッシュとセッションを Redis へ。DB への同じ問い合わせと PHP の計算が減ります。<strong>切り替えた瞬間に全員ログアウトになり、カートも空になる</strong>ので、お客さんの少ない時間に。</p></div>
 
       <div class="step"><div class="num">③</div><h3>php-fpm の枠を広げる</h3><pre><span class="c"># .env（既定 20。1 本 80MB ほど）</span>
-PHP_FPM_MAX_CHILDREN=40</pre><p>CPU に余裕があるのに、負荷試験で「php-fpm の上限に達した」と出るときに効きます。CPU が張り付いているなら、サーバーを大きくするか ④ へ。</p></div>
+PHP_FPM_MAX_CHILDREN=40
+<span class="c"># 反映</span>
+bin/deploy.sh</pre><p>CPU に余裕があるのに、負荷試験で「php-fpm の上限に達した」と出るときに効きます。CPU が張り付いているなら、サーバーを大きくするか ④ へ。</p></div>
 
       <div class="step"><div class="num">④</div><h3>アプリのホストを並べる</h3><pre><span class="c"># 各ホストで（DB・Redis・画像は外へ）</span>
 docker compose \
   -f compose.app.yaml up -d
 <span class="c"># 前に LB を置く</span></pre><p>DB と Redis はマネージドへ、画像は NFS / EFS へ出し、アプリだけを並べます。セッションは Redis で共有なので、同じ人を同じホストへ寄せる設定は要りません。<strong>全ホストの php-fpm の枠の合計が DB の接続数の上限（既定 200）を超えると落ちる</strong>ので、合わせて上げます。</p></div>
 
-      <div class="step"><div class="num">⑤</div><h3>DB が詰まったら</h3><pre><span class="c"># docker/mariadb/conf.d で</span>
-slow_query_log = 1</pre><p>まず遅い SQL を探す（プラグインの 1 本が原因のことが多い）。次に ② の Redis。それでも足りなければ、マネージド DB の上の型へ上げます。</p></div>
+      <div class="step"><div class="num">⑤</div><h3>DB が詰まったら</h3><pre><span class="c"># 動いている DB にその場で（MariaDB）</span>
+SET GLOBAL slow_query_log = 1;
+<span class="c"># 設定ファイルは再起動まで効かない</span></pre><p>まず遅い SQL を探す（プラグインの 1 本が原因のことが多い）。次に ② の Redis。それでも足りなければ、マネージド DB の上の型へ上げます。</p></div>
     </div>
 
     <div class="two" style="margin-top:28px">

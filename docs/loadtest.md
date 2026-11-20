@@ -144,9 +144,9 @@ php-fpm の上限は、サーバーで `docker compose logs ec-cube | grep max_c
 
 | 詰まった場所 | 打ち手 | 文書 |
 |---|---|---|
-| php-fpm の枠（max_children） | `PHP_FPM_MAX_CHILDREN` を上げる（1 本 80MB ほど。メモリの範囲で） | [scale](scale.md)「単一ホスト強化」 |
+| php-fpm の枠（max_children） | `PHP_FPM_MAX_CHILDREN` を上げて `bin/deploy.sh`（1 本 80MB ほど。メモリの範囲で） | [scale](scale.md)「単一ホスト強化」 |
 | ec-cube の CPU | 1 台を大きくする → `--scale` で 1 台の中に増やす → ホストを並べる | [scale](scale.md)「水平スケール」「複数ホスト + LB」 |
-| DB の CPU | 遅い SQL を見る（`docker/mariadb/conf.d` の `slow_query_log = 1`）→ Redis のキャッシュ（`COMPOSE_PROFILES=redis`）→ マネージド DB を大きく | [scale](scale.md)「単一ホスト強化」「DB を外に出す」 |
+| DB の CPU | 遅い SQL を見る（`SET GLOBAL slow_query_log = 1`。設定ファイルだけでは動いている DB に効かない。[scale](scale.md)「3」）→ Redis のキャッシュ（`COMPOSE_PROFILES=redis`）→ マネージド DB を大きく | [scale](scale.md)「単一ホスト強化」「DB を外に出す」 |
 | 特定のページだけ遅い | そのページで動くプラグインを疑う。プラグインを外した検証環境で同じ stress を流して比べる | |
 | 失敗が 502 / 504 | php-fpm の枠か、nginx の `fastcgi_read_timeout` より遅いページ | |
 

@@ -86,6 +86,7 @@ Caching → Configuration → **Purge Cache**（URL を指定するか、全部�
    セッションも `redis-session` に移ります。**切り替えた瞬間、全員ログアウトになり、カートも消えます**
    （下の「セッションの Redis 共有」）。お客さんの少ない時間に。
 2. **1 台の中で php-fpm を増やす**: まず `.env` の `PHP_FPM_MAX_CHILDREN` をメモリの範囲で上げる（1 本 80MB ほど）。
+   **`.env` を直したら `bin/deploy.sh`**（ec-cube が作り直されて新しい値で立つ。`.env` を直しただけでは 20 のまま）。
    CPU に余裕があるのに php-fpm の上限（max_children）が出ているときに効きます。CPU が張り付いているなら、
    サーバーを大きくするか、次へ。
 3. **ホストを並べる**: DB・Redis・画像を外に出し（マネージド DB・マネージド Redis・NFS / EFS）、各ホストで
@@ -100,7 +101,16 @@ Caching → Configuration → **Purge Cache**（URL を指定するか、全部�
 
 ## 3. DB が詰まったら
 
-1. **遅い SQL を見る**: `docker/mariadb/conf.d` で `slow_query_log = 1`。プラグインの 1 本の SQL が原因のことが多い
+1. **遅い SQL を見る**: プラグインの 1 本の SQL が原因のことが多い。**設定ファイルを直しただけでは、動いている DB には
+   効きません**（起動のときにしか読まない。`bin/deploy.sh` も DB は作り直さない）。その場で入れて確かめる（MariaDB）:
+
+   ```bash
+   docker compose exec db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mariadb -uroot -e "SET GLOBAL slow_query_log = 1; SHOW GLOBAL VARIABLES LIKE \"slow_query_log%\""'
+   ```
+
+   1 秒（`long_query_time`）を超えた SQL が、データディレクトリの中の `slow_query_log_file` に溜まります。
+   次の起動からも続けるなら `docker/mariadb/conf.d/eccube.cnf` の `slow_query_log = 1` も直す（DB の再起動で効く。
+   数秒止まる）。調べ終わったら `SET GLOBAL slow_query_log = 0` で戻す
 2. **Redis のキャッシュ**（上の 2 の 1）。Doctrine のメタデータと結果のキャッシュが Redis に載る
 3. **DB そのものを大きくする**: マネージド DB（RDS・Aurora など）へ出して、上の型へ上げる（下の「複数ホスト + LB」）
 
