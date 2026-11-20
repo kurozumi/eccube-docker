@@ -152,6 +152,14 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **`ECCUBE_AUTH_MAGIC` は全パスワードのハッシュの鍵。** 違う値で DB を戻すと誰も
   ログインできず、エラーも出ない。`restore.sh` が DB を戻す前に突き合わせて止める。
   引っ越しは「clone → `bin/init.sh` → AUTH_MAGIC を合わせる → `bin/restore.sh`」。
+  **消す・書き換えるコマンドは、先に退避して、退避できなければ始めない。失敗したら退避から戻す。**
+  `restore.sh` は戻す前にいまの状態を `backups/<日時>-before-restore/` へ取り（`BACKUP_LABEL`）、
+  メンテナンス表示の中で戻し、途中で失敗したら `--rollback` でそこから戻す。**ダンプは完了の行
+  （`-- Dump completed` / `-- PostgreSQL database dump complete`）があるかを先に見る。** 途中で切れた
+  ダンプを psql に流すと、入力の終わりを正常な終わりとみなし、空の表のまま 0 で終わる（1 つの
+  トランザクションでも防げない。試験で踏んだ）。`plugin.sh remove` も退避 → uninstall（失敗したら
+  止まる）→ フォルダは `var/removed-plugins/` へ移す。`backup.sh` の世代管理は自分が付けた名前だけを
+  数え、`-before-` の控えは別勘定（`BACKUP_KEEP_SAFETY`）、`BACKUP_PROTECT` は数から外す。
   **DB は MariaDB / MySQL か PostgreSQL**（`.env` の `DB_ENGINE`。イメージは両方の拡張を持つ）。
   backup / restore はそれを見て mysqldump / pg_dump を使い分ける。外部 DB でも同じ
   （`db` サービスが無ければ同じ DB のクライアントを使い捨てコンテナで起動し `.env` の `DB_*` で繋ぐ）。

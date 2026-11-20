@@ -2,6 +2,11 @@
 # バックアップ（bin/backup.sh の出力）から復元する。
 #   使い方:  bin/restore.sh backups/20260721-040000
 #
+# **戻す前に、いまの状態を退避する**（backups/<日時>-before-restore/）。退避できなければ何も変えずに
+# 止まる。戻している途中で失敗したら、その退避から自動で元に戻す。戻している間はメンテナンス表示。
+#   いまの DB が壊れていて退避が取れないときだけ: RESTORE_WITHOUT_BACKUP=<プロジェクト名> bin/restore.sh …
+#   確認を打たずに進める（スクリプトから）:       CONFIRM_RESTORE=<プロジェクト名> bin/restore.sh …
+#
 # 戻すもの:
 #   db.sql.gz          DB（既存データを DROP して置き換える。確認プロンプトあり）
 #   upload.tar.gz      アップロード画像
@@ -13,7 +18,7 @@
 #                      ハッシュの鍵なので、違う値のまま DB を戻すと誰もログインできない。
 #
 # 引っ越しは「clone → bin/init.sh → bin/restore.sh <退避先>」で完結する。
-set -euo pipefail
+set -Eeuo pipefail
 # -h / --help は先頭のコメント（この説明）をそのまま出す。AI や初めての人が最初に打つのはこれ
 case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
@@ -30,7 +35,11 @@ vol_rw() { # vol_rw <ボリューム名> <マウント先> <コマンド…>
     docker run --rm -i -v "${proj}_$1:$2" alpine:3 "${@:3}"
 }
 
+# --rollback は restore.sh 自身が失敗の後始末に使う（確認・退避・メンテナンスを親に任せる）
+rollback=0
+if [ "${1:-}" = "--rollback" ]; then rollback=1; shift; fi
 src="${1:-}"
+src="${src%/}"
 
 # ── 暗号化されたバックアップ（backup.sh の BACKUP_ENCRYPT_KEY）を透過的に読む ──
 # rd <名前> … その名前の平文を標準出力へ。<名前>.enc があれば復号、無ければそのまま。
@@ -64,6 +73,13 @@ if [ -f "${src}/SHA256SUMS" ]; then
         [ "$got" = "$sum" ] || { echo "[restore] エラー: ${name} のハッシュが合いません（運搬中に壊れた可能性）。中止します。" >&2; exit 1; }
     done < "${src}/SHA256SUMS"
 fi
+# **ダンプが最後まであるかを、何かを変える前に見る。** 途中で切れたダンプを流すと、psql は入力の終わりを
+# 正常な終わりとみなしてそこまでを確定する（表を消して作り直したところで切れていれば、空の表で「完了」）。
+# mysqldump / pg_dump は最後に完了の行を書くので、それがあるかで判る。
+if ! rd db.sql.gz | gunzip -c | tail -c 1024 | grep -qE -- '-- (PostgreSQL database dump complete|Dump completed)'; then
+    echo "[restore] エラー: ${src} の DB ダンプが最後までありません（途中で切れている・壊れている）。何も変えずに中止します。" >&2
+    exit 1
+fi
 if has host.env && [ -f .env ]; then
     # 復号は 1 回にして、以降はこの変数から読む
     host_env="$(rd host.env)"
@@ -95,9 +111,94 @@ EOS
     fi
 fi
 
-echo "[restore] ${src} から復元します。現在の DB は上書きされます。"
-read -r -p "続行しますか? [y/N] " ans
-[ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
+if [ "$rollback" = 0 ]; then
+    echo "[restore] ${src} から復元します。現在の DB・画像・管理画面が書いたファイルは上書きされます。"
+    echo "          （その前に、いまの状態を backups/ へ退避します）"
+    if [ -n "${CONFIRM_RESTORE:-}" ]; then
+        [ "$CONFIRM_RESTORE" = "$proj" ] || { echo "[restore] エラー: CONFIRM_RESTORE がプロジェクト名（${proj}）と違います。中止します。" >&2; exit 1; }
+    else
+        read -r -p "続行しますか? [y/N] " ans
+        [ "$ans" = "y" ] || { echo "中止しました"; exit 1; }
+    fi
+fi
+
+# ── いまの状態を退避する。できなければ何も変えずに止める ──
+# 戻す元を間違えた・古すぎた、というときに戻れる場所がここしか無い。backup.sh の世代管理が
+# 「いまから戻す元」を押し出さないよう、BACKUP_PROTECT で守る。
+safety=""
+if [ "$rollback" = 0 ]; then
+    if [ -n "${RESTORE_WITHOUT_BACKUP:-}" ]; then
+        [ "$RESTORE_WITHOUT_BACKUP" = "$proj" ] || { echo "[restore] エラー: RESTORE_WITHOUT_BACKUP がプロジェクト名（${proj}）と違います。中止します。" >&2; exit 1; }
+        echo "[restore] 注意: RESTORE_WITHOUT_BACKUP が付いているので、いまの状態を退避せずに戻します（失敗しても自動では戻せません）。"
+    else
+        echo "[restore] 戻す前に、いまの状態を退避します..."
+        rf="$(mktemp)"
+        if ! BACKUP_LABEL=restore BACKUP_PROTECT="$src" BACKUP_RESULT_FILE="$rf" bin/backup.sh >"${rf}.log" 2>&1; then
+            tail -5 "${rf}.log" >&2; rm -f "$rf" "${rf}.log"
+            cat >&2 <<EOS
+[restore] エラー: いまの状態を退避できませんでした。**何も変えずに中止します。**
+          bin/backup.sh を単体で打って原因を見てください。
+          いまの DB が壊れていて退避できない、と分かっているときだけ:
+            RESTORE_WITHOUT_BACKUP=${proj} bin/restore.sh ${src}
+EOS
+            exit 1
+        fi
+        safety="$(cat "$rf")"; rm -f "$rf" "${rf}.log"
+        echo "[restore] 退避しました: ${safety}"
+    fi
+fi
+
+# ── メンテナンス表示（戻している間に注文が入ると、その注文は戻した DB に無い）──
+# deploy.sh と同じ仕組み。restore: を付けたものだけ自分で消す。手で入れたものは残す。
+MAINT=/var/www/html/.maintenance
+maint_mine=0
+if [ "$rollback" = 0 ] && [ -n "$(docker compose ps -q --status running ec-cube 2>/dev/null)" ]; then
+    if docker compose exec -T ec-cube sh -c "grep -q '^restore:' $MAINT" 2>/dev/null; then
+        maint_mine=1   # 前の restore が失敗して残したもの。今回うまくいけば外す
+        echo "[restore] メンテナンス表示は前回の restore から ON のままです（そのまま進めます）"
+    elif ! docker compose exec -T ec-cube test -f "$MAINT" 2>/dev/null; then
+        if docker compose exec -T ec-cube runuser -u www-data -- sh -c "printf 'restore:%s' '$(openssl rand -hex 16)' > $MAINT"; then
+            maint_mine=1
+            echo "[restore] メンテナンス ON（お客さんには「メンテナンス中」）"
+        fi
+    fi
+fi
+maint_off() {
+    if [ "$maint_mine" = 1 ] && docker compose exec -T ec-cube sh -c "grep -q '^restore:' $MAINT" 2>/dev/null; then
+        docker compose exec -T ec-cube rm -f "$MAINT" && echo "[restore] メンテナンス OFF"
+    fi
+}
+
+# ── 途中で失敗したら、退避から元に戻す ──
+on_fail() {
+    # set -E なので、パイプの中の子プロセスでも呼ばれる。戻すのは親だけ（子でも戻すと 2 回戻す）
+    [ "${BASH_SUBSHELL:-0}" = 0 ] || exit 1
+    trap - ERR
+    echo >&2
+    if [ "$rollback" = 1 ]; then
+        echo "[restore] 元に戻す途中でも失敗しました。" >&2
+        exit 1
+    fi
+    if [ -z "$safety" ]; then
+        echo "[restore] 失敗しました。退避を取っていないので、自動では戻せません（RESTORE_WITHOUT_BACKUP）。" >&2
+        echo "          メンテナンス表示は ON のままです。" >&2
+        exit 1
+    fi
+    echo "[restore] 失敗しました。戻す前に取った退避（${safety}）から、元の状態に戻します..." >&2
+    if bin/restore.sh --rollback "$safety"; then
+        maint_off
+        echo "[restore] **元の状態に戻しました。** ${src} は戻せていません。上のエラーを見てください。" >&2
+    else
+        cat >&2 <<EOS
+[restore] **元に戻すのにも失敗しました。メンテナンス表示は ON のままです。**
+          いまの状態の退避はここにあります（消さないでください）: ${safety}
+          原因を直してから、これを戻してください:  bin/restore.sh ${safety}
+          （直す前にお店を開けるなら: docker compose exec ec-cube rm /var/www/html/.maintenance）
+EOS
+    fi
+    exit 1
+}
+trap on_fail ERR
 
 # DB は手元の db サービスか外部か（bin/backup.sh と同じ判定）
 db_engine="$(env_get DB_ENGINE)"; db_engine="${db_engine:-mysql}"
@@ -111,15 +212,17 @@ local_db=0; [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null
 case "$db_engine" in
   postgresql)
     db_port="${db_port:-5432}"
-    # pg_dump --clean で作ってあるので、既存の表は DROP されてから作り直される
+    # pg_dump --clean で作ってあるので、既存の表は DROP されてから作り直される。
+    # **1 つのトランザクションで流し、エラーで止める。** 以前は ON_ERROR_STOP=0 で、途中で失敗しても
+    # 残りを流して「完了」と出していた。いまは失敗すれば DB は流す前のまま。
     if [ "$local_db" = 1 ]; then
         echo "[restore] DB を復元しています（手元の db サービス / PostgreSQL）..."
         rd db.sql.gz | gunzip -c | docker compose exec -T db sh -c \
-            'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -q -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null
+            'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -q -v ON_ERROR_STOP=1 --single-transaction -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null
     else
         echo "[restore] DB を復元しています（外部 PostgreSQL: ${db_host}:${db_port}）..."
         rd db.sql.gz | gunzip -c | docker run --rm -i --network "${proj}_backend" -e PGPASSWORD="$(env_get DB_PASSWORD)" "postgres:${pg_ver}-alpine" \
-            psql -q -v ON_ERROR_STOP=0 -h "$db_host" -p "$db_port" -U "$(env_get DB_USER)" -d "$(env_get DB_NAME)" >/dev/null
+            psql -q -v ON_ERROR_STOP=1 --single-transaction -h "$db_host" -p "$db_port" -U "$(env_get DB_USER)" -d "$(env_get DB_NAME)" >/dev/null
     fi
     ;;
   *)
@@ -195,4 +298,9 @@ else
     docker compose exec -T ec-cube runuser -u www-data -- php bin/console cache:clear --no-interaction >/dev/null 2>&1 || true
 fi
 
+trap - ERR
+[ "$rollback" = 1 ] && exit 0
+maint_off
 echo "[restore] 完了。bin/healthcheck.sh で動作確認してください。"
+[ -n "$safety" ] && echo "          戻す前の状態はここに退避してあります: ${safety}（戻すなら bin/restore.sh ${safety}）"
+exit 0

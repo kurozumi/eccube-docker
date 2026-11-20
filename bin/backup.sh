@@ -3,6 +3,8 @@
 #   使い方:  bin/backup.sh                  # ./backups/<日時>/ に保存
 #            BACKUP_DIR=/mnt/nas bin/backup.sh   # 保存先を変える
 #            BACKUP_KEEP=14 bin/backup.sh        # 保持世代数（既定 7）
+#   ほかのコマンドが「変える前の控え」を取るときは BACKUP_LABEL=<名前> を付ける
+#   （<日時>-before-<名前>/ に置く。毎日の世代とは別に数え、BACKUP_KEEP_SAFETY 世代（既定 10）残す）。
 #   cron 例（毎日 4:00、リポジトリ直下で）:
 #     0 4 * * * cd /path/to/eccube-docker && bin/backup.sh >> var/backup.log 2>&1
 #
@@ -39,9 +41,33 @@ vol() { # vol <ボリューム名> <マウント先> <コマンド…>
 
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
 BACKUP_KEEP="${BACKUP_KEEP:-7}"
-stamp="$(date +%Y%m%d-%H%M%S)"
-dest="${BACKUP_DIR}/${stamp}"
-mkdir -p "$dest"
+BACKUP_KEEP_SAFETY="${BACKUP_KEEP_SAFETY:-10}"
+# 「変える前の控え」（restore.sh などが取る）。名前で毎日の世代と分け、毎日の backup で押し出されないようにする
+label="${BACKUP_LABEL:-}"
+case "$label" in
+    '') suffix="" ;;
+    *[!a-z0-9-]*) echo "[backup] エラー: BACKUP_LABEL は英小文字・数字・- だけにしてください（${label}）" >&2; exit 1 ;;
+    *) suffix="-before-${label}" ;;
+esac
+mkdir -p "$BACKUP_DIR"
+# **同じ秒に 2 回取ると、前のものに上書きしていた**（mkdir -p は既存でも通る）。無い名前になるまで待つ
+for _ in 1 2 3 4 5; do
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    dest="${BACKUP_DIR}/${stamp}${suffix}"
+    mkdir "$dest" 2>/dev/null && break
+    dest=""; sleep 1
+done
+[ -n "$dest" ] || { echo "[backup] エラー: 退避先のフォルダを作れません（${BACKUP_DIR}）" >&2; exit 1; }
+# **途中で失敗したら、書きかけのフォルダを残さない。** 残すと良い世代として数えられ、世代管理が
+# ちゃんとしたバックアップを先に消していく。外へ送るのに失敗しただけなら、手元の分は完全なので残す。
+complete=0
+cleanup_partial() {
+    if [ "$complete" != 1 ] && [ -n "${dest:-}" ] && [ -d "$dest" ]; then
+        echo "[backup] 途中で失敗したので、書きかけの ${dest} を消しました（ほかの世代は触っていません）。" >&2
+        rm -rf "$dest"
+    fi
+}
+trap cleanup_partial EXIT
 
 # DB は 2 通り。手元の db サービス（単一ホスト）か、外部の DB（compose.app.yaml の
 # 複数ホスト、マネージド DB）。外部のときは db コンテナが無いので exec できない。
@@ -96,6 +122,10 @@ esac
 # 「アップグレードに失敗してサイトが落ちている状態から復旧したい」ときに
 # バックアップが取れなくなる。
 echo "[backup] アップロード画像を退避しています..."
+# **ボリュームが無いときに、空のまま「成功」にしない。** docker run -v は無い名前のボリュームを
+# 黙って新しく作るので、プロジェクト名がずれていると空の書庫ができ、画像が入っていないことに気づけない。
+docker volume inspect "${proj}_eccube_upload" >/dev/null 2>&1 \
+    || { echo "[backup] エラー: 画像のボリューム ${proj}_eccube_upload がありません（プロジェクト名が違う？ .env の COMPOSE_PROJECT_NAME）" >&2; exit 1; }
 vol eccube_upload /upload tar -C / -czf - upload > "${dest}/upload.tar.gz"
 
 # 管理画面がディスクに書いたものを退避する。
@@ -170,6 +200,9 @@ fi
 gzip -t "${dest}/db.sql.gz"
 gzip -t "${dest}/upload.tar.gz"
 gzip -t "${dest}/admin-files.tar.gz"
+# ダンプが最後まで書けたか（mysqldump / pg_dump は最後に完了の行を書く）。途中で切れたものを良い世代として残さない
+gunzip -c "${dest}/db.sql.gz" | tail -c 1024 | grep -qE -- '-- (PostgreSQL database dump complete|Dump completed)' \
+    || { echo "[backup] エラー: DB ダンプが最後まで書けていません（途中で切れた可能性）。" >&2; exit 1; }
 db_size=$(wc -c < "${dest}/db.sql.gz")
 if [ "$db_size" -lt 1024 ]; then
     echo "[backup] エラー: DB ダンプが小さすぎます（${db_size} bytes）。失敗の可能性。" >&2
@@ -193,12 +226,21 @@ if [ -n "$enc_key" ]; then
         rm -f "${dest}/${f}"
     done
     printf 'encrypted\n' > "${dest}/ENCRYPTED"
+    # **鍵で戻せるかを、ここで確かめる。** 戻すときに初めて読めないと分かっても遅い
+    for f in db.sql.gz upload.tar.gz admin-files.tar.gz; do
+        BACKUP_ENCRYPT_KEY="$enc_key" openssl enc -d -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 \
+            -pass env:BACKUP_ENCRYPT_KEY -in "${dest}/${f}.enc" | gzip -t \
+            || { echo "[backup] エラー: 暗号化した ${f} を戻せません" >&2; exit 1; }
+    done
 elif [ -n "$(env_get BACKUP_SYNC)" ]; then
     echo "[backup] 注意: BACKUP_SYNC で外へ送りますが、暗号化していません（会員の個人情報が平文のまま外に置かれます）。"
     echo "           .env に BACKUP_ENCRYPT_KEY を書くと暗号化します（docs/backup.md）。"
 fi
 # 運搬中の壊れを見るためのハッシュ（暗号化後のファイルに対して）
 ( cd "$dest" && for f in *; do [ "$f" = SHA256SUMS ] && continue; printf '%s  %s\n' "$(openssl dgst -sha256 -r "$f" | cut -d' ' -f1)" "$f"; done ) > "${dest}/SHA256SUMS"
+complete=1
+# 呼んだスクリプトが退避先を知るため（restore.sh / upgrade.sh）
+if [ -n "${BACKUP_RESULT_FILE:-}" ]; then printf '%s\n' "$dest" > "$BACKUP_RESULT_FILE"; fi
 
 echo "[backup] 完了: ${dest}"
 ls -lh "$dest"
@@ -226,12 +268,25 @@ if [ -n "$sync_to" ]; then
     esac
 fi
 
-# 世代管理: 古いバックアップを削除（BACKUP_KEEP 世代残す）
+# 世代管理: 古いバックアップを削除（毎日の分は BACKUP_KEEP 世代、変える前の控えは BACKUP_KEEP_SAFETY 世代）
+# **数えるのは backup.sh が作った名前のフォルダだけ。** ほかのものを置いても消さない。
+# BACKUP_PROTECT に渡したフォルダは数から外して必ず残す（restore.sh が「いまから戻す元」を渡す）。
 # head -n -N は BSD/macOS 非対応のため、削除数を計算して先頭から消す
-total=$(ls -1d "${BACKUP_DIR}"/*/ 2>/dev/null | wc -l | tr -d ' ')
-if [ "$total" -gt "$BACKUP_KEEP" ]; then
-    ls -1d "${BACKUP_DIR}"/*/ | sort | head -n $((total - BACKUP_KEEP)) | while read -r old; do
-        echo "[backup] 古い世代を削除: ${old}"
-        rm -rf "$old"
-    done
-fi
+protect=""
+if [ -n "${BACKUP_PROTECT:-}" ] && [ -d "$BACKUP_PROTECT" ]; then protect="$(cd "$BACKUP_PROTECT" && pwd -P)"; fi
+prune() { # prune <ERE> <残す数>
+    local list total
+    list="$(cd "$BACKUP_DIR" && ls -1d */ 2>/dev/null | sed 's:/$::' | grep -E "$1" | sort | while read -r d; do
+        [ -n "$protect" ] && [ "$(cd "$d" && pwd -P)" = "$protect" ] && continue
+        printf '%s\n' "$d"
+    done)"
+    total="$(printf '%s' "$list" | grep -c . || true)"
+    if [ "$total" -gt "$2" ]; then
+        printf '%s\n' "$list" | head -n $((total - $2)) | while read -r old; do
+            echo "[backup] 古い世代を削除: ${BACKUP_DIR}/${old}/"
+            rm -rf "${BACKUP_DIR:?}/${old}"
+        done
+    fi
+}
+prune '^[0-9]{8}-[0-9]{6}$' "$BACKUP_KEEP"
+prune '^[0-9]{8}-[0-9]{6}-before-[a-z0-9-]+$' "$BACKUP_KEEP_SAFETY"
