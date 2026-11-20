@@ -33,6 +33,8 @@ cd "$(dirname "$0")/.."
 . "$(dirname "$0")/lib/image.sh"
 # shellcheck source=lib/compose.sh
 . "$(dirname "$0")/lib/compose.sh"
+# shellcheck source=lib/maint.sh
+. "$(dirname "$0")/lib/maint.sh"
 
 # --prod は本番構成（compose.prod.yaml）で上げる指定。位置は問わない。
 # --php=8.x は PHP も一緒に変える指定。
@@ -463,6 +465,10 @@ trap backup_interrupted INT TERM HUP
 # メールの worker を止める。戻すと送ったはずのメールが DB に戻り、もう一度送られる（注文確認の二重送信）
 if printf '%s\n' "$services_now" | grep -qx worker && [ -n "$("${dc[@]}" ps -q --status running worker 2>/dev/null)" ]; then
     "${dc[@]}" stop worker >/dev/null 2>&1 && worker_stopped=1 && echo "[upgrade] メールの worker を止めました（終われば起動し直します）"
+fi
+# 表示を立てる前に受け付けた要求（注文の確定など）が終わるのを待ってから取る
+if ! maint_drain "${dc[@]}"; then
+    echo "[upgrade] 注意: 処理中の要求が 30 秒で終わりませんでした（ログイン中の管理者の操作かもしれません）。このまま取ります。"
 fi
 echo "[upgrade] バックアップを取得します（上げる前の .env で）..."
 # バックアップの host.env は「上げる前」のものにする（戻すときの突き合わせと記録のため）

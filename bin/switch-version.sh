@@ -55,7 +55,8 @@ echo "         （NFS/EFS ドライバで運用していれば外部データは
 guard_destructive switch-version.sh "DB・アップロード画像・セッション"
 # 退避は消す直前に取る（イメージの用意は数分かかりうるので、先に取るとその間の変更が退避から漏れる）。
 # 退避の host.env は切り替える前のものにしたいので、.env をここで写しておき、取るときだけ戻す。
-env_before="$(mktemp)"; cp -p .env "$env_before"
+# 写しは mktemp の 0600 のまま（cp -p だと .env の権限、たいてい 0644 が付き、ほかの利用者に読める）
+env_before="$(mktemp)"; cp .env "$env_before"
 
 current="$(grep -E '^ECCUBE_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
 current_redis="$(grep -E '^PHPREDIS_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
@@ -107,6 +108,16 @@ fi
 # 先にイメージを用意する。ここで落ちても既存の環境とデータは無傷なので、
 # .env だけ戻して終わる。
 if ! image_provision docker compose; then
+    # まず写しから .env を丸ごと戻す（下の値ごとの戻しでは、足した行が消えない）。戻せたときだけ写しを消す
+    # 同じフォルダの一時ファイルへ写してから入れ替える（.env へ直接書くと、ディスクがいっぱいのとき途中で切れる）
+    if cp "$env_before" .env.switch-restore && mv -f .env.switch-restore .env; then
+        rm -f "$env_before"
+    else
+        rm -f .env.switch-restore
+        echo "[switch] エラー: .env を元に戻せませんでした。切り替える前の .env はここに残っています: ${env_before}" >&2
+        echo "         cp ${env_before} .env で戻してください。" >&2
+        exit 1
+    fi
     echo "[switch] エラー: イメージを用意できませんでした。既存の環境とデータはそのままです。" >&2
     if [ -n "$current" ]; then
         tmp="$(mktemp)"
@@ -133,13 +144,13 @@ if ! image_provision docker compose; then
 fi
 
 # ビルドが通ってから、退避を取って破棄する（取れなければ .env を戻して止まる）。
-env_new="$(mktemp)"; cp -p .env "$env_new"; cp -p "$env_before" .env
+env_new="$(mktemp)"; cp .env "$env_new"; cat "$env_before" > .env
 if ! ( guard_backup_before_destroy switch-version ); then
     echo "[switch] .env は切り替える前のままにしてあります。" >&2
     rm -f "$env_new" "$env_before"
     exit 1
 fi
-cp -p "$env_new" .env; rm -f "$env_new" "$env_before"
+cat "$env_new" > .env; rm -f "$env_new" "$env_before"
 docker compose down -v
 docker compose up -d
 echo "[switch] 完了。進捗: docker compose logs -f ec-cube"

@@ -101,7 +101,11 @@ guard_backup_before_destroy() {
     # **このプロジェクトのボリュームが 1 つでもあれば取る。** DB のボリュームだけを見ていると、外部 DB の店
     # （compose.externaldb.yaml・compose.app.yaml。手元に DB のボリュームが無い）で「消えるものが無い」と
     # 判断し、画像（eccube_upload）を退避なしで消していた
-    vols="$(docker volume ls -q --filter "label=com.docker.compose.project=${proj}" 2>/dev/null || true)"
+    # 一覧が取れなかったことを「ボリューム無し」と取り違えない（取り違えると退避を飛ばし、そのあと消す）
+    if ! vols="$(docker volume ls -q --filter "label=com.docker.compose.project=${proj}")"; then
+        echo "[${label}] エラー: ボリュームの一覧を取れませんでした（Docker が応答しない？）。**何も消していません。**" >&2
+        exit 1
+    fi
     if [ -z "$vols" ]; then
         echo "[${label}] このプロジェクト（${proj}）のボリュームがまだ無いので、退避は取りません。"
         return 0

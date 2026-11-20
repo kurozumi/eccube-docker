@@ -60,6 +60,8 @@ cd "$(dirname "$0")/.."
 . "$(dirname "$0")/lib/compose.sh"
 # shellcheck source=lib/deploy-guard.sh
 . "$(dirname "$0")/lib/deploy-guard.sh"
+# shellcheck source=lib/maint.sh
+. "$(dirname "$0")/lib/maint.sh"
 
 log() { echo "[deploy] $*"; }
 die() { echo "[deploy] エラー: $*" >&2; exit 1; }
@@ -261,6 +263,7 @@ token=""
 maint_on() {
     # 手で入れたメンテナンスがあれば上書きしない（そのまま ON なので目的は果たせる）。
     # その token を借りて疎通確認する。
+    # 前の deploy が失敗して残した表示もここに入る。それは外さない（maint_mine=0）。
     if docker compose exec -T ec-cube test -f "$MAINT" 2>/dev/null; then
         token="$(docker compose exec -T ec-cube sh -c "cut -d: -f2 $MAINT" 2>/dev/null | tr -d '\r\n' || true)"
         log "メンテナンス表示はすでに有効です（そのまま進めます）"
@@ -268,7 +271,15 @@ maint_on() {
     fi
     token="$(openssl rand -hex 16 2>/dev/null || date +%s%N)"
     ec sh -c "printf 'deploy:%s' '$token' > $MAINT"
+    maint_mine=1
     log "メンテナンス ON（お客さんには「メンテナンス中」。ログイン中の管理者は見えます）"
+}
+maint_mine=0   # この deploy が表示を立てた
+# 退避の失敗・中断で外すのは、この deploy が立てた表示だけ。前の deploy が失敗して残した表示は、壊れた画面を
+# 隠しているので外さない（完了したときの maint_off は、直し終えたので外してよい）
+maint_off_mine() {
+    [ "$maint_mine" = 1 ] && maint_off
+    return 0
 }
 maint_off() {
     # deploy: が付いているものだけ消す。手で入れたものは残す（doctor と同じ区別）。
@@ -290,7 +301,13 @@ on_fail() {
     fi
     if [ -n "${backup_dir:-}" ]; then
         echo "         DB も始める前に戻すなら: bin/restore.sh ${backup_dir}" >&2
-        echo "         （メンテナンス表示の中で取ったので、その後の注文はありません）" >&2
+        if [ "${drained:-1}" = 1 ]; then
+            echo "         （メンテナンス表示を立て、処理中の要求が終わるのを待ってから取りました。戻すと、それ以降に" >&2
+            echo "          管理画面で変えたものは消えます）" >&2
+        else
+            echo "         （**処理中の要求が終わるのを待ち切れずに取りました。** 取ったあとに確定した注文が入っていない" >&2
+            echo "          ことがあり、戻すとそれも消えます。戻す前に、受注一覧でその時刻の注文を確かめてください）" >&2
+        fi
     fi
 }
 
@@ -302,12 +319,15 @@ maint_on
 backup_interrupted() {
     trap - INT TERM HUP
     rm -f "${bk_result:-}"
-    maint_off
+    maint_off_mine
     deploy_record "${planned:-?}" "$([ -d .git ] && echo pull || echo push)" "$by" "failed${sent_note:-} (backup interrupted)"
     die "退避の途中で止められました。何も変えていません。"
 }
 if [ "$do_backup" = 1 ]; then
     trap backup_interrupted INT TERM HUP
+    # 表示を立てる前に受け付けた要求（注文の確定など）が終わるのを待ってから取る
+    drained=1
+    maint_drain "${dc[@]}" || { drained=0; log "  注意: 処理中の要求が 30 秒で終わりませんでした（ログイン中の管理者の操作かもしれません）。このまま取ります。"; }
     log "退避します（DB・画像・管理画面が書いたファイル）..."
     # **出力を捨てない。** backup.sh は「管理画面が書いたのにコミットされていないファイル」を
     # 挙げる。deploy はそれを上書きしない（pull は同じファイルを触らない限り通る）が、
@@ -318,7 +338,7 @@ if [ "$do_backup" = 1 ]; then
         printf '%s\n' "$out" | tail -5 >&2
         rm -f "$bk_result"
         trap - INT TERM HUP
-        maint_off
+        maint_off_mine
         deploy_record "${planned:-?}" "$([ -d .git ] && echo pull || echo push)" "$by" "failed${sent_note:-} (backup)"
         die "退避に失敗しました。何も変えていません。bin/backup.sh を単体で打って原因を見てください。"
     fi
@@ -339,7 +359,7 @@ if [ "$do_pull" = 1 ]; then
         log "自分のリポジトリから取り込みます（git pull --ff-only）..."
         if ! git pull --ff-only --quiet; then
             trap - ERR
-            maint_off
+            maint_off_mine
             deploy_record "${planned:-?}" pull "$by" "failed${sent_note} (pull)"
             die "取り込めませんでした。何も変えていません。
        よくある原因: 本番で管理画面が書き換えたファイル（customize.css など）と、
