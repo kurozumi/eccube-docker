@@ -129,7 +129,9 @@ if [ "$local_target" = 1 ]; then
     if [ "$(uname -s)" = Linux ]; then
         net_opts=(--network host)
     else
-        target="${url/:\/\/${host}/://host.docker.internal}"
+        # host を文字どおりに外す（パターンにすると [::1] が角括弧の式として読まれ、書き換わらない）
+        scheme="${url%%://*}"; rest="${url#*://}"
+        target="${scheme}://host.docker.internal${rest#"$host"}"
     fi
 fi
 
