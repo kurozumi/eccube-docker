@@ -20,6 +20,8 @@ cd "$(dirname "$0")/.."
 . bin/lib/guard.sh     # guard_is_prod_stack（起動し直すときに本番構成のままにする）
 # shellcheck source=lib/compose.sh
 . bin/lib/compose.sh   # compose_files
+# shellcheck source=lib/maint.sh
+. bin/lib/maint.sh     # maint_drain
 
 [ "${1:-}" = protect ] || [ -f .env ] || { echo "[setup] .env がありません。先に bin/init.sh を実行してください。" >&2; exit 1; }
 set_env() { # set_env KEY VALUE（無ければ追記）
@@ -198,6 +200,9 @@ EOS
             fi
         }
         trap setup_on_exit EXIT
+        if [ "$smine" = 1 ] && ! maint_drain docker compose; then
+            echo "[setup] 注意: 処理中の要求が 30 秒で終わりませんでした（ログイン中の管理者の操作かもしれません）。このまま写します。"
+        fi
         echo "[setup] 写しています..."
         copy_ok=1
         if [ "$engine" = postgresql ]; then

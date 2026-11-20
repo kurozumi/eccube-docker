@@ -26,6 +26,8 @@ cd "$(dirname "$0")/.."
 . "$(dirname "$0")/lib/guard.sh"
 # shellcheck source=lib/image.sh
 . "$(dirname "$0")/lib/image.sh"
+# shellcheck source=lib/maint.sh
+. "$(dirname "$0")/lib/maint.sh"
 
 # ボリュームは alpine で触る（bin/backup.sh と同じ理由: ec-cube のイメージが
 # 無いとフルビルドが始まる）。
@@ -184,6 +186,10 @@ if [ "$rollback" = 0 ]; then
         [ "$RESTORE_WITHOUT_BACKUP" = "$proj" ] || { echo "[restore] エラー: RESTORE_WITHOUT_BACKUP がプロジェクト名（${proj}）と違います。中止します。" >&2; exit 1; }
         echo "[restore] 注意: RESTORE_WITHOUT_BACKUP が付いているので、いまの状態を退避せずに戻します（失敗しても自動では戻せません）。"
     else
+        # 表示を立てる前に受け付けた要求（注文の確定など）が終わるのを待ってから取る
+        if [ "$maint_mine" = 1 ] && ! maint_drain docker compose; then
+            echo "[restore] 注意: 処理中の要求が 30 秒で終わりませんでした（ログイン中の管理者の操作かもしれません）。このまま取ります。"
+        fi
         echo "[restore] 戻す前に、いまの状態を退避します..."
         rf="$(mktemp)"
         if ! BACKUP_LABEL=restore BACKUP_PROTECT="$src" BACKUP_RESULT_FILE="$rf" bin/backup.sh >"${rf}.log" 2>&1; then
