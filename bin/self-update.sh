@@ -358,7 +358,11 @@ read -r -p "[self-update] ${cur_tag} → ${target} へ更新します。続行�
 # --force で上書きしたあなたの変更も、ここに残る。新しいファイルは先に同じディスクの置き場へ全部写し
 # （ここで失敗しても何も変わらない）、1 つずつ mv で入れ替える（書きかけのファイルが見えない）。
 # 入れ替えの途中で失敗したら、控えから全部戻す。
-snap="var/self-update/$(date +%Y%m%d-%H%M%S)-from-${cur_tag}"
+# 置き場は mktemp -d で作る（同じ秒に 2 回打っても別のフォルダになる。持ち主だけが読める 0700）。
+# 控えには環境ファイルが丸ごと入るので、ほかの利用者に読ませない。
+mkdir -p var/self-update || die "控えの置き場（var/self-update）を作れません。何も書き換えていません。"
+snap="$(mktemp -d "var/self-update/$(date +%Y%m%d-%H%M%S)-from-${cur_tag}-XXXXXX")" \
+    || die "控えの置き場を作れません。何も書き換えていません。"
 mkdir -p "$snap/stage" || die "控えの置き場（${snap}）を作れません。何も書き換えていません。"
 : > "$snap/existing.txt"; : > "$snap/created.txt"
 printf '%s\n' VERSION >> "$snap/existing.txt"
@@ -396,7 +400,7 @@ undo_apply() {
         echo "[self-update] **元に戻しました**（${cur_tag} のまま）。控え: ${snap}" >&2
     else
         echo "[self-update] **戻すのにも失敗しました。** 控えはここにあります（消さないでください）: ${snap}/before.tar" >&2
-        echo "               手で戻すなら: tar -xf ${snap}/before.tar && xargs rm -f < ${snap}/created.txt" >&2
+        echo "               手で戻すなら: tar -xf ${snap}/before.tar && while IFS= read -r f; do rm -f \"./\$f\"; done < ${snap}/created.txt" >&2
     fi
     exit 1
 }
@@ -431,7 +435,7 @@ ls -1d var/self-update/*-from-v* 2>/dev/null | LC_ALL=C sort | awk -v keep=5 '{ 
 echo
 log "完了。${cur_tag} → ${target}（更新 ${applied} 件 / 削除 ${removed} 件）"
 log "書き換える前のファイル: ${snap}/before.tar"
-log "  元に戻すなら: tar -xf ${snap}/before.tar && xargs rm -f < ${snap}/created.txt"
+log "  元に戻すなら: tar -xf ${snap}/before.tar && while IFS= read -r f; do rm -f \"./\$f\"; done < ${snap}/created.txt"
 [ "$force" = 1 ] && [ -n "$conflicts" ] && log "  （--force で上書きしたあなたの変更も、この控えに入っています）"
 echo
 log "次にやること:"
