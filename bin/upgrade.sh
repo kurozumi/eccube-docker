@@ -753,8 +753,10 @@ if ! wait_site "$health_wait"; then
     rollback_upgrade
 fi
 trap - ERR INT TERM HUP
-# メンテナンス表示を外す。手で入れていたものは、新しい版にも同じものを置いたので残す
-if [ "$maint_on" = 1 ] && "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' $MAINT && rm -f $MAINT" 2>/dev/null; then
+# メンテナンス表示を外す。手で入れていたものは、新しい版にも同じものを置いたので残す。
+# **止まっていたスタックを上げたときも外す。** そのときは始めに表示を立てない（maint_on=0）が、新しい版のボリュームには
+# 必ず upgrade: の表示を置いて起動するので、maint_on で見ると外れずに 503 のまま残った（2 台の試験で踏んだ）
+if [ -z "$manual_maint" ] && "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' $MAINT && rm -f $MAINT" 2>/dev/null; then
     echo "[upgrade] メンテナンス OFF"
 elif [ -n "$manual_maint" ]; then
     echo "[upgrade] メンテナンス表示は、手で入れていたものなので残しています。"

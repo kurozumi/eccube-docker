@@ -421,6 +421,9 @@ bin/healthcheck.sh
 5. キャッシュの Redis を空にする（`redis-cli -u "$REDIS_URL" FLUSHDB`。セッションの Redis は消さない）
 6. LB を戻す
 
+この手順は、2 台（共有の MariaDB・Redis 2 つ・LB）で通しで試してあります。init 役で upgrade が途中で失敗したときも、
+共有の DB を退避から戻し、元の版で起動し直すことを確かめました。
+
 ### バックアップは 1 台で
 
 DB が外部になっても `bin/backup.sh` はそのまま使える（`db` サービスが無ければ `.env` の `DB_*` で
