@@ -409,6 +409,10 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   app 層のみ、外部共有サービスを参照）。init ロール 1 台だけ `ECCUBE_SKIP_DB_INIT=0` で
   migrate、他は 1。HTTPS 終端 LB では `TRUSTED_PROXIES` 必須（本体未配線を
   `app/config/eccube/packages/trusted_proxies.yaml` で補う）。LB 例は `docker/nginx/lb.conf.example`。
+- **どこまで強くするかは `bin/loadtest.sh` で測ってから決める**（k6、`docs/loadtest.md`）。到着数を固定して流す
+  （VU 固定だと遅くなるほど送る数も減り、限界の手前で余裕があるように見える）。**注文は流さない**（本物の受注と
+  メール）。手元以外へはホスト名を打たないと流さず、手元でもこのプロジェクトの nginx のポートでなければ止める
+  （作るときに、別名で立てた別のスタックへ smoke を流した）。
 
 ## ドキュメントの置き場所
 
@@ -427,6 +431,7 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 | `docs/backup.md` | バックアップ / 復元 |
 | `docs/data-safety.md` | `down` と `down -v` の違い、消えるコマンド、復旧 |
 | `docs/scale.md` | 大規模アクセス、セッション・画像の共有、LB、メールの非同期化 |
+| `docs/loadtest.md` | 負荷試験（`bin/loadtest.sh` と `docker/k6/eccube.js`）。目標の決め方・読み方・詰まった場所ごとの打ち手 |
 | `docs/monitoring.md` | 監視 |
 | `docs/testing.md` | ユニットテスト |
 | `docs/security-updates.md` | ミドルウェアの脆弱性と Docker の設定の毎日の点検（Trivy・設定の決まり・Dependabot） |
