@@ -112,7 +112,7 @@ bin/publish.sh</pre><p>アプリ専用のサーバーの上では、新しく店
       <div class="step"><div class="num">3</div><h3>アプリのサーバーを用意する</h3><pre><span class="c"># .env は 1 台目を写してから直す</span>
 COMPOSE_FILE=compose.app.yaml
 HTTP_BIND=10.0.0.11
-ECCUBE_IMAGE=…:4.3-php8.3-20261123</pre><p><strong>ECCUBE_AUTH_MAGIC は全台同じに</strong>（違うと、そのサーバーでは誰もログインできません）。イメージは日付タグで全台を揃えます。init 役だけ <code>ECCUBE_SKIP_DB_INIT=0</code>。</p></div>
+ECCUBE_IMAGE=…:4.3-php8.3-20261123</pre><p><code>HTTP_BIND</code> はそのサーバーのプライベート IP（必須。LB 以外から届かないように）。<strong>ECCUBE_AUTH_MAGIC は全台同じに</strong>（違うと、そのサーバーでは誰もログインできません）。イメージは日付タグで全台を揃えます。init 役だけ <code>ECCUBE_SKIP_DB_INIT=0</code>。</p></div>
       <div class="step"><div class="num">4</div><h3>LB を前に置く</h3><pre><span class="c"># 自前の nginx なら</span>
 docker/nginx/lb.conf.example</pre><p>各サーバーの <code>:8080</code> へ振ります。<code>TRUSTED_PROXIES</code> は書きません（書くと HTTPS と判定されず、Cookie に Secure が付きません）。</p></div>
     </div>
