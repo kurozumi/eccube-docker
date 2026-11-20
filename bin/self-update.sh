@@ -5,6 +5,7 @@
 #   bin/self-update.sh --check    確認だけ（何も書き換えない）
 #   bin/self-update.sh v1.2.0     版を指定（戻すこともできる）
 #   bin/self-update.sh --force    自分で変更した環境ファイルも上書きする
+#                                 （上書きする前のファイルは var/self-update/ に控える）
 #
 # **更新するのは「環境」であって「EC-CUBE 本体」ではない。**
 #   環境（bin/ compose docker/ docs/）  … このスクリプト
@@ -352,13 +353,61 @@ read -r -p "[self-update] ${cur_tag} → ${target} へ更新します。続行�
 # 一覧が「失われるのはこれだけ」という意味にならなくなる。
 # 触るのは「配布元で変わったファイル」だけにする。あなたが自分で足した
 # ファイル（bin/ に置いた独自スクリプトなど）はどちらにも無いので残る。
+#
+# **書き換える前に、書き換える・消すファイルを全部控える**（var/self-update/<日時>-from-<版>/before.tar）。
+# --force で上書きしたあなたの変更も、ここに残る。新しいファイルは先に同じディスクの置き場へ全部写し
+# （ここで失敗しても何も変わらない）、1 つずつ mv で入れ替える（書きかけのファイルが見えない）。
+# 入れ替えの途中で失敗したら、控えから全部戻す。
+snap="var/self-update/$(date +%Y%m%d-%H%M%S)-from-${cur_tag}"
+mkdir -p "$snap/stage" || die "控えの置き場（${snap}）を作れません。何も書き換えていません。"
+: > "$snap/existing.txt"; : > "$snap/created.txt"
+printf '%s\n' VERSION >> "$snap/existing.txt"
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if [ -e "./$f" ] || [ -L "./$f" ]; then
+        printf '%s\n' "$f" >> "$snap/existing.txt"
+    elif [ -e "$new_tree/$f" ]; then
+        printf '%s\n' "$f" >> "$snap/created.txt"
+    fi
+done <<< "$incoming"
+LC_ALL=C sort -u -o "$snap/existing.txt" "$snap/existing.txt"
+COPYFILE_DISABLE=1 tar -cf "$snap/before.tar" -T "$snap/existing.txt" \
+    || { rm -rf "$snap"; die "書き換える前のファイルを控えられませんでした。何も書き換えていません。"; }
+staged=0
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ -e "$new_tree/$f" ] || continue
+    mkdir -p "$snap/stage/$(dirname "$f")" && cp -a "$new_tree/$f" "$snap/stage/$f" \
+        || { rm -rf "$snap"; die "新しいファイルを用意できませんでした（${f}）。何も書き換えていません。"; }
+    staged=$((staged + 1))
+done <<< "$incoming"
+log "書き換える前のファイルを控えました: ${snap}/before.tar"
+
+undo_apply() {
+    trap - ERR
+    echo >&2
+    echo "[self-update] 入れ替えの途中で失敗しました。控えから元に戻します..." >&2
+    local ok=1
+    tar -xf "$snap/before.tar" || ok=0
+    while IFS= read -r f; do
+        [ -n "$f" ] && rm -f "./$f"
+    done < "$snap/created.txt"
+    if [ "$ok" = 1 ]; then
+        echo "[self-update] **元に戻しました**（${cur_tag} のまま）。控え: ${snap}" >&2
+    else
+        echo "[self-update] **戻すのにも失敗しました。** 控えはここにあります（消さないでください）: ${snap}/before.tar" >&2
+        echo "               手で戻すなら: tar -xf ${snap}/before.tar && xargs rm -f < ${snap}/created.txt" >&2
+    fi
+    exit 1
+}
+trap undo_apply ERR INT TERM
 applied=0
 removed=0
 while IFS= read -r f; do
     [ -n "$f" ] || continue
-    if [ -e "$new_tree/$f" ]; then
+    if [ -e "$snap/stage/$f" ] || [ -L "$snap/stage/$f" ]; then
         mkdir -p "$(dirname "./$f")"
-        cp -a "$new_tree/$f" "./$f"
+        mv -f "$snap/stage/$f" "./$f"
         applied=$((applied + 1))
     elif [ -n "$base_tree" ] && [ -e "./$f" ]; then
         # 配布元から消えたファイル。**基準（${cur_tag}）が取れているときだけ消す。**
@@ -366,16 +415,24 @@ while IFS= read -r f; do
         rm -f "./$f"
         # `$f（` と書くと bash が全角括弧まで変数名に取り込んで
         # 「f（: unbound variable」で落ちる（bin/ide-sync.sh にも同じ注意書きがある）。
-        log "削除: ${f}（更新版には含まれません）"
+        log "削除: ${f}（更新版には含まれません。控えには残っています）"
         removed=$((removed + 1))
     fi
 done <<< "$incoming"
 
 # VERSION はタグを正とする（リリース側の書き忘れに引きずられないため）
 printf '%s\n' "${target#v}" > VERSION
+trap - ERR INT TERM
+rm -rf "$snap/stage"
+# 控えは新しい 5 回分を残す
+ls -1d var/self-update/*-from-v* 2>/dev/null | LC_ALL=C sort | awk -v keep=5 '{ a[NR] = $0 } END { for (i = 1; i <= NR - keep; i++) print a[i] }' |
+    while IFS= read -r old; do rm -rf "$old"; done
 
 echo
 log "完了。${cur_tag} → ${target}（更新 ${applied} 件 / 削除 ${removed} 件）"
+log "書き換える前のファイル: ${snap}/before.tar"
+log "  元に戻すなら: tar -xf ${snap}/before.tar && xargs rm -f < ${snap}/created.txt"
+[ "$force" = 1 ] && [ -n "$conflicts" ] && log "  （--force で上書きしたあなたの変更も、この控えに入っています）"
 echo
 log "次にやること:"
 log "  1) 設定ファイルが変わっているので、コンテナを作り直す:"
