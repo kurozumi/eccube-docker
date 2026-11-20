@@ -26,6 +26,17 @@
 	respond @denied 403
 	respond @dotfiles 403
 
+	# 静的ファイルのキャッシュ（nginx の default.conf と同じ。理由もそちら）。
+	# 名前の変わらない CSS / JS / テーマの画像は 5 分、名前が毎回変わる商品画像だけ 30 日。
+	# 2 つの matcher が重ならないように、汎用のほうから商品画像を外す
+	@productImage path_regexp productImage ^/html/upload/save_image/[^/]+\.(?i:jpg|jpeg|png|gif|webp|avif|svg)$
+	@asset {
+		path_regexp asset \.(?i:css|js|mjs|jpg|jpeg|png|gif|ico|svg|webp|avif|woff|woff2|ttf|otf|eot)$
+		not path_regexp ^/html/upload/save_image/[^/]+\.(?i:jpg|jpeg|png|gif|webp|avif|svg)$
+	}
+	header @productImage Cache-Control "public, max-age=2592000"
+	header @asset Cache-Control "public, max-age=300"
+
 	php_fastcgi ec-cube:9000
 	file_server
 }
