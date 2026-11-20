@@ -34,9 +34,9 @@ x-eccube-environment: &eccube-environment
   # スキーム・ポート・serverVersion・charset をそれぞれ変数から引いて 1 本の URL にする。
   # postgresql のときは compose.postgresql.yaml が db サービスを差し替え、これらの既定を
   # 5432 / 16 / utf8 に上書きする（bin/init.sh が COMPOSE_FILE に足す）。
-  DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}@${DB_HOST:-db}:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}&charset=${DB_CHARSET:-utf8mb4}"
+  DATABASE_URL: "${DB_ENGINE:-mysql}://${DB_USER:-eccube}:${DB_PASSWORD:?DB_PASSWORD が .env に無い（bin/init.sh が生成する。既定値では起動しない）}@${DB_HOST:-db}:${DB_PORT:-3306}/${DB_NAME:-eccube_db}?serverVersion=${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.11}.0}&charset=${DB_CHARSET:-utf8mb4}"
   # MariaDB の版は MARIADB_VERSION（db サービスの image と serverVersion の両方に効く）
-  DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.6}.0}
+  DATABASE_SERVER_VERSION: ${DATABASE_SERVER_VERSION:-mariadb-${MARIADB_VERSION:-10.11}.0}
   DB_ENGINE: ${DB_ENGINE:-mysql}
   DB_PORT: ${DB_PORT:-3306}
   # 本番は実メールサービスの DSN を .env で設定する。未設定なら送信は破棄（null）。
@@ -316,9 +316,13 @@ services:
     networks:
       - backend
     logging: *default-logging
-    # 版は .env の MARIADB_VERSION（10.6 / 10.11 / 11.4 …。MySQL なら mysql:8.4 のように image ごと変える）
-    image: ${MARIADB_IMAGE:-mariadb}:${MARIADB_VERSION:-10.6}
+    # 版は .env の MARIADB_VERSION（既定 10.11 / 11.4 …。MySQL なら mysql:8.4 のように image ごと変える）
+    # **既定は v1.0.16 まで 10.6**（2026-07 で保守終了）。.env に版を書いていない環境は、次の起動で
+    # 10.6 のデータのまま 10.11 が立つ。MARIADB_AUTO_UPGRADE が mariadb-upgrade を流す（システム表の
+    # 退避も取る）。**下げる方向へは戻せない**ので、戻すなら backup から（deploy.sh は先に backup を取る）
+    image: ${MARIADB_IMAGE:-mariadb}:${MARIADB_VERSION:-10.11}
     environment:
+      MARIADB_AUTO_UPGRADE: "1"
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD が .env に無い（bin/init.sh が生成する）}
       MYSQL_DATABASE: ${DB_NAME:-eccube_db}
       MYSQL_USER: ${DB_USER:-eccube}

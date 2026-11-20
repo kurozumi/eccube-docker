@@ -103,7 +103,7 @@ read -r -p "続行しますか? [y/N] " ans
 db_engine="$(env_get DB_ENGINE)"; db_engine="${db_engine:-mysql}"
 # 外部 DB に繋ぐクライアントの版は、手元の db サービスと同じ変数から（.env の MARIADB_VERSION / PG_VERSION）
 mariadb_img="$(env_get MARIADB_IMAGE)"; mariadb_img="${mariadb_img:-mariadb}"
-mariadb_ver="$(env_get MARIADB_VERSION)"; mariadb_ver="${mariadb_ver:-10.6}"
+mariadb_ver="$(env_get MARIADB_VERSION)"; mariadb_ver="${mariadb_ver:-10.11}"
 pg_ver="$(env_get PG_VERSION)"; pg_ver="${pg_ver:-16}"
 db_host="$(env_get DB_HOST)"; db_host="${db_host:-db}"
 db_port="$(env_get DB_PORT)"

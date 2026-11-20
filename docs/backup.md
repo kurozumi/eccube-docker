@@ -60,7 +60,7 @@ bin/restore.sh backups/20260721-040000   # 復元（確認プロンプトあり�
 
 | `DB_ENGINE` | 手元の `db` サービス | ダンプ | 戻し |
 |---|---|---|---|
-| `mysql`（既定） | `mariadb:<MARIADB_VERSION>`（既定 10.6） | `mysqldump --single-transaction`（無停止・整合） | `mysql` |
+| `mysql`（既定） | `mariadb:<MARIADB_VERSION>`（既定 10.11） | `mysqldump --single-transaction`（無停止・整合） | `mysql` |
 | `postgresql` | `postgres:<PG_VERSION>`（既定 16） | `pg_dump --clean --if-exists`（既存の表を落として作り直す） | `psql` |
 
 DB が外部（`compose.app.yaml` の複数ホスト、マネージド DB）のときも、そのまま使える。`db` サービスが

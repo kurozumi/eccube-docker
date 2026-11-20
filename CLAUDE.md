@@ -103,6 +103,10 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   から composer が落ちていた（create-project は stability を指定しないので安定版しか探さない）。
   DB の版は `.env` の `MARIADB_VERSION` / `PG_VERSION`（image と Doctrine の `serverVersion` の
   両方に効く。`DATABASE_SERVER_VERSION` は外部 DB で版が違うときだけ）。
+  **MariaDB の既定は v1.0.17 で 10.6 → 10.11**（10.6 は 2026-07 で保守終了）。`init.sh` は `.env` に版を
+  書かないので、既定を動かすと既存の環境は次の `up` で**データごと新しい版へ上がる**（`MARIADB_AUTO_UPGRADE`
+  が mariadb-upgrade を流す。下げる方向には戻せない）。既定を動かすときはリリースノートで backup を案内する。
+  外部 DB で版を書いていない環境は、Doctrine に伝える版だけが 10.11 に変わる（実物が違えば `DATABASE_SERVER_VERSION`）。
 - **`bin/self-update.sh` の更新対象は `.eccube-docker-paths`。** スクリプト内の配列は控えで、
   **正は「これから入れる版」の一覧**。スクリプト側だけ見ると、新しい版で足したパスが
   初回の更新で届かない（`LICENSE` を足したときに実際にそうなった）。
