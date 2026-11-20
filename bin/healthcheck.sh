@@ -5,9 +5,9 @@ set -euo pipefail
 case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;; esac
 cd "$(dirname "$0")/.."
 
-port="${HTTP_PORT:-8080}"
-[ -f .env ] && port="$(grep -E '^HTTP_PORT=' .env | cut -d= -f2- || echo 8080)"
-url="http://localhost:${port:-8080}/"
+# shellcheck source=lib/compose.sh
+. bin/lib/compose.sh
+url="$(compose_nginx_url)/"   # HTTP_BIND で内側の IP だけに開いていても、実際に開いている場所を見る
 
 code="$(curl -s -o /dev/null -w '%{http_code}' "$url" || true)"
 echo "GET ${url} -> ${code}"

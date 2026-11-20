@@ -17,6 +17,10 @@ guard_project_name() {
 
 # 稼働中のスタックが本番構成か。
 #
+# **compose.app.yaml（複数ホストのアプリ層）も本番として扱う。** あれは LB の後ろに並べる本番専用の
+# 構成で、compose.prod.yaml を重ねない。以前は prod.yaml だけを見ていたので、アプリホストは「本番では
+# ない」と判定され、deploy.sh の main 以外を止める守りもプロジェクト名の確認も素通りしていた。
+#
 # **稼働中のコンテナのラベルを見る。** compose は起動に使ったファイルの一覧を
 # com.docker.compose.project.config_files に残す。`docker compose ls` の JSON は
 # 並び順に依存する読み方になるので使わない。
@@ -36,7 +40,7 @@ guard_is_prod_stack() {
         "$cid" 2>/dev/null || true)"
 
     case "$cfg" in
-        *compose.prod.yaml*) return 0 ;;
+        *compose.prod.yaml*|*compose.app.yaml*) return 0 ;;
         *) return 1 ;;
     esac
 }

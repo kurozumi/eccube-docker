@@ -13,6 +13,12 @@
 framework:
   session:
     handler_id: Customize\Session\RawRedisSessionHandler
+    # **Cookie の secure は、HTTPS のときに付ける（auto = Request::isSecure() を見る）。**
+    # 本体のファイルのセッションでは SameSiteNoneCompatSessionHandler が isSecure() を見て付けていたが、
+    # ハンドラをここで差し替えると誰も付けず、cookie_secure も未設定なので**一度も付かなかった**
+    # （HTTPS の本番でも。複数ホストの検証で判明）。LB の後ろでは TRUSTED_PROXIES が正しくないと
+    # isSecure() が偽になる（compose.app.yaml の既定は REMOTE_ADDR）。HTTP の手元では付かないので害は無い。
+    cookie_secure: auto
 
 services:
   # セッション保存用 Redis 接続（キャッシュ用 redis とは別インスタンス＝noeviction）。

@@ -9,7 +9,8 @@ x-logging: &default-logging
 # 共有サービス」を指す（このファイルには db/redis を含めない）。
 #
 #   使い方（各アプリホスト）:
-#     docker compose -f compose.app.yaml pull ec-cube && docker compose -f compose.app.yaml up -d
+#     .env に COMPOSE_FILE=compose.app.yaml を書いてから docker compose pull && docker compose up -d
+#     （-f で直接指定しない。bin/*.sh は COMPOSE_FILE を見るので、-f で起こすと別のスタックとして扱われる）
 #
 #   前提: .env に外部エンドポイントを設定しておく（.env.example の「複数ホスト」節を参照）:
 #     DB_HOST / DB_USER / DB_PASSWORD / DB_NAME  … 共有 DB
@@ -54,12 +55,12 @@ services:
     logging: *default-logging
     # 本番は CI（.github/workflows/build-image.yml）が push した GHCR イメージを使う。
     #   .env で ECCUBE_IMAGE=ghcr.io/<owner>/<repo>/ec-cube:<系列>-<リリース> を指定し、
-    #   docker compose -f compose.app.yaml pull ec-cube && up -d --no-build
+    #   docker compose pull ec-cube && docker compose up -d --no-build（.env の COMPOSE_FILE=compose.app.yaml）
     # ECCUBE_IMAGE 未指定ならローカル build（従来どおり）。
     # **`latest` は作っていない。** 4.2/4.3/4.4 が並行して現役なので、
     # 単一の「最新」を置くと系列をまたぐ更新を黙って引き当てることになる。
     image: ${ECCUBE_IMAGE:-eccube-ec-cube}
-    build:
+    build: &app-build
       context: .
       dockerfile: docker/php/Dockerfile
       args:
@@ -73,10 +74,10 @@ services:
     # アプリのコンテナに乗らないようにする。EC-CUBE の任意の設定（ECCUBE_COOKIE_LIFETIME、
     # ECCUBE_ADMIN_ALLOW_HOSTS 等）を渡したいときは .env.app に書く（無ければ無視される。
     # 空文字を environment で注入すると本体の既定値を潰すので、あえて別ファイルにしている）。
-    env_file:
+    env_file: &app-env-file
       - path: .env.app
         required: false
-    environment:
+    environment: &app-environment
       APP_ENV: ${APP_ENV:-prod}
       APP_DEBUG: ${APP_DEBUG:-0}
       ECCUBE_AUTH_MAGIC: ${ECCUBE_AUTH_MAGIC:?ECCUBE_AUTH_MAGIC が .env に無い（全パスワードの鍵。bin/init.sh が生成する）}
@@ -96,8 +97,13 @@ services:
       PUID: ${PUID:-}
       PGID: ${PGID:-}
       ECCUBE_LOCALE: ${ECCUBE_LOCALE:-ja}
-      # 前段 LB の IP/サブネットを信頼して X-Forwarded-* を honor（HTTPS 判定に必須）
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # X-Forwarded-Proto（HTTPS 判定に必須）などを信じる相手。**既定は REMOTE_ADDR（直前の相手）。**
+      # LB の IP / サブネットを書いても効かない: このホストの nginx が set_real_ip_from で接続元を
+      # **お客さんの IP に書き換えてから** PHP に渡すので、Symfony から見た相手は LB ではない。
+      # LB の IP を書いていた頃は isSecure() が偽のままで、Cookie に secure が付かなかった。
+      # 前提は「nginx に LB からしか届かない」こと（下の nginx の ports のコメント。HTTP_BIND か
+      # ファイアウォール）。届くなら X-Forwarded-* を詐称できる。
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-REMOTE_ADDR}
       # 外部の共有 Redis（キャッシュ / セッション）
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-}@redis:6379}
       SESSION_REDIS_URL: ${SESSION_REDIS_URL:-redis://:${REDIS_PASSWORD:-}@redis-session:6379}
@@ -115,7 +121,7 @@ services:
       PHP_FPM_MIN_SPARE: ${PHP_FPM_MIN_SPARE:-2}
       PHP_FPM_MAX_SPARE: ${PHP_FPM_MAX_SPARE:-6}
       PHP_FPM_MAX_REQUESTS: ${PHP_FPM_MAX_REQUESTS:-500}
-    volumes:
+    volumes: &app-volumes
       - eccube_app:/var/www/html
       - ./app/Customize:/var/www/html/app/Customize:ro
       # 管理画面が書くので本番でも rw（compose.yaml と同じ理由）
@@ -153,6 +159,47 @@ services:
       start_period: 180s
     restart: unless-stopped
 
+  # 非同期メール（Messenger）の worker。.env の COMPOSE_PROFILES に messenger があるときだけ起動する
+  # （設定側の optional/messenger も同じスイッチで入る。compose.yaml と同じ）。**以前はこのファイルに
+  # 無く、messenger を有効にした複数ホストではメールが DB に溜まるだけで届かなかった（エラーなし）。**
+  # 全ホストで動かしてよい（Doctrine のキューは取り合わない）。1 台だけにしたいなら、その他のホストの
+  # COMPOSE_PROFILES から messenger を外さず、worker だけ `docker compose stop worker` する。
+  worker:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - KILL
+    pids_limit: 256
+    networks:
+      - backend
+    logging: *default-logging
+    profiles: ["messenger"]
+    image: ${ECCUBE_IMAGE:-eccube-ec-cube}
+    # ローカル build の環境でも worker のイメージを作れるように、ec-cube と同じ build を持つ
+    build: *app-build
+    env_file: *app-env-file
+    environment:
+      <<: *app-environment
+      # 共有 var/cache と DB スキーマには触らない（ec-cube が起動時に整えている）
+      ECCUBE_SKIP_DB_INIT: "1"
+      ECCUBE_SKIP_CACHE_CLEAR: "1"
+    volumes: *app-volumes
+    command: ["runuser", "-u", "www-data", "--", "php", "bin/console", "messenger:consume", "async", "--time-limit=3600", "--memory-limit=192M", "--quiet"]
+    depends_on:
+      ec-cube:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "tr '\\0' ' ' < /proc/1/cmdline | grep -q messenger:consume"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
   nginx:
     <<: *hardened
     cap_add:
@@ -166,13 +213,12 @@ services:
       - backend
     logging: *default-logging
     image: nginx:1.30-alpine
-    # 複数ホスト構成では LB がここへ来るので、既定は全インターフェイス。
-    # **LB からしか到達させないこと。** プライベート側の IP に束縛する
-    # （HTTP_BIND=10.0.0.11 のようにホストごとに書く）か、ファイアウォールで LB の IP
-    # だけ許可する。0.0.0.0 のまま公開 IP にも開いていると LB をバイパスして直接叩ける
-    # （TRUSTED_PROXIES で信頼している X-Forwarded-* を詐称できる）。
+    # **LB からしか届かないこと。** nginx は X-Forwarded-For を信じるので、直接届くと IP を詐称でき、
+    # 管理画面の IP 制限とログインの回数制限が抜ける（試験で確かめた）。
+    # **HTTP_BIND は必須**（既定の 0.0.0.0 だと公開 IP にも開く）。そのホストのプライベート側の IP を
+    # 書き（HTTP_BIND=10.0.0.11）、ファイアウォールでも HTTP_PORT を LB の IP にだけ開ける。
     ports:
-      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8080}:80"
+      - "${HTTP_BIND:?HTTP_BIND が .env に無い（nginx を束縛するプライベート側の IP。docs/scale.md「複数ホスト + ロードバランサ」）}:${HTTP_PORT:-8080}:80"
     volumes:
       - eccube_app:/var/www/html:ro
       - ./html/user_data:/var/www/html/html/user_data:ro

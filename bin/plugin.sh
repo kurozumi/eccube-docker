@@ -37,6 +37,8 @@ case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next }
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/guard.sh
 . bin/lib/guard.sh   # guard_is_prod_stack（doctor が本番かどうかを見る）
+# shellcheck source=lib/compose.sh
+. bin/lib/compose.sh # compose_nginx_url（doctor が疎通を見る先）
 
 ec()  { docker compose exec -T ec-cube runuser -u www-data -- php bin/console "$@"; }
 die() { echo "[plugin] エラー: $*" >&2; exit 1; }
@@ -828,10 +830,17 @@ PHP
         esac
     fi
     running="$(docker compose ps --status running --format '{{.Service}}' 2>/dev/null | tr '\n' ' ')"
+    defined="$(docker compose config --services 2>/dev/null | tr '\n' ' ')"
     case "$cprof" in *,redis,*)
-        case " $running " in *" redis "*) echo "[doctor] redis: 有効・起動中" ;;
-            *) echo "[doctor] redis の設定が入っているのに redis コンテナが動いていません（全ページ 500 の原因）"; ng=1 ;;
-        esac ;;
+        if case " $defined " in *" redis "*) false ;; *) true ;; esac; then
+            # 複数ホスト（compose.app.yaml）では Redis は外の共有サービスで、このホストには定義が無い。
+            # 「コンテナが居ない」を異常にすると、アプリホストでは必ず落ちる
+            echo "[doctor] redis: 外部の Redis（REDIS_URL）。このホストには居ません"
+        elif case " $running " in *" redis "*) true ;; *) false ;; esac; then
+            echo "[doctor] redis: 有効・起動中"
+        else
+            echo "[doctor] redis の設定が入っているのに redis コンテナが動いていません（全ページ 500 の原因）"; ng=1
+        fi ;;
     esac
     case "$cprof" in *,messenger,*)
         case " $running " in *" worker "*) echo "[doctor] messenger: 有効・worker 起動中" ;;
@@ -859,10 +868,7 @@ PHP
     # いたので、8080 の別サイトを点検していた。ECCUBE_BASE_URL があればそれを使う
     base="${ECCUBE_BASE_URL:-}"
     if [ -z "$base" ]; then
-        published="$(docker compose port nginx 80 2>/dev/null | tail -1 || true)"
-        published="${published/0.0.0.0/localhost}"
-        published="${published/\[::\]/localhost}"
-        base="http://${published:-localhost:8080}"
+        base="$(compose_nginx_url)"
     fi
     echo "[doctor] 疎通を確かめる先: ${base}"
     page_ng=0

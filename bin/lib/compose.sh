@@ -22,17 +22,39 @@ compose_files_from_env() {
     printf '%s' "$v"
 }
 
-# -f の並びを出す。--prod で override を外して compose.prod.yaml を足す
+# -f の並びを出す。--prod で override を外して compose.prod.yaml を足す。
+# **compose.app.yaml（複数ホストのアプリ層）には compose.prod.yaml を足さない。** app.yaml はそれだけで
+# 本番の構成で、prod.yaml は db / cloudflared など app.yaml に無いサービスを指すため、重ねると
+# 「service "db" has neither an image nor a build context」で compose ごと読めなくなる。
 compose_files() { # compose_files [--prod]
-    local prod=0 f out=""
+    local prod=0 f out="" app=0
     [ "${1:-}" = "--prod" ] && prod=1
     IFS=':' read -r -a _files <<< "$(compose_files_from_env)"
     for f in "${_files[@]}"; do
         [ -n "$f" ] || continue
         if [ "$prod" = 1 ] && [ "$f" = "compose.override.yaml" ]; then continue; fi
         [ "$f" = "compose.prod.yaml" ] && continue
+        [ "$f" = "compose.app.yaml" ] && app=1
         out="$out -f $f"
     done
-    [ "$prod" = 1 ] && out="$out -f compose.prod.yaml"
+    [ "$prod" = 1 ] && [ "$app" = 0 ] && out="$out -f compose.prod.yaml"
     printf '%s' "${out# }"
+}
+
+# nginx に手元から届く URL（http://host:port）。**HTTP_PORT から決め打ちしない。**
+# 複数ホストでは HTTP_BIND=10.0.0.11 のように内側の IP だけで待ち受けるので、localhost では届かない
+# （deploy.sh の疎通確認が必ず失敗し、メンテナンス表示のまま止まっていた）。同じ機械の別のスタックが
+# 8080 を使っていると、よそのサイトを見てしまう（plugin.sh doctor で実際にあった）。
+# compose に実際に開いている場所を聞き、0.0.0.0 / [::] は localhost に読み替える。
+compose_nginx_url() { # compose_nginx_url [compose の引数…]（既定は docker compose）
+    local p
+    if [ "$#" -gt 0 ]; then p="$("$@" port nginx 80 2>/dev/null | tail -1 || true)"
+    else p="$(docker compose port nginx 80 2>/dev/null | tail -1 || true)"; fi
+    p="${p/0.0.0.0/localhost}"
+    p="${p/\[::\]/localhost}"
+    if [ -z "$p" ]; then
+        p="$(grep -E '^HTTP_PORT=' .env 2>/dev/null | cut -d= -f2- || true)"
+        p="localhost:${p:-8080}"
+    fi
+    printf 'http://%s' "$p"
 }

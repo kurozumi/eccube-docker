@@ -488,13 +488,15 @@ fi
 # メンテナンス中なので bin/healthcheck.sh は 503 を見てしまう。token cookie を付けて
 # 本体を通し、フロントと商品一覧が実際に描画できるかを見る（管理画面はもともと素通り）。
 log "画面が開くか確かめます（メンテナンス表示の裏で）..."
-port="$(grep -E '^HTTP_PORT=' .env 2>/dev/null | cut -d= -f2- || true)"; port="${port:-8080}"
+base_url="$(compose_nginx_url "${dc[@]}")"   # HTTP_BIND で内側の IP だけに開いていても届く先
 ok=0
 for i in $(seq 1 20); do
     ok=1
     for path in / /products/list; do
-        code="$(curl -s -o /dev/null -w '%{http_code}' -b "maintenance_token=${token}" "http://localhost:${port}${path}" || echo 000)"
-        case "$code" in 200|301|302) ;; *) ok=0; last="${code} ${path}" ;; esac
+        # HTTPS として聞き、200 だけを通す。ECCUBE_FORCE_SSL の店は http のままだと https への転送（301/302）を
+        # 返し、画面を組み立てずに「開いた」ことになっていた（upgrade.sh と同じ）
+        code="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' -b "maintenance_token=${token}" "${base_url}${path}" || echo 000)"
+        [ "$code" = 200 ] || { ok=0; last="${code} ${path}"; }
     done
     [ "$ok" = 1 ] && break
     sleep 3
