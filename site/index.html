@@ -15,185 +15,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
-<style>
-  :root {
-    --ground: #FFFFFF;
-    --band: #F6F7F9;
-    --surface: #FFFFFF;
-    --sunk: #F1F3F6;
-    --ink: #0B1F33;
-    --ink-soft: #3E4F61;
-    --ink-mute: #6B7A8A;
-    --line: #E1E6EC;
-    --accent: #E8621C;
-    --accent-deep: #C24E10;
-    --accent-soft: #FFF1E8;
-    --accent-ink: #FFFFFF;
-    --warn: #B3421B;
-    --warn-bg: #FFF4EC;
-    --f-display: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
-    --f-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
-    --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    color-scheme: light;
-  }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.85; -webkit-font-smoothing: antialiased; }
-  a { color: var(--accent-deep); text-decoration-thickness: 1px; text-underline-offset: 3px; }
-  a:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
-  @media (max-width: 640px) { .wrap { padding: 0 20px; } }
-  code { font-family: var(--f-mono); font-size: .9em; background: var(--sunk); padding: 1px 6px; border-radius: 4px; color: var(--ink); }
-
-  /* 主張したい語だけ浮かせる（Cloudflare の見出しのやり方） */
-  em.k { font-style: normal; color: var(--accent); }
-  .voice em.k { color: var(--accent-deep); }
-
-  /* ── やりたいことから選ぶ ── */
-  .terms { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 0 0 40px; }
-  .term { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; }
-  .term .tag { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-mute); margin: 0 0 6px; }
-  .term h3 { font-family: var(--f-display); font-weight: 900; font-size: 19px; margin: 0 0 6px; }
-  .term .ver { display: inline-block; font-family: var(--f-mono); font-size: 13px; font-weight: 600; background: var(--accent-soft); color: var(--accent-deep); border-radius: 4px; padding: 1px 8px; margin: 0 0 8px; }
-  .term p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
-  .pickq { font-family: var(--f-display); font-weight: 900; font-size: 20px; margin: 0 0 14px; }
-  .picks { display: flex; flex-direction: column; gap: 10px; margin: 0 0 56px; }
-  .pick { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1.1fr); align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; text-decoration: none; color: var(--ink); }
-  a.pick:hover { border-color: var(--accent); background: var(--accent-soft); }
-  .pick .when { font-weight: 700; font-size: 15px; line-height: 1.6; }
-  .pick .when small { display: block; font-weight: 400; font-size: 13px; color: var(--ink-mute); }
-  .pick .arrow { color: var(--accent); font-weight: 900; font-size: 20px; text-align: center; }
-  .pick .go { font-size: 14.5px; color: var(--ink-soft); line-height: 1.6; }
-  .pick .go b { font-family: var(--f-display); color: var(--ink); font-size: 16px; }
-  .pick .go .letter { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-family: var(--f-display); font-weight: 900; font-size: 13px; margin-right: 6px; vertical-align: 1px; }
-  .pick .go .letter.plain { background: var(--ink-mute); }
-  @media (max-width: 640px) { .pick { grid-template-columns: 1fr; gap: 4px; } .pick .arrow { text-align: left; transform: rotate(90deg); width: 20px; } }
-
-  .flow { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 32px; padding: 36px 0; border-top: 1px solid var(--line); scroll-margin-top: 16px; }
-  .flow-head .letter { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-family: var(--f-display); font-weight: 900; font-size: 20px; margin-bottom: 10px; }
-  .flow-head h3 { font-family: var(--f-display); font-weight: 900; font-size: 22px; line-height: 1.4; margin: 0 0 8px; }
-  .flow-head p { margin: 0 0 10px; font-size: 14.5px; color: var(--ink-soft); }
-  .flow-head .keep { background: var(--band); border-radius: 8px; padding: 10px 14px; font-size: 13.5px; color: var(--ink-soft); }
-  .flow-head .keep b { color: var(--ink); }
-  .flow > *, ol.steps-v > li { min-width: 0; }   /* 長いコマンドが列を押し広げないように */
-  @media (max-width: 860px) { .flow { grid-template-columns: 1fr; gap: 16px; } }
-  ol.steps-v { list-style: none; margin: 0; padding: 0; counter-reset: st; }
-  ol.steps-v > li { position: relative; padding: 0 0 22px 52px; counter-increment: st; }
-  ol.steps-v > li::before { content: counter(st); position: absolute; left: 0; top: 0; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); color: var(--accent-deep); font-family: var(--f-display); font-weight: 900; font-size: 15px; display: grid; place-items: center; }
-  ol.steps-v > li::after { content: ""; position: absolute; left: 16px; top: 38px; bottom: 4px; width: 2px; background: var(--line); }
-  ol.steps-v > li:last-child { padding-bottom: 0; }
-  ol.steps-v > li:last-child::after { display: none; }
-  .steps-v h4 { font-family: var(--f-display); font-weight: 700; font-size: 16.5px; margin: 4px 0 6px; line-height: 1.5; }
-  .steps-v p { margin: 0 0 8px; font-size: 14.5px; color: var(--ink-soft); }
-  .steps-v pre { font-size: 12.5px; margin: 0 0 6px; }
-  .where { display: inline-block; font-family: var(--f-body); font-weight: 700; font-size: 11.5px; letter-spacing: .04em; border-radius: 999px; padding: 1px 10px; margin-right: 8px; vertical-align: 2px; white-space: nowrap; }
-  .where.pc { background: var(--sunk); color: var(--ink-soft); border: 1px solid var(--line); }
-  .where.srv { background: var(--accent-soft); color: var(--accent-deep); border: 1px solid #F3D3BE; }
-  .where.eye { background: #EAF3EC; color: #2F6B3E; border: 1px solid #CFE3D4; }
-  .fork { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 6px 0 8px; }
-  .fork > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 14px; color: var(--ink-soft); background: var(--surface); }
-  .fork > div b { display: block; color: var(--ink); font-family: var(--f-display); }
-  .fork > div.stop { background: var(--warn-bg); border-color: #F3D3BE; }
-
-  /* ── 冒頭 ── */
-  header.hero { padding: 104px 0 80px; background: linear-gradient(180deg, #FFF7F1 0%, #FFFFFF 70%); border-bottom: 1px solid var(--line); }
-  .eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .12em; color: var(--ink-mute); margin: 0 0 20px; }
-  h1 { max-width: 20em; font-family: var(--f-display); font-weight: 900; font-size: clamp(32px, 5.2vw, 60px); line-height: 1.28; word-break: keep-all; overflow-wrap: anywhere; letter-spacing: -.005em; margin: 0 0 22px; text-wrap: balance; }
-  .lede { font-size: 19px; color: var(--ink-soft); max-width: 44em; margin: 0 0 32px; }
-  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-  .btn { display: inline-block; padding: 13px 24px; border-radius: 6px; font-family: var(--f-display); font-weight: 700; font-size: 15px; text-decoration: none; background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); box-shadow: 0 2px 0 var(--accent-deep); }
-  .btn.ghost { background: #FFFFFF; color: var(--ink); border-color: var(--line); box-shadow: none; }
-
-  /* ── 節 ── */
-  section { padding: 80px 0; }
-  section.band { background: var(--band); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  h2 { font-family: var(--f-display); font-weight: 900; font-size: clamp(26px, 3.6vw, 34px); line-height: 1.35; margin: 0 0 10px; text-wrap: balance; }
-  .sub { color: var(--ink-soft); margin: 0 0 36px; max-width: 48em; font-size: 17px; }
-  p { max-width: 44em; }
-
-  /* ── 症状 → この環境では ── */
-  .pains { display: flex; flex-direction: column; gap: 18px; }
-  .pain { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); overflow: hidden; box-shadow: 0 1px 2px rgba(11,31,51,.04); }
-  .pain > div { padding: 28px 30px 30px; min-width: 0; }
-  .pain .who { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-mute); margin: 0 0 10px; }
-  .pain .voice { font-family: var(--f-display); font-weight: 700; font-size: 20px; line-height: 1.55; margin: 0; text-wrap: balance; }
-  .pain .voice small { display: block; font-family: var(--f-body); font-weight: 400; font-size: 14px; color: var(--ink-soft); margin-top: 8px; }
-  .pain .fix { border-left: 1px solid var(--line); background: var(--accent-soft); }
-  .pain .fix h3 { font-family: var(--f-display); font-size: 16px; font-weight: 900; margin: 0 0 8px; color: var(--accent-deep); }
-  .pain .fix p { margin: 0 0 10px; font-size: 14.5px; color: var(--ink-soft); }
-  .pain .fix p:last-child { margin: 0; }
-  @media (max-width: 640px) { .pain { grid-template-columns: 1fr; } .pain .fix { border-left: 0; border-top: 1px solid var(--line); } }
-
-  pre { margin: 0; padding: 14px 16px; background: #0B1F33; color: #E9EEF4; border-radius: 8px; font-family: var(--f-mono); font-size: 13px; line-height: 1.8; overflow-x: auto; }
-  pre .c { color: #8FA3B8; }
-  .pain pre { font-size: 12.5px; padding: 12px 14px; }
-
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
-  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px; display: flex; flex-direction: column; gap: 10px; }
-  .num { font-family: var(--f-display); font-weight: 900; font-size: 28px; line-height: 1; color: var(--accent); }
-  .step h3 { font-family: var(--f-display); font-size: 17px; font-weight: 700; margin: 0; }
-  .step p { margin: 0; font-size: 14px; color: var(--ink-soft); }
-
-  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-  .box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; }
-  .box h3 { font-family: var(--f-display); font-size: 17px; font-weight: 900; margin: 0 0 10px; }
-  .box ul { margin: 0; padding-left: 1.2em; font-size: 14.5px; color: var(--ink-soft); }
-  .box li { margin: 5px 0; }
-  .box.ok h3 { color: var(--accent-deep); }
-  .box.no { background: var(--band); }
-  .box.no h3 { color: var(--ink-mute); }
-
-  .note { display: flex; gap: 12px; align-items: baseline; padding: 12px 16px; margin-top: 18px; font-size: 14px; color: var(--ink-soft); background: var(--warn-bg); border: 1px solid #F3D3BE; border-radius: 8px; }
-  .note b { color: var(--warn); font-size: 11px; letter-spacing: .1em; white-space: nowrap; }
-
-  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
-  th, td { text-align: left; padding: 10px 14px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 700; }
-  td:first-child { white-space: nowrap; font-weight: 700; }
-  .tablewrap { overflow-x: auto; }
-
-  .docs { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-  .docs .box p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
-
-  /* ── お問い合わせ / Issue 募集 ── */
-  section.contact { background: linear-gradient(180deg, #FFF7F1 0%, var(--accent-soft) 100%); border-top: 2px solid var(--accent); border-bottom: 1px solid var(--line); }
-  .contact .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-  .contact .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 30px 32px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 2px 6px rgba(11,31,51,.06); }
-  .contact .card .who { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-mute); margin: 0; }
-  .contact .card h3 { font-family: var(--f-display); font-weight: 900; font-size: 22px; line-height: 1.4; margin: 0; text-wrap: balance; }
-  .contact .card p { margin: 0; font-size: 15px; color: var(--ink-soft); }
-  .contact .card ul { margin: 0; padding-left: 1.2em; font-size: 14.5px; color: var(--ink-soft); }
-  .contact .card li { margin: 4px 0; }
-  .contact .card .cta { margin-top: auto; padding-top: 8px; }
-  .contact .card .addr { font-family: var(--f-mono); font-size: 15px; }
-
-  footer { padding: 40px 0 64px; color: var(--ink-mute); font-size: 13.5px; border-top: 1px solid var(--line); }
-  footer p { margin: 6px 0; }
-  /* ── 右下に追従するお問い合わせ ── */
-  .fab { position: fixed; right: 20px; bottom: 20px; z-index: 50; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; padding-bottom: env(safe-area-inset-bottom); }
-  .fab[hidden] { display: none; }
-  .fab-btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px 14px 18px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-family: var(--f-display); font-weight: 700; font-size: 15px; line-height: 1; cursor: pointer; box-shadow: 0 6px 20px rgba(232,98,28,.35), 0 2px 0 var(--accent-deep); transition: transform .18s ease, box-shadow .18s ease; }
-  .fab-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(232,98,28,.4), 0 2px 0 var(--accent-deep); }
-  .fab-btn:active { transform: translateY(0); }
-  .fab-btn svg { width: 20px; height: 20px; flex: none; }
-  .fab-btn .x { display: none; }
-  .fab.open .fab-btn .x { display: block; }
-  .fab.open .fab-btn .chat { display: none; }
-  .fab-menu { width: min(340px, calc(100vw - 40px)); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 16px 48px rgba(11,31,51,.18); padding: 8px; transform-origin: bottom right; opacity: 0; transform: translateY(8px) scale(.96); pointer-events: none; transition: opacity .16s ease, transform .16s ease; }
-  .fab.open .fab-menu { opacity: 1; transform: none; pointer-events: auto; }
-  .fab-menu .head { padding: 12px 14px 6px; font-family: var(--f-display); font-weight: 900; font-size: 15px; color: var(--ink); }
-  .fab-menu .head small { display: block; font-family: var(--f-body); font-weight: 400; font-size: 12.5px; color: var(--ink-mute); margin-top: 2px; }
-  .fab-item { display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 10px; text-decoration: none; color: var(--ink); }
-  .fab-item:hover, .fab-item:focus-visible { background: var(--accent-soft); outline: none; }
-  .fab-item .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--sunk); color: var(--accent-deep); }
-  .fab-item .ic svg { width: 18px; height: 18px; }
-  .fab-item b { display: block; font-family: var(--f-display); font-weight: 700; font-size: 14.5px; line-height: 1.3; }
-  .fab-item span { display: block; font-size: 12.5px; color: var(--ink-mute); line-height: 1.5; margin-top: 2px; }
-  @media (max-width: 640px) { .fab { right: 14px; bottom: 14px; } .fab-btn { padding: 14px 18px 14px 16px; font-size: 14px; } }
-  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .fab-btn, .fab-menu { transition: none; } .fab-btn:hover { transform: none; } }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<div class="topnav"><div class="wrap"><a class="brand" href="index.html"><img src="favicon.svg" alt="">eccube-docker</a><nav aria-label="ページ"><a href="index.html" aria-current="page">トップ</a><a href="guide.html">はじめる・上げる</a><a href="ops.html">更新と反映</a><a href="scale.html">大規模アクセス</a><a href="https://github.com/kurozumi/eccube-docker">GitHub</a></nav></div></div>
 
 <header class="hero">
   <div class="wrap">
@@ -206,79 +32,13 @@
       ダメなら何も変えずに止まる。インストールもサーバー移転も同じ考え方で 1 コマンドにしました。
     </p>
     <div class="cta">
-      <a class="btn" href="#howto">やりたいことから選ぶ</a>
+      <a class="btn" href="guide.html">やりたいことから選ぶ</a>
       <a class="btn ghost" href="https://github.com/kurozumi/eccube-docker/blob/main/docs/handbook.md">はじめての人のための手引き</a>
       <a class="btn ghost" href="https://github.com/kurozumi/eccube-docker">GitHub</a>
       <a class="btn ghost" href="#contact">お問い合わせ / Issue</a>
     </div>
   </div>
 </header>
-
-<section id="patch">
-  <div class="wrap">
-    <h2>パッチは<em class="k">その日のうちに</em></h2>
-    <p class="sub">EC-CUBE のパッチ（4.3.1 → 4.3.2 など）は、やることが 2 つだけ。プラグインの移植が要るのはメジャー・マイナー（4.3 → 4.4）だけです。</p>
-    <div class="steps">
-      <div class="step"><div class="num">1</div><h3>環境（eccube-docker）を新しくする</h3><pre>bin/self-update.sh</pre><p>コマンド・compose・スクリプトが新しいリリースに揃う。差分は git で見えるので、何が変わるか分かってから進める。</p></div>
-      <div class="step"><div class="num">2</div><h3>EC-CUBE を上げる</h3><pre>bin/upgrade.sh ~4.3.0 --prod</pre><p>退避 → 新しい EC-CUBE でプラグインが動くかを、お店に触る前に確認 → メンテナンス表示 → migration → 疎通。<strong>危ないものを見つけたら、お店に触る前に止まる。</strong></p></div>
-    </div>
-    <h3 style="font-family:var(--f-display);font-size:20px;margin:36px 0 6px">速い理由は 1 つ。<em class="k">あなたが直したものと EC-CUBE が、別々に更新される</em></h3>
-    <p class="sub">EC-CUBE の中身を直接編集した環境は、上げるたびに「どこを直したか」の調査から始まります。ここでは置き場所が最初から分かれています。</p>
-    <div class="two">
-      <div class="box ok">
-        <h3>あなたのもの — git で持つ</h3>
-        <ul>
-          <li>カスタマイズした PHP（<code>app/Customize/</code>）</li>
-          <li>直したテンプレート・テーマ（<code>app/template/</code>）</li>
-          <li>独自の CSS / JS（<code>html/user_data/</code>）</li>
-          <li>プラグイン、migration、設定（<code>app/Plugin/</code> ほか）</li>
-        </ul>
-        <p>パッチを当てても<strong>1 ファイルも触られない</strong>。上書きされる心配がないので、当てる前に「どこを直したか」を思い出す必要がない。</p>
-      </div>
-      <div class="box no">
-        <h3>EC-CUBE と PHP — イメージで入れ替える</h3>
-        <ul>
-          <li>EC-CUBE と、それが使うライブラリ（vendor）</li>
-          <li>PHP、拡張、php-fpm、nginx</li>
-        </ul>
-        <p>手で編集しないので、PHP は新しいイメージを引き直すだけ（<code>bin/deploy.sh</code>）、EC-CUBE は <code>bin/upgrade.sh</code> が入れ替える（イメージを引くだけでは、動いている EC-CUBE は古いまま）。<strong>だからパッチが出たその日に当てられる。</strong>EC-CUBE を直接編集した環境ではこれができない。</p>
-      </div>
-    </div>
-    <div class="note">
-      <b>丸ごと写さない、が守られる</b>
-      <span>テンプレートは「直すファイルだけ」を置く決まり。丸ごと写すと、上げたときに古いほうが勝ち続けて直したはずの不具合が戻ります。<code>bin/theme.sh diff</code> と <code>bin/plugin.sh template diff</code> が、EC-CUBE 側で変わったファイルを上げたあとに挙げます。</span>
-    </div>
-
-    <h3 style="font-family:var(--f-display);font-size:20px;margin:44px 0 6px">バージョンを変えるのは、<em class="k">それぞれ 1 コマンド</em></h3>
-    <p class="sub">PHP・EC-CUBE・この環境（eccube-docker）は、別々に上げ下げできます。どれもデータ（受注・会員・商品・画像）はそのままです。</p>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th>変えたいもの</th><th>やること</th><th>かかる時間</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><strong>PHP</strong><br><span style="color:var(--ink-mute);font-size:13px">8.2 → 8.3 など</span></td>
-            <td><code>.env</code> のタグの <code>php8.2</code> を <code>php8.3</code> に書き換えて<br><code>docker compose pull ec-cube &amp;&amp; docker compose up -d</code></td>
-            <td><strong>約 20 秒</strong><br><span style="color:var(--ink-mute);font-size:13px">戻すのも同じ</span></td>
-          </tr>
-          <tr>
-            <td><strong>EC-CUBE</strong><br><span style="color:var(--ink-mute);font-size:13px">4.3.1 → 4.3.2 など</span></td>
-            <td><code>bin/upgrade.sh ~4.3.0 --prod</code></td>
-            <td>数分<br><span style="color:var(--ink-mute);font-size:13px">失敗したら何も変えずに止まる</span></td>
-          </tr>
-          <tr>
-            <td><strong>eccube-docker</strong><br><span style="color:var(--ink-mute);font-size:13px">v1.0.18 → v1.0.19 など</span></td>
-            <td><code>bin/self-update.sh</code></td>
-            <td>1 分<br><span style="color:var(--ink-mute);font-size:13px">差分を git で見てから commit</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="note">
-      <b>PHP だけ変えても EC-CUBE はそのまま</b>
-      <span>PHP はイメージの中に、EC-CUBE と <code>vendor</code> はボリュームの中にあります。だからイメージを差し替えても<strong>入れ替わるのは PHP だけ</strong>で、店のデータにも EC-CUBE の版にも触りません（作り直されるのはアプリのコンテナ 1 つ、約 20 秒）。合わない組み合わせのタグは存在しないので、<strong>壊れる前に <code>pull</code> が失敗します</strong>。選べる PHP は下の表のとおりです。</span>
-    </div>
-  </div>
-</section>
 
 <section id="pains" class="band">
   <div class="wrap">
@@ -375,89 +135,20 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
 
 <section>
   <div class="wrap">
+    <h2>くわしくは<em class="k">ページごとに</em></h2>
+    <p class="sub">やりたいことが決まっているなら、そのページから読んでください。</p>
+    <div class="nextpages"><a class="nextpage" href="guide.html"><span class="tag">はじめる・上げる</span><h3>やりたいことから<em class="k">選ぶ</em></h3><p>新規作成・EC-CUBE のバージョンアップ・環境のアップデートを、どこで何を打つかの流れ図で。</p></a><a class="nextpage" href="ops.html"><span class="tag">更新と反映</span><h3>パッチを<em class="k">その日のうちに</em></h3><p>あなたのものと EC-CUBE を別々に更新する仕組みと、本番にはレビュー済みの main しか出ない 3 枚の壁。</p></a><a class="nextpage" href="scale.html"><span class="tag">大規模アクセス</span><h3>アクセスが増えたら、<em class="k">測ってから</em></h3><p>負荷試験、CDN、Redis、php-fpm の枠、複数サーバーとロードバランサー、DB。</p></a></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
     <h2>毎日は<em class="k">これだけ</em></h2>
     <p class="sub">直す場所（手元）と動かす場所（サーバー）を分ける。この環境の全部です。</p>
     <div class="steps">
       <div class="step"><div class="num">1</div><h3>手元で直す</h3><pre>bin/init.sh                <span class="c"># 初回だけ。終わると URL とログイン情報が表示される</span></pre></div>
       <div class="step"><div class="num">2</div><h3>控えを送る</h3><pre>git add -A &amp;&amp; git commit -m "何を直したか" &amp;&amp; git push</pre></div>
       <div class="step"><div class="num">3</div><h3>サーバーに反映する</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop</pre><p>手元から送るので、サーバーに git も GitHub の鍵も要りません（最初の 1 回は <code>bin/bootstrap-server.sh</code> が Docker まで入れる）。数分かかります。終わったらお店を開いて目で確かめる。PHP やミドルウェアのセキュリティパッチも、このときに入ります。</p><p><strong>本番には <code>main</code> の先頭と同じものしか送れません。</strong>出る前に「何が出るか」を見せ、プロジェクト名を打つまで何も変えない。見るだけなら <code>--check</code>。</p></div>
-    </div>
-  </div>
-</section>
-
-<section id="gate">
-  <div class="wrap">
-    <h2>本番には、<em class="k">レビュー済みの main</em> しか出ない</h2>
-    <p class="sub">エンジニアが直し、担当者が承認して、本番へ出す。「エンジニアが勝手に出す」と「担当者がうっかり出す」を、別々の壁で止めます。どれか 1 枚が無くても残りは効く。</p>
-    <div class="steps">
-      <div class="step"><div class="num">①</div><h3>GitHub — 承認が無いと main に入らない</h3><pre>bin/setup.sh protect</pre><p>PR 必須、担当者（CODEOWNERS）の承認必須、force push と削除の禁止。管理者も例外なし。<span style="color:var(--ink-mute)">非公開リポジトリは GitHub の有料プランが要ります（無ければ②③だけで運用）。</span></p></div>
-      <div class="step"><div class="num">②</div><h3>手元 — main の先頭と同じものしか送れない</h3><pre>bin/deploy.sh --remote=shop:/srv/myshop
-<span class="c">  ✗ いまのブランチは feature です。出せるのは main だけ</span></pre><p>別のブランチ、コミットしていない変更、push していないコミット。どれか 1 つでも本番へは<strong>送らない</strong>。何もしなくて効きます。</p></div>
-      <div class="step"><div class="num">③</div><h3>サーバー — 見せて、打たせて、記録する</h3><pre>  コード: 3f2a1c0 → 9b7e4d2（3 コミット）
-  ⚠ migration が含まれます
-  続けるなら、プロジェクト名 myshop を入力:</pre><p><code>y</code> では通しません。指が覚えて通してしまわないように、プロジェクト名を打つ。誰が・いつ・何を出したかは <code>var/deploy.log</code> に残る。</p></div>
-    </div>
-    <div class="note">
-      <b>正直に</b>
-      <span>本番の SSH を持つ人は②③を素通りできます。壁は「うっかり」を止めるもので「故意」は止められない。だから本番の SSH はエンジニアに渡さない、と決めてください。詳しくは <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/deploy.md">本番デプロイ</a>。</span>
-    </div>
-  </div>
-</section>
-
-<section id="scale">
-  <div class="wrap">
-    <h2>アクセスが増えたら、<em class="k">測ってから</em>強くする</h2>
-    <p class="sub">どこが先に詰まるかは、店のプラグインとデータの量で変わります。最初に測り、詰まった場所に合う手を、安くて効く順に打ちます。</p>
-
-    <div class="tablewrap">
-      <table>
-        <tr><th>先に詰まったもの</th><th>打つ手</th></tr>
-        <tr><td>画像・CSS・JS の数</td><td>① CDN（トンネルで公開していれば、もう効いている）</td></tr>
-        <tr><td>PHP の CPU</td><td>② Redis → ③ php-fpm の枠 → ④ アプリのホストを並べる</td></tr>
-        <tr><td>DB の CPU</td><td>⑤ 遅い SQL を直す → ② Redis → DB を大きくする</td></tr>
-        <tr><td>特定のページだけ</td><td>そのページで動くプラグインを疑う（外した検証環境で同じ試験を流して比べる）</td></tr>
-      </table>
-    </div>
-
-    <div class="steps" style="margin-top:28px">
-      <div class="step"><div class="num">0</div><h3>測る</h3><pre>bin/loadtest.sh stress --rate=100</pre><p>「毎秒何 PV」で流し、段ごとに応答時間と失敗を出す。手元ならコンテナの CPU と php-fpm の上限も。月間 PV から山の PV/秒を出す式は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/loadtest.md">負荷試験</a> に。<strong>本番には流さない</strong>（手元以外はホスト名を打たないと流れない）。</p></div>
-
-      <div class="step"><div class="num">①</div><h3>CDN — 静的ファイルを中継点に</h3><pre><span class="c"># caddy で直接公開しているなら、トンネルへ</span>
-bin/setup.sh tunnel
-<span class="c"># 確かめる（2 回目で HIT）</span>
-curl -sI https://店/…/style.css \
-  | grep -i cf-cache-status</pre><p>Cloudflare Tunnel で公開していれば<strong>設定は要りません。</strong>商品画像は 30 日、名前の変わらない CSS・JS は 5 分（管理画面で直した CSS がすぐ出るように）。Cloudflare の画面では Browser Cache TTL を「Respect Existing Headers」に。<strong>「Cache Everything」にはしない</strong>（ほかの人のカートが入ったページを配ってしまう）。</p></div>
-
-      <div class="step"><div class="num">②</div><h3>Redis — 同じ計算をしない</h3><pre><span class="c"># .env</span>
-COMPOSE_PROFILES=tunnel,redis
-<span class="c"># 反映</span>
-bin/deploy.sh</pre><p>キャッシュとセッションを Redis へ。DB への同じ問い合わせと PHP の計算が減ります。<strong>切り替えた瞬間に全員ログアウトになり、カートも空になる</strong>ので、お客さんの少ない時間に。</p></div>
-
-      <div class="step"><div class="num">③</div><h3>php-fpm の枠を広げる</h3><pre><span class="c"># .env（既定 20。1 本 80MB ほど）</span>
-PHP_FPM_MAX_CHILDREN=40
-<span class="c"># 反映</span>
-bin/deploy.sh</pre><p>CPU に余裕があるのに、負荷試験で「php-fpm の上限に達した」と出るときに効きます。CPU が張り付いているなら、サーバーを大きくするか ④ へ。</p></div>
-
-      <div class="step"><div class="num">④</div><h3>アプリのホストを並べる</h3><pre><span class="c"># 各ホストで（DB・Redis・画像は外へ）</span>
-docker compose \
-  -f compose.app.yaml up -d
-<span class="c"># 前に LB を置く</span></pre><p>DB と Redis はマネージドへ、画像は NFS / EFS へ出し、アプリだけを並べます。セッションは Redis で共有なので、同じ人を同じホストへ寄せる設定は要りません。<strong>全ホストの php-fpm の枠の合計が DB の接続数の上限（既定 200）を超えると落ちる</strong>ので、合わせて上げます。</p></div>
-
-      <div class="step"><div class="num">⑤</div><h3>DB が詰まったら</h3><pre><span class="c"># 動いている DB にその場で（MariaDB）</span>
-SET GLOBAL slow_query_log = 1;
-<span class="c"># 設定ファイルは再起動まで効かない</span></pre><p>まず遅い SQL を探す（プラグインの 1 本が原因のことが多い）。次に ② の Redis。それでも足りなければ、マネージド DB の上の型へ上げます。</p></div>
-    </div>
-
-    <div class="two" style="margin-top:28px">
-      <div class="box no"><h3>入れていないもの</h3><ul>
-        <li><strong>DB の読み取りを複製へ振り分ける</strong>: EC-CUBE がリクエストのたびにトランザクションを始めるので、設定を足しても複製は一度も使われません。</li>
-        <li><strong>ページ（HTML）のキャッシュ</strong>: 商品一覧・詳細には人ごとのトークンが、ヘッダーには人ごとのカートとログインの欄があります。そのまま配ると、ほかの人のカートが見え、「カートに入れる」が失敗します。</li>
-      </ul></div>
-    </div>
-
-    <div class="note">
-      <b>正直に</b>
-      <span>何 PV まで耐えるかは、まだ本番と同じ形の環境で測っていません。手元の Mac（8 CPU、サンプルデータ）では 20 PV/秒までが安全で、先に詰まったのは PHP の CPU でした。設定の詳しい手順は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/scale.md">大規模アクセス</a>。</span>
     </div>
   </div>
 </section>
@@ -495,168 +186,6 @@ SET GLOBAL slow_query_log = 1;
       <b>ひとこと</b>
       <span>初回は Redis も非同期メールも無効で、必要になったら <code>.env</code> に 1 行足す設計です。最初から全部入りではありません。</span>
     </div>
-  </div>
-</section>
-
-<section id="howto">
-  <div class="wrap">
-    <h2><em class="k">やりたいこと</em>から選ぶ</h2>
-    <p class="sub">「上げる」「更新する」と言っても、相手は 3 つあります。どれを上げたいのかが分かれば、やることは決まっています。</p>
-
-    <div class="terms">
-      <div class="term">
-        <p class="tag">お店のソフト</p>
-        <h3>EC-CUBE</h3>
-        <span class="ver">4.3.2 のような番号</span>
-        <p>商品・カート・管理画面。お店そのもの。<strong>脆弱性の案内が来るのは、たいていここ。</strong></p>
-      </div>
-      <div class="term">
-        <p class="tag">EC-CUBE を動かす台と道具</p>
-        <h3>eccube-docker（この環境）</h3>
-        <span class="ver">v1.0.19 のような番号（v 付き）</span>
-        <p><code>bin/</code> のコマンドや、サーバーの組み立て。このページで配っているもの。</p>
-      </div>
-      <div class="term">
-        <p class="tag">EC-CUBE を動かす言語</p>
-        <h3>PHP</h3>
-        <span class="ver">8.3 のような番号</span>
-        <p>EC-CUBE の下で動いているもの。パッチは毎朝、配布イメージに入ります。</p>
-      </div>
-    </div>
-
-    <p class="pickq">何がしたいですか？</p>
-    <div class="picks">
-      <a class="pick" href="#start">
-        <span class="when">お店をこれから作る<small>まだ何も無い</small></span>
-        <span class="arrow" aria-hidden="true">→</span>
-        <span class="go"><span class="letter">A</span><b>新規作成</b></span>
-      </a>
-      <a class="pick" href="#flow-eccube">
-        <span class="when">EC-CUBE の脆弱性の案内が来た／EC-CUBE の新しい版が出た<small>「EC-CUBE 4.3.2 をリリースしました」など、v の付かない番号</small></span>
-        <span class="arrow" aria-hidden="true">→</span>
-        <span class="go"><span class="letter">B</span><b>EC-CUBE のバージョンアップ</b></span>
-      </a>
-      <a class="pick" href="#flow-env">
-        <span class="when">eccube-docker の新しい版が出た<small>「v1.0.19」など、v の付く番号。月に 1 回くらい確かめる</small></span>
-        <span class="arrow" aria-hidden="true">→</span>
-        <span class="go"><span class="letter">C</span><b>環境のアップデート</b></span>
-      </a>
-      <div class="pick">
-        <span class="when">PHP の脆弱性の案内が来た<small>「PHP 8.3.37 を公開」など</small></span>
-        <span class="arrow" aria-hidden="true">→</span>
-        <span class="go"><span class="letter plain">–</span><b>いつもの <code>bin/deploy.sh</code> だけ</b><br>配布イメージに翌朝入るので、反映を打てば届きます。A〜C は要りません。8.2 → 8.3 のように<strong>番号を変える</strong>ときは、上の「バージョンを変えるのは、それぞれ 1 コマンド」の表。</span>
-      </div>
-      <div class="pick">
-        <span class="when">自分で直したところを、お店に出したい<small>CSS・テンプレート・プラグインなど</small></span>
-        <span class="arrow" aria-hidden="true">→</span>
-        <span class="go"><span class="letter plain">–</span><b>いつもの <code>bin/deploy.sh</code></b><br>毎日の手順は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/handbook.md">はじめての人のための手引き</a>。</span>
-      </div>
-    </div>
-
-    <div class="flow" id="start">
-      <div class="flow-head">
-        <span class="letter">A</span>
-        <h3>新規作成</h3>
-        <p>パソコンで動かしてから、サーバーに出します。<strong>サーバーには何も入れに行きません。</strong>全部パソコンから打ちます。</p>
-        <p>時間: パソコンで動くまで 5 分、公開まで 30 分ほど。</p>
-        <div class="keep"><b>git clone はしません。</b>clone だと送り先が配布元のままで、あなたのコードを保存する場所がありません。中身だけもらって、<b>自分専用の非公開リポジトリ</b>にします。</div>
-      </div>
-      <ol class="steps-v">
-        <li><h4><span class="where pc">パソコン</span>中身をもらう</h4>
-<pre>curl -fsSL https://github.com/kurozumi/eccube-docker/releases/latest/download/eccube-docker.tar.gz | tar -xz
-mv eccube-docker-* myshop &amp;&amp; cd myshop</pre></li>
-        <li><h4><span class="where pc">パソコン</span>自分の非公開リポジトリにする</h4>
-<pre>git init -b main &amp;&amp; git add -A &amp;&amp; git commit -m "eccube-docker から開始"
-gh repo create myshop --private --source=. --push</pre></li>
-        <li><h4><span class="where pc">パソコン</span>動かしてみる</h4>
-<pre>bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3</pre>
-<p>数十秒で終わり、URL（<code>http://localhost:8080/</code>）と管理画面のログイン情報が出ます。<code>4.3</code> が EC-CUBE の版、<code>php8.3</code> が PHP の版です。</p></li>
-        <li><h4><span class="where srv">サーバー</span>サーバーを整える（パソコンから打つ）</h4>
-<pre>bin/bootstrap-server.sh user@サーバー /srv/myshop</pre>
-<p>Docker を入れ、お店のファイルを送ります。サーバーは SSH で入れるようにしておくだけ。</p></li>
-        <li><h4><span class="where srv">サーバー</span>メールと公開の設定（パソコンから打つ）</h4>
-<pre>bin/setup.sh mail   --remote=user@サーバー:/srv/myshop
-bin/setup.sh tunnel --remote=user@サーバー:/srv/myshop</pre>
-<p>質問に答えるだけ。メールは 1 通試してから、公開は Cloudflare につながるか試してから書きます。</p></li>
-        <li><h4><span class="where srv">サーバー</span>公開して、毎日のバックアップを入れる</h4>
-<pre>bin/publish.sh      --remote=user@サーバー:/srv/myshop
-bin/setup.sh backup --remote=user@サーバー:/srv/myshop</pre></li>
-        <li><h4><span class="where eye">ブラウザ</span>お店を開いて確かめる</h4>
-<p>これ以降、直したものを出すのは <code>bin/deploy.sh --remote=user@サーバー:/srv/myshop</code> だけです。詳しくは <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/install.md">導入手順</a>。</p></li>
-      </ol>
-    </div>
-
-    <div class="flow" id="flow-eccube">
-      <div class="flow-head">
-        <span class="letter">B</span>
-        <h3>EC-CUBE のバージョンアップ</h3>
-        <p>例: EC-CUBE 4.3.1 → 4.3.2。<strong>パソコンで試してから、サーバーで上げます。</strong></p>
-        <p>時間: お店が止まるのは数分。</p>
-        <div class="keep"><b>そのまま残るもの:</b> 受注・会員・商品・画像、あなたが直したテンプレートや CSS、プラグイン。<br><b>止まったら:</b> たいていはお店に触る前に止まり、そのまま動き続けます。DB を変える途中で止まったときはメンテナンス表示のまま止まるので、<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md#4-失敗したとき">失敗したとき</a>の表に沿って戻します（バックアップは自動で取ってあります）。</div>
-      </div>
-      <ol class="steps-v">
-        <li><h4>どの番号が変わるかを見る</h4>
-          <div class="fork">
-            <div><b>3 つ目だけ（4.3.1 → 4.3.2）</b>パッチ。このまま次へ。</div>
-            <div class="stop"><b>2 つ目（4.3 → 4.4）</b>プラグインの作り直しが要ります。ひとりで進めず、制作者に相談してください（<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md">バージョンアップ</a>）。</div>
-          </div></li>
-        <li><h4><span class="where pc">パソコン</span>先に環境を新しくする</h4>
-<p>下の <a href="#flow-env">C</a> を済ませます。古い道具で新しい EC-CUBE を扱わないためです。</p></li>
-        <li><h4><span class="where pc">パソコン</span>パソコンで上げて、試す</h4>
-<pre>bin/upgrade.sh ~4.3.0</pre>
-<p><code>~4.3.0</code> は「4.3 の中で一番新しい版」。「取得したイメージの EC-CUBE: 4.3.2」と出たら、<strong>案内にあった版（またはそれより新しい版）か</strong>を見ます。古ければ <code>n</code> で止め、翌朝の配布イメージを待ちます。合っていれば番号を控えて <code>y</code>。終わったら <code>http://localhost:8080/</code> で、トップ・商品・カート・管理画面を開いてみます。</p>
-<p><strong>できれば本番のデータで試します。</strong>本番にだけ残っているプラグインの列なども、そこで見つかります。いつもの手元の環境に戻すと作業中のデータが上書きされるので、<strong>別のフォルダに検証用を作って</strong>本番のバックアップを戻します（<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md#2-ステージングで予行演習">ステージングで予行演習</a>）。</p></li>
-        <li><h4><span class="where srv">サーバー</span>お客さんに告知してから、サーバーで上げる</h4>
-<pre>ssh user@サーバー
-cd /srv/myshop
-bin/upgrade.sh ~4.3.0 --prod</pre>
-<p><strong><code>--prod</code> を必ず付けます。</strong>出てきた EC-CUBE の番号が<strong>パソコンで試したものと同じか</strong>を見てから <code>y</code>（違えば <code>n</code> で止め、パソコンで試し直す）。自動でバックアップを取り、新しい EC-CUBE でプラグインが動くかを、お店に触る前に確かめます。</p></li>
-        <li><h4><span class="where eye">ブラウザ</span>目で確かめる</h4>
-<p>トップ・商品詳細・カートに入れる・管理画面のログイン・受注一覧。おかしければ <code>bin/plugin.sh doctor</code>。</p></li>
-      </ol>
-    </div>
-
-    <div class="flow" id="flow-env">
-      <div class="flow-head">
-        <span class="letter">C</span>
-        <h3>環境のアップデート</h3>
-        <p>例: eccube-docker v1.0.18 → v1.0.19。<strong>パソコンで取り込み、いつもの deploy でサーバーへ。</strong>サーバーで直接は取り込みません。</p>
-        <p>時間: 5 分ほど。お店はほとんど止まりません。</p>
-        <div class="keep"><b>触らないもの:</b> EC-CUBE の版、お店のデータ、あなたが直したもの、<code>.env</code>。<br><b>新しくなるもの:</b> <code>bin/</code> のコマンド、サーバーの組み立て、文書。</div>
-      </div>
-      <ol class="steps-v">
-        <li><h4><span class="where pc">パソコン</span>何が変わるかを見る</h4>
-<pre>bin/self-update.sh --check</pre>
-<p>まだ何も書き換えません。<a href="https://github.com/kurozumi/eccube-docker/releases">リリースノート</a>の「まずやること」も読みます。版によっては、ひと手間あります。</p></li>
-        <li><h4><span class="where pc">パソコン</span>取り込む</h4>
-<pre>bin/self-update.sh</pre>
-<p>配布元が変えたファイルだけを差し替えます。あなたが手を入れたファイルとぶつかるときは、上書きせずに止まって知らせます。</p></li>
-        <li><h4><span class="where pc">パソコン</span>控えを送る</h4>
-<pre>git add -A &amp;&amp; git commit -m "eccube-docker v1.0.19" &amp;&amp; git push</pre></li>
-        <li><h4><span class="where srv">サーバー</span>いつもどおり反映する（パソコンから打つ）</h4>
-<pre>bin/deploy.sh --remote=user@サーバー:/srv/myshop</pre></li>
-        <li><h4><span class="where eye">ブラウザ</span>お店を開いて確かめる</h4></li>
-      </ol>
-    </div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <h2>対応する EC-CUBE</h2>
-    <p class="sub">配布イメージを使うと、手元でビルドせずに数十秒で立ち上がります（<code>bin/init.sh --image=…</code> か <code>.env</code> の <code>ECCUBE_IMAGE</code>）。<strong>PHP はタグで選びます</strong>: <code>4.3-php8.3</code> のように書くとその PHP、<code>-php</code> を省くと系列の既定。</p>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th>系列</th><th>イメージ（本番はこれ）</th><th>選べる PHP</th><th>備考</th></tr></thead>
-        <tbody>
-          <tr><td>4.3</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.3</code></td><td>8.1<sup>†</sup> / 8.2 / <strong>8.3</strong></td><td>推奨</td></tr>
-          <tr><td>4.2</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.2</code></td><td>8.1<sup>†</sup> / <strong>8.2</strong></td><td></td></tr>
-          <tr><td>4.4</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.4</code></td><td>8.2 / <strong>8.3</strong> / 8.4 / 8.5</td><td>上流の開発ブランチから焼いている。同じものを立てたいなら日付タグで固定</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="sub"><strong>公式の PHP イメージが作り直されたら、翌朝その組だけ焼き直します（月曜は全部）。PHP のセキュリティパッチは公開の翌日に入り、OS のパッチも遅くとも 1 週間で入ります。</strong>受け取るのは <code>bin/deploy.sh</code>（nginx・Redis・DB などのミドルウェアも一緒に引き直す）。ミドルウェアの脆弱性・保守期限・Docker の設定も毎日点検しています。 <sup>†</sup>PHP 8.1 は 2025 年 12 月で終了しています。OS のパッチは入りますが PHP 自体の修正はもう出ないので、8.1 でしか動かないプラグインが無ければ 8.2 以上を。太字は <code>-php</code> 無しの既定。PHP を選ぶなら <code>4.4-php8.5</code> のように書く。同じものを何度も立てたい人は日付タグ <code>4.3-20260907</code>、リリース時点なら <code>4.3-__TAG__</code>。</p>
-    <p class="sub">DB は <strong>MariaDB / MySQL</strong>（既定）か <strong>PostgreSQL</strong>。版は <code>.env</code> の <code>MARIADB_VERSION</code> / <code>PG_VERSION</code>。<code>.env</code> の <code>DB_ENGINE</code> で選び、バックアップも引っ越しも同じコマンドで通ります。手元の DB でも、クラウドのマネージド DB でも。</p>
   </div>
 </section>
 
@@ -714,7 +243,7 @@ bin/upgrade.sh ~4.3.0 --prod</pre>
   <div class="wrap">
     <p>Apache License 2.0。EC-CUBE は対象外で、EC-CUBE 自身のライセンスがそのまま適用されます（EC-CUBE は一切改変していません）。</p>
     <p><a href="https://github.com/kurozumi/eccube-docker/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-docker/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-docker/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-docker/security/policy">脆弱性の報告（非公開）</a></p>
-    <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）· お問い合わせは<a href="#contact">上の節</a>へ。</p>
+    <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）· <a href="index.html#contact">お問い合わせ</a></p>
     <p>この環境は非公式です。EC-CUBE は株式会社イーシーキューブの登録商標で、同社とは無関係です。</p>
   </div>
 </footer>
