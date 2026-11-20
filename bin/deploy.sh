@@ -386,9 +386,13 @@ sha256_stdin() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else s
 conf_hash() { # conf_hash <ファイル…>（無いものは飛ばす）
     # ファイルごとに指紋を取り、「名前 指紋」の並びの指紋にする。中身をつないでから取ると、ファイルの
     # 境目が動いても（a の末尾が b の先頭へ移る）同じ値になり、MariaDB のようにファイルごとに読む設定の変更を見落とす
-    local f
+    # 無いファイルは飛ばす（&& でつなぐと最後が無いとき失敗で返り、pipefail で deploy が落ちる）。
+    # **読めないファイルは失敗にする。** 空の指紋を記録すると、その後の変更をずっと見落とす
+    local f d
     for f in "$@"; do
-        if [ -f "$f" ]; then printf '%s %s\n' "$f" "$(sha256_stdin < "$f")"; fi   # && だと最後が無いとき失敗で返り、pipefail で deploy が落ちる
+        [ -f "$f" ] || continue
+        d="$(sha256_stdin < "$f")" || exit 1   # パイプの左側（サブシェル）を抜け、pipefail で失敗が返る
+        printf '%s %s\n' "$f" "$d"
     done | LC_ALL=C sort | sha256_stdin
 }
 service_running() { [ -n "$("${dc[@]}" ps -q --status running "$1" 2>/dev/null)" ]; }
@@ -396,7 +400,7 @@ apply_proxy_conf() { # apply_proxy_conf <サービス> <設定ファイル> <確
     local svc="$1" file="$2" now old out stamp="${conf_stamp_dir}/$1.sha256"
     shift 2
     [ -f "$file" ] && service_running "$svc" || return 0
-    now="$(conf_hash "$file")"
+    now="$(conf_hash "$file")" || { echo "[deploy] エラー: ${file} を読めません（持ち主と権限を確かめてください）。" >&2; return 1; }
     old="$(cat "$stamp" 2>/dev/null || true)"
     [ "$now" = "$old" ] && return 0
     log "${svc} の設定（${file}）を当てます。確かめてから再起動します（1 秒ほど止まります）..."
@@ -417,7 +421,7 @@ apply_proxy_conf caddy docker/caddy/Caddyfile caddy validate --config /etc/caddy
 # PostgreSQL の db はこの設定を mount していないので、言わない（再起動しても何も変わらない）
 db_id="$("${dc[@]}" ps -q --status running db 2>/dev/null || true)"
 if [ -n "$db_id" ] && docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$db_id" 2>/dev/null | grep -q '/etc/mysql/conf.d'; then
-    db_now="$(conf_hash docker/mariadb/conf.d/*.cnf)"
+    db_now="$(conf_hash docker/mariadb/conf.d/*.cnf)" || { echo "[deploy] エラー: docker/mariadb/conf.d の設定を読めません（持ち主と権限を確かめてください）。" >&2; false; }
     db_old="$(cat "${conf_stamp_dir}/db.sha256" 2>/dev/null || true)"
     if [ -n "$db_old" ] && [ "$db_now" != "$db_old" ]; then
         log "注意: DB の設定（docker/mariadb/conf.d）が変わりました。動いている DB には、再起動するまで効きません。"
