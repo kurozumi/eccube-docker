@@ -7,6 +7,6 @@
     "watch": "sass --watch scss/customize.scss:/output/assets/css/customize-theme.css --load-path=/eccube/html/template/default/assets/scss --no-source-map"
   },
   "devDependencies": {
-    "sass": "^1.93.0"
+    "sass": "^1.108.2"
   }
 }
