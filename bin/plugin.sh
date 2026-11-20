@@ -832,10 +832,31 @@ PHP
     running="$(docker compose ps --status running --format '{{.Service}}' 2>/dev/null | tr '\n' ' ')"
     defined="$(docker compose config --services 2>/dev/null | tr '\n' ' ')"
     case "$cprof" in *,redis,*)
-        if case " $defined " in *" redis "*) false ;; *) true ;; esac; then
+        if [ -z "${defined// /}" ]; then
+            # compose の設定を読めなかった（.env の必須の値が無い、など）。「外部」と取り違えない
+            echo "[doctor] redis: compose の設定を読めないので、Redis があるか確かめられません（docker compose config で原因を見てください）"; warn=1
+        elif case " $defined " in *" redis "*) false ;; *) true ;; esac; then
             # 複数ホスト（compose.app.yaml）では Redis は外の共有サービスで、このホストには定義が無い。
-            # 「コンテナが居ない」を異常にすると、アプリホストでは必ず落ちる
-            echo "[doctor] redis: 外部の Redis（REDIS_URL）。このホストには居ません"
+            # 「コンテナが居ない」を異常にすると、アプリホストでは必ず落ちる。代わりに、アプリのコンテナの中から
+            # キャッシュ用とセッション用の両方へ実際に繋いで確かめる（繋がらないと全ページ 500・全員ログアウト）
+            rping="$(docker compose exec -T ec-cube php -r '
+                foreach (["REDIS_URL", "SESSION_REDIS_URL"] as $k) {
+                    $u = parse_url((string) getenv($k));
+                    if (!$u || empty($u["host"])) { echo "$k: 未設定\n"; continue; }
+                    try {
+                        $r = new Redis();
+                        $r->connect($u["host"], (int) ($u["port"] ?? 6379), 3.0);
+                        if (isset($u["pass"]) && $u["pass"] !== "") { $r->auth(isset($u["user"]) && $u["user"] !== "" ? [urldecode($u["user"]), urldecode($u["pass"])] : urldecode($u["pass"])); }
+                        echo $k.": ".($r->ping() ? "OK" : "NG")." (".$u["host"].")\n";
+                    } catch (Throwable $e) { echo $k.": NG (".$u["host"]."): ".$e->getMessage()."\n"; }
+                }' 2>/dev/null | tr -d '\r' || true)"
+            if [ -n "$rping" ] && ! printf '%s\n' "$rping" | grep -q 'NG\|未設定'; then
+                echo "[doctor] redis: 外部の Redis に繋がります（このホストには居ません）"
+            else
+                echo "[doctor] redis: 外部の Redis に繋がりません（全ページ 500・ログインできない原因）:"
+                printf '%s\n' "${rping:-（確かめられませんでした）}" | sed 's/^/           /'
+                ng=1
+            fi
         elif case " $running " in *" redis "*) true ;; *) false ;; esac; then
             echo "[doctor] redis: 有効・起動中"
         else
