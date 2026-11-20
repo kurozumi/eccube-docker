@@ -261,8 +261,17 @@ dump_before_migrate() { # 標準出力へ gzip 前のダンプ
             major="$(( ${num:-0} / 10000 ))"
             bin="/usr/lib/postgresql/${major}/bin/pg_dump"
             if [ ! -x "$bin" ]; then
-                log "注意: PostgreSQL ${major} の pg_dump がイメージにありません（入っているのは $(ls /usr/lib/postgresql 2>/dev/null | tr '\n' ' ')）。"
-                return 1
+                # 入っているより古いサーバー（外部の 13 以下など）は、入っている中でいちばん古い版で取る
+                # （pg_dump は自分より古いサーバーを取れる）。新しすぎるサーバーは取れないので失敗にする
+                local oldest
+                oldest="$(ls /usr/lib/postgresql 2>/dev/null | sort -n | head -1)"
+                if [ -n "$oldest" ] && [ "$major" -lt "$oldest" ]; then
+                    bin="/usr/lib/postgresql/${oldest}/bin/pg_dump"
+                else
+                    # 標準出力はダンプの中身なので、説明は標準エラーへ
+                    log "注意: PostgreSQL ${major} の pg_dump がイメージにありません（入っているのは $(ls /usr/lib/postgresql 2>/dev/null | tr '\n' ' ')）。" >&2
+                    return 1
+                fi
             fi
             PGPASSWORD="$DB_PASSWORD" "$bin" --clean --if-exists -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" "$DB_NAME" ;;
         *)
