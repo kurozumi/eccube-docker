@@ -209,6 +209,35 @@ pg_ver="$(env_get PG_VERSION)"; pg_ver="${pg_ver:-16}"
 db_host="$(env_get DB_HOST)"; db_host="${db_host:-db}"
 db_port="$(env_get DB_PORT)"
 local_db=0; [ "$db_host" = "db" ] && [ -n "$(docker compose ps -q db 2>/dev/null)" ] && local_db=1
+# **ダンプを流す前に、いまある表を全部消す。** ダンプは自分が持つ表しか作り直さないので、退避した
+# あとで増えた表（upgrade の途中で作られた新しい版の表など）がそのまま残り、「その時点に戻した」ことに
+# ならない。いまの状態は上で退避してある（RESTORE_WITHOUT_BACKUP のときを除く）。
+# MySQL の GROUP_CONCAT は既定で 1024 バイトで切れる（表は 60 個を超える）ので、先に広げる。
+read -r -d '' my_clear <<'SQL' || true
+SET SESSION group_concat_max_len = 1048576;
+SET FOREIGN_KEY_CHECKS = 0;
+SET @v = (SELECT GROUP_CONCAT('`', table_name, '`') FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'VIEW');
+SET @s = IF(@v IS NULL, 'DO 0', CONCAT('DROP VIEW IF EXISTS ', @v));
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @t = (SELECT GROUP_CONCAT('`', table_name, '`') FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE');
+SET @s = IF(@t IS NULL, 'DO 0', CONCAT('DROP TABLE IF EXISTS ', @t));
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SQL
+# PostgreSQL はダンプと同じトランザクションの中で消す（失敗すれば消したことも取り消される）
+read -r -d '' pg_clear <<'SQL' || true
+DO $$ DECLARE r record; BEGIN
+  FOR r IN SELECT viewname AS n FROM pg_views WHERE schemaname = current_schema() LOOP
+    EXECUTE format('DROP VIEW IF EXISTS %I CASCADE', r.n); END LOOP;
+  FOR r IN SELECT tablename AS n FROM pg_tables WHERE schemaname = current_schema() LOOP
+    EXECUTE format('DROP TABLE IF EXISTS %I CASCADE', r.n); END LOOP;
+  FOR r IN SELECT sequence_name AS n FROM information_schema.sequences WHERE sequence_schema = current_schema() LOOP
+    EXECUTE format('DROP SEQUENCE IF EXISTS %I CASCADE', r.n); END LOOP;
+END $$;
+SQL
+dump_with() { # dump_with <先に流す SQL> … それに続けてダンプの平文を標準出力へ
+    printf '%s\n' "$1"
+    rd db.sql.gz | gunzip -c
+}
 case "$db_engine" in
   postgresql)
     db_port="${db_port:-5432}"
@@ -217,11 +246,11 @@ case "$db_engine" in
     # 残りを流して「完了」と出していた。いまは失敗すれば DB は流す前のまま。
     if [ "$local_db" = 1 ]; then
         echo "[restore] DB を復元しています（手元の db サービス / PostgreSQL）..."
-        rd db.sql.gz | gunzip -c | docker compose exec -T db sh -c \
+        dump_with "$pg_clear" | docker compose exec -T db sh -c \
             'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -q -v ON_ERROR_STOP=1 --single-transaction -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null
     else
         echo "[restore] DB を復元しています（外部 PostgreSQL: ${db_host}:${db_port}）..."
-        rd db.sql.gz | gunzip -c | docker run --rm -i --network "${proj}_backend" -e PGPASSWORD="$(env_get DB_PASSWORD)" "postgres:${pg_ver}-alpine" \
+        dump_with "$pg_clear" | docker run --rm -i --network "${proj}_backend" -e PGPASSWORD="$(env_get DB_PASSWORD)" "postgres:${pg_ver}-alpine" \
             psql -q -v ON_ERROR_STOP=1 --single-transaction -h "$db_host" -p "$db_port" -U "$(env_get DB_USER)" -d "$(env_get DB_NAME)" >/dev/null
     fi
     ;;
@@ -229,11 +258,11 @@ case "$db_engine" in
     db_port="${db_port:-3306}"
     if [ "$local_db" = 1 ]; then
         echo "[restore] DB を復元しています（手元の db サービス）..."
-        rd db.sql.gz | gunzip -c | docker compose exec -T db sh -c \
+        dump_with "$my_clear" | docker compose exec -T db sh -c \
             'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root "$MYSQL_DATABASE"'
     else
         echo "[restore] DB を復元しています（外部: ${db_host}:${db_port}）..."
-        rd db.sql.gz | gunzip -c | docker run --rm -i --network "${proj}_backend" \
+        dump_with "$my_clear" | docker run --rm -i --network "${proj}_backend" \
             -e MYSQL_PWD="$(env_get DB_PASSWORD)" "${mariadb_img}:${mariadb_ver}" \
             mysql -h "$db_host" -P "$db_port" -u "$(env_get DB_USER)" "$(env_get DB_NAME)"
     fi
