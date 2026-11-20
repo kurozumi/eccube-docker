@@ -50,6 +50,7 @@ Docker Desktop は WSL2 の中からも使えます。
 EC-CUBE の案内が来た／新しい版が出た ──▶ 環境を新しくしてから、bin/upgrade.sh（バージョンアップ）
 eccube-docker の新しい版が出た ────────▶ bin/self-update.sh（この仕組みに更新があったとき）
 PHP の脆弱性の案内が来た ──────────────▶ いつもの bin/deploy.sh だけ（翌朝の配布イメージに入っている）
+                                          ※ .env に ECCUBE_IMAGE が無い（手元で build している）なら bin/deploy.sh --rebuild
 自分で直したところを出したい ──────────▶ いつもの bin/deploy.sh（毎日やること）
 ```
 
@@ -214,7 +215,7 @@ bin/deploy.sh --remote=shop:/srv/myshop
 | いつ | 何を | どこで |
 |---|---|---|
 | 月に 1 回くらい | `bin/self-update.sh --check`（上の節） | あなたのパソコン |
-| EC-CUBE の新しい版が出たとき | 先に「この仕組みに更新があったとき」を済ませ、あなたのパソコンで `bin/upgrade.sh ~4.3.0` を試してから、サーバーで `bin/upgrade.sh ~4.3.0 --prod`（[バージョンアップ](upgrade.md)）。**`deploy.sh` ではない**。2 つ目の番号が変わる（4.3 → 4.4）ときはプラグインの作り直しが要るので、制作者に相談 | パソコン → サーバー |
+| EC-CUBE の新しい版が出たとき | 先に「この仕組みに更新があったとき」を済ませ、あなたのパソコンで `bin/upgrade.sh ~4.3.0` を試してから（できれば本番のバックアップを `bin/restore.sh` で戻したうえで）、サーバーで `bin/upgrade.sh ~4.3.0 --prod`。サーバーで表示される「取得したイメージの EC-CUBE」の番号が、パソコンで試したものと同じかを見てから `y`（[バージョンアップ](upgrade.md)）。**`deploy.sh` ではない**。2 つ目の番号が変わる（4.3 → 4.4）ときはプラグインの作り直しが要るので、制作者に相談 | パソコン → サーバー |
 | 毎日（自動） | `bin/backup.sh` を cron に。[バックアップ](backup.md) | サーバー |
 
 ---

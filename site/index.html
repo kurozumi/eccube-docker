@@ -220,7 +220,7 @@
     <p class="sub">EC-CUBE のパッチ（4.3.1 → 4.3.2 など）は、やることが 2 つだけ。プラグインの移植が要るのはメジャー・マイナー（4.3 → 4.4）だけです。</p>
     <div class="steps">
       <div class="step"><div class="num">1</div><h3>環境（eccube-docker）を新しくする</h3><pre>bin/self-update.sh</pre><p>コマンド・compose・スクリプトが新しいリリースに揃う。差分は git で見えるので、何が変わるか分かってから進める。</p></div>
-      <div class="step"><div class="num">2</div><h3>EC-CUBE を上げる</h3><pre>bin/upgrade.sh ~4.3.0 --prod</pre><p>退避 → 新しい EC-CUBE でプラグインが動くかを、お店に触る前に確認 → メンテナンス表示 → migration → 疎通。<strong>途中で失敗したら何も変えずに止まる。</strong></p></div>
+      <div class="step"><div class="num">2</div><h3>EC-CUBE を上げる</h3><pre>bin/upgrade.sh ~4.3.0 --prod</pre><p>退避 → 新しい EC-CUBE でプラグインが動くかを、お店に触る前に確認 → メンテナンス表示 → migration → 疎通。<strong>危ないものを見つけたら、お店に触る前に止まる。</strong></p></div>
     </div>
     <h3 style="font-family:var(--f-display);font-size:20px;margin:36px 0 6px">速い理由は 1 つ。<em class="k">あなたが直したものと EC-CUBE が、別々に更新される</em></h3>
     <p class="sub">EC-CUBE の中身を直接編集した環境は、上げるたびに「どこを直したか」の調査から始まります。ここでは置き場所が最初から分かれています。</p>
@@ -241,7 +241,7 @@
           <li>EC-CUBE と、それが使うライブラリ（vendor）</li>
           <li>PHP、拡張、php-fpm、nginx</li>
         </ul>
-        <p>手で編集しないので、新しいイメージを引き直すだけで新しくなる。<strong>だからパッチが出たその日に当てられる。</strong>EC-CUBE を直接編集した環境ではこれができない。</p>
+        <p>手で編集しないので、PHP は新しいイメージを引き直すだけ（<code>bin/deploy.sh</code>）、EC-CUBE は <code>bin/upgrade.sh</code> が入れ替える（イメージを引くだけでは、動いている EC-CUBE は古いまま）。<strong>だからパッチが出たその日に当てられる。</strong>EC-CUBE を直接編集した環境ではこれができない。</p>
       </div>
     </div>
     <div class="note">
@@ -592,7 +592,7 @@ bin/setup.sh backup --remote=user@サーバー:/srv/myshop</pre></li>
         <h3>EC-CUBE のバージョンアップ</h3>
         <p>例: EC-CUBE 4.3.1 → 4.3.2。<strong>パソコンで試してから、サーバーで上げます。</strong></p>
         <p>時間: お店が止まるのは数分。</p>
-        <div class="keep"><b>そのまま残るもの:</b> 受注・会員・商品・画像、あなたが直したテンプレートや CSS、プラグイン。<br><b>失敗したら:</b> 何も変えずに止まります。そのままのお店が動き続けます。</div>
+        <div class="keep"><b>そのまま残るもの:</b> 受注・会員・商品・画像、あなたが直したテンプレートや CSS、プラグイン。<br><b>止まったら:</b> たいていはお店に触る前に止まり、そのまま動き続けます。DB を変える途中で止まったときはメンテナンス表示のまま止まるので、<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md#4-失敗したとき">失敗したとき</a>の表に沿って戻します（バックアップは自動で取ってあります）。</div>
       </div>
       <ol class="steps-v">
         <li><h4>どの番号が変わるかを見る</h4>
@@ -604,12 +604,13 @@ bin/setup.sh backup --remote=user@サーバー:/srv/myshop</pre></li>
 <p>下の <a href="#flow-env">C</a> を済ませます。古い道具で新しい EC-CUBE を扱わないためです。</p></li>
         <li><h4><span class="where pc">パソコン</span>パソコンで上げて、試す</h4>
 <pre>bin/upgrade.sh ~4.3.0</pre>
-<p><code>~4.3.0</code> は「4.3 の中で一番新しい版」。確認が出たら <code>y</code>。終わったら <code>http://localhost:8080/</code> で、トップ・商品・カート・管理画面を開いてみます。</p></li>
+<p><code>~4.3.0</code> は「4.3 の中で一番新しい版」。<strong>「取得したイメージの EC-CUBE: 4.3.2」と出た番号を控えて</strong> <code>y</code>。終わったら <code>http://localhost:8080/</code> で、トップ・商品・カート・管理画面を開いてみます。</p>
+<p><strong>できれば本番のデータで試します。</strong>本番のバックアップを手元で <code>bin/restore.sh</code> してから上げると、本番にだけ残っているプラグインの列なども、ここで見つかります（<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/backup.md">バックアップ / 復元</a>）。</p></li>
         <li><h4><span class="where srv">サーバー</span>お客さんに告知してから、サーバーで上げる</h4>
 <pre>ssh user@サーバー
 cd /srv/myshop
 bin/upgrade.sh ~4.3.0 --prod</pre>
-<p><strong><code>--prod</code> を必ず付けます。</strong>自動でバックアップを取り、新しい EC-CUBE でプラグインが動くかを、お店に触る前に確かめます。</p></li>
+<p><strong><code>--prod</code> を必ず付けます。</strong>出てきた EC-CUBE の番号が<strong>パソコンで試したものと同じか</strong>を見てから <code>y</code>（違えば <code>n</code> で止め、パソコンで試し直す）。自動でバックアップを取り、新しい EC-CUBE でプラグインが動くかを、お店に触る前に確かめます。</p></li>
         <li><h4><span class="where eye">ブラウザ</span>目で確かめる</h4>
 <p>トップ・商品詳細・カートに入れる・管理画面のログイン・受注一覧。おかしければ <code>bin/plugin.sh doctor</code>。</p></li>
       </ol>
