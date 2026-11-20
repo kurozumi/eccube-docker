@@ -754,10 +754,17 @@ PHP
         esac
     fi
     running="$(docker compose ps --status running --format '{{.Service}}' 2>/dev/null | tr '\n' ' ')"
+    defined="$(docker compose config --services 2>/dev/null | tr '\n' ' ')"
     case "$cprof" in *,redis,*)
-        case " $running " in *" redis "*) echo "[doctor] redis: 有効・起動中" ;;
-            *) echo "[doctor] redis の設定が入っているのに redis コンテナが動いていません（全ページ 500 の原因）"; ng=1 ;;
-        esac ;;
+        if case " $defined " in *" redis "*) false ;; *) true ;; esac; then
+            # 複数ホスト（compose.app.yaml）では Redis は外の共有サービスで、このホストには定義が無い。
+            # 「コンテナが居ない」を異常にすると、アプリホストでは必ず落ちる
+            echo "[doctor] redis: 外部の Redis（REDIS_URL）。このホストには居ません"
+        elif case " $running " in *" redis "*) true ;; *) false ;; esac; then
+            echo "[doctor] redis: 有効・起動中"
+        else
+            echo "[doctor] redis の設定が入っているのに redis コンテナが動いていません（全ページ 500 の原因）"; ng=1
+        fi ;;
     esac
     case "$cprof" in *,messenger,*)
         case " $running " in *" worker "*) echo "[doctor] messenger: 有効・worker 起動中" ;;

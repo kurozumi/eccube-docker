@@ -71,10 +71,10 @@ services:
     # アプリのコンテナに乗らないようにする。EC-CUBE の任意の設定（ECCUBE_COOKIE_LIFETIME、
     # ECCUBE_ADMIN_ALLOW_HOSTS 等）を渡したいときは .env.app に書く（無ければ無視される。
     # 空文字を environment で注入すると本体の既定値を潰すので、あえて別ファイルにしている）。
-    env_file:
+    env_file: &app-env-file
       - path: .env.app
         required: false
-    environment:
+    environment: &app-environment
       APP_ENV: ${APP_ENV:-prod}
       APP_DEBUG: ${APP_DEBUG:-0}
       ECCUBE_AUTH_MAGIC: ${ECCUBE_AUTH_MAGIC:?ECCUBE_AUTH_MAGIC が .env に無い（全パスワードの鍵。bin/init.sh が生成する）}
@@ -94,8 +94,13 @@ services:
       PUID: ${PUID:-}
       PGID: ${PGID:-}
       ECCUBE_LOCALE: ${ECCUBE_LOCALE:-ja}
-      # 前段 LB の IP/サブネットを信頼して X-Forwarded-* を honor（HTTPS 判定に必須）
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # X-Forwarded-Proto（HTTPS 判定に必須）などを信じる相手。**既定は REMOTE_ADDR（直前の相手）。**
+      # LB の IP / サブネットを書いても効かない: このホストの nginx が set_real_ip_from で接続元を
+      # **お客さんの IP に書き換えてから** PHP に渡すので、Symfony から見た相手は LB ではない。
+      # LB の IP を書いていた頃は isSecure() が偽のままで、Cookie に secure が付かなかった。
+      # 前提は「nginx に LB からしか届かない」こと（下の nginx の ports のコメント。HTTP_BIND か
+      # ファイアウォール）。届くなら X-Forwarded-* を詐称できる。
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-REMOTE_ADDR}
       # 外部の共有 Redis（キャッシュ / セッション）
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-}@redis:6379}
       SESSION_REDIS_URL: ${SESSION_REDIS_URL:-redis://:${REDIS_PASSWORD:-}@redis-session:6379}
@@ -113,7 +118,7 @@ services:
       PHP_FPM_MIN_SPARE: ${PHP_FPM_MIN_SPARE:-2}
       PHP_FPM_MAX_SPARE: ${PHP_FPM_MAX_SPARE:-6}
       PHP_FPM_MAX_REQUESTS: ${PHP_FPM_MAX_REQUESTS:-500}
-    volumes:
+    volumes: &app-volumes
       - eccube_app:/var/www/html
       - ./app/Customize:/var/www/html/app/Customize:ro
       # 管理画面が書くので本番でも rw（compose.yaml と同じ理由）
@@ -149,6 +154,45 @@ services:
       timeout: 5s
       retries: 3
       start_period: 180s
+    restart: unless-stopped
+
+  # 非同期メール（Messenger）の worker。.env の COMPOSE_PROFILES に messenger があるときだけ起動する
+  # （設定側の optional/messenger も同じスイッチで入る。compose.yaml と同じ）。**以前はこのファイルに
+  # 無く、messenger を有効にした複数ホストではメールが DB に溜まるだけで届かなかった（エラーなし）。**
+  # 全ホストで動かしてよい（Doctrine のキューは取り合わない）。1 台だけにしたいなら、その他のホストの
+  # COMPOSE_PROFILES から messenger を外さず、worker だけ `docker compose stop worker` する。
+  worker:
+    <<: *hardened
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - KILL
+    pids_limit: 256
+    networks:
+      - backend
+    logging: *default-logging
+    profiles: ["messenger"]
+    image: ${ECCUBE_IMAGE:-eccube-ec-cube}
+    env_file: *app-env-file
+    environment:
+      <<: *app-environment
+      # 共有 var/cache と DB スキーマには触らない（ec-cube が起動時に整えている）
+      ECCUBE_SKIP_DB_INIT: "1"
+      ECCUBE_SKIP_CACHE_CLEAR: "1"
+    volumes: *app-volumes
+    command: ["runuser", "-u", "www-data", "--", "php", "bin/console", "messenger:consume", "async", "--time-limit=3600", "--memory-limit=192M", "--quiet"]
+    depends_on:
+      ec-cube:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "tr '\\0' ' ' < /proc/1/cmdline | grep -q messenger:consume"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
   nginx:
