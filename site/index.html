@@ -267,13 +267,29 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
   </button>
 </div>
 <script>
+// ページを分ける前のリンク（/#howto・/#start・/#flow-eccube など）を、移った先へ
+(function () {
+  var moved = { howto: 'guide.html', start: 'guide.html', 'flow-eccube': 'guide.html', 'flow-env': 'guide.html', support: 'guide.html', patch: 'ops.html', versions: 'ops.html', gate: 'ops.html', scale: 'scale.html' };
+  var h = location.hash.slice(1);
+  if (moved[h]) location.replace(moved[h] + '#' + h);
+})();
+</script>
+<script>
 (function () {
   var fab = document.getElementById('fab');
   var btn = document.getElementById('fab-btn');
   var contact = document.getElementById('contact');
   if (!fab || !btn) return;
   fab.hidden = false;
-  function setOpen(v) { fab.classList.toggle('open', v); btn.setAttribute('aria-expanded', v ? 'true' : 'false'); }
+  var menu = document.getElementById('fab-menu');
+  // 閉じている間はメニューの中に Tab で入れないようにする（見えないリンクにフォーカスが行かない）
+  if (menu) menu.inert = true;
+  function setOpen(v) {
+    if (!v && menu && menu.contains(document.activeElement)) btn.focus();
+    fab.classList.toggle('open', v);
+    btn.setAttribute('aria-expanded', v ? 'true' : 'false');
+    if (menu) menu.inert = !v;
+  }
   btn.addEventListener('click', function () { setOpen(!fab.classList.contains('open')); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
   document.addEventListener('click', function (e) { if (!fab.contains(e.target)) setOpen(false); });

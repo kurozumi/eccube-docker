@@ -232,7 +232,15 @@ bin/upgrade.sh ~4.3.0 --prod</pre>
   var contact = document.getElementById('contact');
   if (!fab || !btn) return;
   fab.hidden = false;
-  function setOpen(v) { fab.classList.toggle('open', v); btn.setAttribute('aria-expanded', v ? 'true' : 'false'); }
+  var menu = document.getElementById('fab-menu');
+  // 閉じている間はメニューの中に Tab で入れないようにする（見えないリンクにフォーカスが行かない）
+  if (menu) menu.inert = true;
+  function setOpen(v) {
+    if (!v && menu && menu.contains(document.activeElement)) btn.focus();
+    fab.classList.toggle('open', v);
+    btn.setAttribute('aria-expanded', v ? 'true' : 'false');
+    if (menu) menu.inert = !v;
+  }
   btn.addEventListener('click', function () { setOpen(!fab.classList.contains('open')); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
   document.addEventListener('click', function (e) { if (!fab.contains(e.target)) setOpen(false); });

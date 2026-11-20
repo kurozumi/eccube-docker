@@ -19,7 +19,9 @@
     color-scheme: light;
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  /* 上のナビに見出しが隠れないように（ページ内リンクで飛んだ先） */
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+  @media (max-width: 720px) { html { scroll-padding-top: 112px; } }
   body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.85; -webkit-font-smoothing: antialiased; }
   a { color: var(--accent-deep); text-decoration-thickness: 1px; text-underline-offset: 3px; }
   a:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
