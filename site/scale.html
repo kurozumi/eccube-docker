@@ -38,7 +38,7 @@
       <li class="layer">
         <div class="lname"><span class="lstep">1</span>CDN<small>Cloudflare</small></div>
         <ul>
-          <li><strong>画像・CSS・JS を、お客さんに近い中継点から配る。</strong>Cloudflare Tunnel で公開していれば、設定なしで効きます。商品画像は 30 日、CSS・JS は 5 分（管理画面で直した CSS がすぐ出るように）。</li>
+          <li><strong>画像・CSS・JS を、お客さんに近い中継点から配る。</strong>Cloudflare Tunnel で公開していれば、設定なしで効きます。商品画像は 30 日、CSS・JS は 5 分（管理画面で直した CSS がすぐ出るように。Cloudflare の画面で Browser Cache TTL を「Respect Existing Headers」にしておく。既定の 4 時間のままだと、ブラウザが古い CSS を持ち続けます）。</li>
           <li>サーバーの 80 / 443 を外に開けずに済みます（入口はトンネルだけ）。</li>
         </ul>
       </li>
@@ -55,14 +55,14 @@
         <ul>
           <li><strong>OPcache を本番向けに</strong>（ファイルの更新を毎回確かめない）。コンパイル済みのコードをメモリから使います。</li>
           <li><strong>同時に処理する数（php-fpm の枠）は <code>.env</code> で変えられる</strong>（既定 20）。<span class="ltag">数字 1 つ</span></li>
-          <li>メールは<strong>非同期で送れる</strong>（Messenger）。メールサーバーが止まっていても、注文の確定は待たされません。<span class="ltag">スイッチ 1 つ</span></li>
+          <li>メールは<strong>非同期で送れる</strong>（Messenger）。worker が動いていれば、メールサーバーが止まっていても注文の確定は待たされません（入れられなかったときは、これまでどおりその場で送ります）。<span class="ltag">スイッチ 1 つ</span></li>
         </ul>
       </li>
       <li class="layer">
         <div class="lname"><span class="lstep">4</span>Redis<small>キャッシュ・ログイン</small></div>
         <ul>
           <li><strong>同じ計算と DB への同じ問い合わせを、キャッシュから返す。</strong><span class="ltag">スイッチ 1 つ</span></li>
-          <li><strong>ログインとカートを Redis に置く</strong>（キャッシュとは別の Redis。あふれても消えない設定）。サーバーを何台に増やしても、同じ人が同じサーバーに当たる必要がありません。<span class="ltag">上と同じスイッチ</span></li>
+          <li><strong>ログインの状態とカートの目印を Redis に置く</strong>（キャッシュとは別の Redis。あふれても消えない設定。カートの中身は DB）。サーバーを何台に増やしても、同じ人が同じサーバーに当たる必要がありません。<span class="ltag">上と同じスイッチ</span></li>
         </ul>
       </li>
       <li class="layer">
@@ -83,7 +83,7 @@
 
     <div class="note">
       <b>強くする前に測る</b>
-      <span>どこが先に詰まるかは店ごとに違うので、<code>bin/loadtest.sh</code>（k6）で「毎秒何 PV」を流して確かめてから、詰まった場所の仕組みを足します。注文は流さず、本番には流れないようにしてあります。下の表が、詰まった場所ごとの打つ手です。</span>
+      <span>どこが先に詰まるかは店ごとに違うので、<code>bin/loadtest.sh</code>（k6）で「毎秒何 PV」を流して確かめてから、詰まった場所の仕組みを足します。注文は流しません。流す先は、本番と切り離した検証環境にしてください（手元以外へはホスト名を打たないと流れないのは、向き先の取り違えを防ぐためで、本番を見分けているわけではありません）。下の表が、詰まった場所ごとの打つ手です。</span>
     </div>
   </div>
 </section>
