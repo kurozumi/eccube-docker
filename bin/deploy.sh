@@ -35,6 +35,8 @@
 #   2. メンテナンス ON        .maintenance を deploy:<token> で作る。ログイン中の管理者は素通り
 #   3. git pull --ff-only    自分のリポジトリから取り込む。衝突したら何も変えずに OFF して止まる
 #   4. docker compose up -d  compose / .env / イメージが変わっていれば作り直す（同じなら何もしない）
+#   4b. 設定ファイル         nginx / caddy の設定が前回と違えば、確かめてから再起動（up -d は作り直さない）。
+#                            DB の設定は再起動が要ることだけを言う
 #   5. migration             app/DoctrineMigrations（CustomizeMigrations）と本体の未適用分
 #   5b. プラグインの DB      ファイルだけ新しくなったプラグインを DB に追いつかせる（bin/plugin.sh sync）。
 #                            版が変わったものは本体の更新処理、エンティティだけ変わったものはスキーマ更新。
@@ -370,6 +372,63 @@ for i in $(seq 1 60); do
     [ "$st" = "healthy" ] && break
     sleep 3
 done
+
+# ── 4b. nginx / caddy / DB の設定ファイル ──
+# **4. の up -d は、bind mount した設定ファイルが変わっても作り直さない**（イメージも compose も同じだから）。
+# nginx は起動のときにしか設定を読まず、1 ファイルの bind mount は Linux ではファイルが入れ替わると古い中身を
+# 見続ける。v1.0.18 で静的ファイルのキャッシュを 30 日 → 5 分にしたとき、deploy しても効かなかった。
+# 前回に当てた設定の指紋を var/deploy-conf/ に置き、違えば確かめてから再起動する（1 秒ほど止まる）。
+# 指紋が無い初回も再起動する（いま動いているのが、どの版の設定か分からないため）。
+# 確かめで落ちたら再起動しない（古い設定の nginx が動き続け、メンテナンス表示のまま止まる）。
+# DB は再起動すると接続が全部切れるので、自分では再起動せず、変わったことだけを言う。
+conf_stamp_dir=var/deploy-conf
+sha256_stdin() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -c1-64; }
+conf_hash() { # conf_hash <ファイル…>（無いものは飛ばす）
+    # ファイルごとに指紋を取り、「名前 指紋」の並びの指紋にする。中身をつないでから取ると、ファイルの
+    # 境目が動いても（a の末尾が b の先頭へ移る）同じ値になり、MariaDB のようにファイルごとに読む設定の変更を見落とす
+    # 無いファイルは飛ばす（&& でつなぐと最後が無いとき失敗で返り、pipefail で deploy が落ちる）。
+    # **読めないファイルは失敗にする。** 空の指紋を記録すると、その後の変更をずっと見落とす
+    local f d
+    for f in "$@"; do
+        [ -f "$f" ] || continue
+        d="$(sha256_stdin < "$f")" || exit 1   # パイプの左側（サブシェル）を抜け、pipefail で失敗が返る
+        printf '%s %s\n' "$f" "$d"
+    done | LC_ALL=C sort | sha256_stdin
+}
+service_running() { [ -n "$("${dc[@]}" ps -q --status running "$1" 2>/dev/null)" ]; }
+apply_proxy_conf() { # apply_proxy_conf <サービス> <設定ファイル> <確かめるコマンド…>
+    local svc="$1" file="$2" now old out stamp="${conf_stamp_dir}/$1.sha256"
+    shift 2
+    [ -f "$file" ] && service_running "$svc" || return 0
+    now="$(conf_hash "$file")" || { echo "[deploy] エラー: ${file} を読めません（持ち主と権限を確かめてください）。" >&2; return 1; }
+    old="$(cat "$stamp" 2>/dev/null || true)"
+    [ "$now" = "$old" ] && return 0
+    log "${svc} の設定（${file}）を当てます。確かめてから再起動します（1 秒ほど止まります）..."
+    if ! out="$("${dc[@]}" run --rm --no-deps -T "$svc" "$@" 2>&1)"; then
+        echo "$out" | grep -v -e '^ *Container ' -e 'docker-entrypoint' | tail -n 20 >&2
+        echo "[deploy] エラー: ${file} に誤りがあります。${svc} は古い設定のまま動いています。直してもう一度 bin/deploy.sh を打ってください。" >&2
+        return 1
+    fi
+    if ! out="$("${dc[@]}" restart "$svc" 2>&1)"; then
+        echo "$out" >&2
+        return 1
+    fi
+    echo "$now" > "$stamp"
+}
+mkdir -p "$conf_stamp_dir"
+apply_proxy_conf nginx docker/nginx/default.conf nginx -t
+apply_proxy_conf caddy docker/caddy/Caddyfile caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+# PostgreSQL の db はこの設定を mount していないので、言わない（再起動しても何も変わらない）
+db_id="$("${dc[@]}" ps -q --status running db 2>/dev/null || true)"
+if [ -n "$db_id" ] && docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$db_id" 2>/dev/null | grep -q '/etc/mysql/conf.d'; then
+    db_now="$(conf_hash docker/mariadb/conf.d/*.cnf)" || { echo "[deploy] エラー: docker/mariadb/conf.d の設定を読めません（持ち主と権限を確かめてください）。" >&2; false; }
+    db_old="$(cat "${conf_stamp_dir}/db.sha256" 2>/dev/null || true)"
+    if [ -n "$db_old" ] && [ "$db_now" != "$db_old" ]; then
+        log "注意: DB の設定（docker/mariadb/conf.d）が変わりました。動いている DB には、再起動するまで効きません。"
+        log "      お客さんの少ない時間に: ${dc[*]} restart db（数秒、接続が切れます）"
+    fi
+    echo "$db_now" > "${conf_stamp_dir}/db.sha256"
+fi
 
 # ── 5. migration ──
 log "migration を適用します..."

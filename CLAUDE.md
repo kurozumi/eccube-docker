@@ -118,7 +118,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **「更新」は 3 つあり、別物。** 自分のコードは `bin/deploy.sh`（毎日）、環境（`bin/` や
   compose）は `bin/self-update.sh`、EC-CUBE 本体は `bin/upgrade.sh`。順番は
   self-update → upgrade。逆にすると新しい本体を古いスクリプトで扱うことになる。
-  `deploy.sh` はボリュームを作り直さず DB も画像も触らない。メンテナンス表示は
+  `deploy.sh` はボリュームを作り直さず DB も画像も触らない。**`up -d` は bind mount の設定ファイルの変更では
+  作り直さない**ので、nginx / caddy は設定の指紋（`var/deploy-conf/`）が違えば `nginx -t` / `caddy validate` の
+  あとで再起動する（v1.0.18 のキャッシュの直しが deploy で効かなかった）。DB は再起動せず注意だけ。メンテナンス表示は
   `deploy:<token>` で立て、失敗したら **OFF にしない**（`doctor` が後始末する）。
   詳細は `docs/distribute.md`。
 - **起動系のスクリプトに `up -d --build` を直接書かない。** 配布イメージを使っている
