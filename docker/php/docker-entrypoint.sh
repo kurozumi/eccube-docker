@@ -254,7 +254,17 @@ entry_maint_on() {
 dump_before_migrate() { # 標準出力へ gzip 前のダンプ
     case "${DB_ENGINE:-mysql}" in
         postgresql)
-            PGPASSWORD="$DB_PASSWORD" pg_dump --clean --if-exists -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" "$DB_NAME" ;;
+            # サーバーと同じ版の pg_dump を使う（古い pg_dump は新しいサーバーを取れず、新しい pg_dump の出力は
+            # 古いサーバーに戻せないことがある）。イメージには 14〜17 が入っている（Dockerfile）
+            local num major bin
+            num="$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -tAc 'SHOW server_version_num' 2>/dev/null | tr -d ' ')" || return 1
+            major="$(( ${num:-0} / 10000 ))"
+            bin="/usr/lib/postgresql/${major}/bin/pg_dump"
+            if [ ! -x "$bin" ]; then
+                log "注意: PostgreSQL ${major} の pg_dump がイメージにありません（入っているのは $(ls /usr/lib/postgresql 2>/dev/null | tr '\n' ' ')）。"
+                return 1
+            fi
+            PGPASSWORD="$DB_PASSWORD" "$bin" --clean --if-exists -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" "$DB_NAME" ;;
         *)
             MYSQL_PWD="$DB_PASSWORD" mysqldump --single-transaction --triggers --no-tablespaces \
                 -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" "$DB_NAME" ;;
@@ -303,7 +313,6 @@ migrate_installed() {
        ! gunzip -c "$out" | tail -c 1024 | grep -qE -- '-- (PostgreSQL database dump complete|Dump completed)'; then
         rm -f "$rcf" "$out"
         log "エラー: DB を取れなかったので、migration は流しません（取れないまま流すと、失敗したときに戻せない）。"
-        log "  （PostgreSQL 16 以上は、イメージの pg_dump（15）では取れません。bin/deploy.sh で反映してください）"
         entry_maint_on
         log "bin/deploy.sh で反映してください（先に退避してから流します。終われば表示も外れます）。"
         return 0

@@ -202,8 +202,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   流さない（deploy が退避してから流す。同時に流すと二重に当たる）。未適用があれば `var/migrate-backup/` へダンプしてから
   流し、成功したらダンプは消す。取れない・失敗したらメンテナンス表示（`entrypoint:`）にして止める。表示は、後の起動で
   未適用が無くなっていれば entrypoint が外し、`deploy.sh` の成功でも外れる（`doctor` は外さない）。
-  **イメージの `pg_dump` は Debian の 15 で、16 以上のサーバーは取れない**（取れない側に倒れてメンテナンスになる。
-  PostgreSQL は deploy.sh で反映する）。**entrypoint は `/bin/sh`（dash）で `pipefail` が無い。**
+  **PostgreSQL のクライアントは PGDG から 14〜17 を全部入れ、サーバーと同じ版の pg_dump を使う**（古い pg_dump は新しい
+  サーバーを取れず、新しい pg_dump の出力は古いサーバーに戻せないことがある。Debian の 15 だけだった頃は、既定の 16 で
+  毎回メンテナンス表示になっていた）。選べる版（PG_VERSION）を増やしたら Dockerfile にも足す。**entrypoint は `/bin/sh`（dash）で `pipefail` が無い。**
   **メンテナンス表示はそのホストのボリュームにしか無い**ので、複数ホストのアプリホストは守れない。
 - **`bin/upgrade.sh` は失敗したら自動で元の版に戻す。** 止める前に `.env` を `var/upgrade/env.before` へ写し、
   動いているイメージの ID を控え、**メンテナンス表示の中で**バックアップ（`-before-upgrade`）を取り、本体ボリュームを
