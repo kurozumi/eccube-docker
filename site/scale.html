@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>大規模アクセス | eccube-docker</title>
-<meta name="description" content="負荷試験、CDN、Redis、php-fpm の枠、複数サーバーとロードバランサー、DB。">
+<meta name="description" content="アクセスを受け止める仕組み（CDN・nginx・PHP・Redis・DB・ロードバランサー）と、測ってから強くする手順。">
 <meta property="og:title" content="eccube-docker — EC-CUBE 4 の運用を、いつもの 1 コマンドに">
 <meta property="og:description" content="インストール・バージョンアップ・サーバー移転・引き継ぎ。EC-CUBE 4 で止まりがちな 4 つを、手順ではなくコマンドにした Docker 環境。">
 <meta property="og:type" content="website">
@@ -28,6 +28,65 @@
     <p class="lede">どこが先に詰まるかを測り、詰まった場所に合う手を、安くて効く順に打ちます。</p>
   </div>
 </header>
+
+<section id="mechanism">
+  <div class="wrap">
+    <h2>アクセスを受け止める<em class="k">仕組み</em></h2>
+    <p class="sub">お客さんの 1 回のアクセスが通る順に、それぞれの場所で効いている仕組みです。印の付いていないものは、何もしなくても最初から効いています。</p>
+
+    <ol class="layers">
+      <li class="layer">
+        <div class="lname"><span class="lstep">1</span>CDN<small>Cloudflare</small></div>
+        <ul>
+          <li><strong>画像・CSS・JS を、お客さんに近い中継点から配る。</strong>Cloudflare Tunnel で公開していれば、設定なしで効きます。商品画像は 30 日、CSS・JS は 5 分（管理画面で直した CSS がすぐ出るように）。</li>
+          <li>サーバーの 80 / 443 を外に開けずに済みます（入口はトンネルだけ）。</li>
+        </ul>
+      </li>
+      <li class="layer">
+        <div class="lname"><span class="lstep">2</span>nginx<small>入口</small></div>
+        <ul>
+          <li><strong>静的ファイルは PHP を通さずに返す</strong>（圧縮とキャッシュの指示つき）。</li>
+          <li><strong>ログインとパスワード再発行に回数制限</strong>（1 つの IP から 1 分に 10 回）。総当たりで PHP が埋まりません。</li>
+          <li>PHP を複数並べたとき（<code>--scale</code>）は、その間で振り分けます。</li>
+        </ul>
+      </li>
+      <li class="layer">
+        <div class="lname"><span class="lstep">3</span>PHP<small>php-fpm</small></div>
+        <ul>
+          <li><strong>OPcache を本番向けに</strong>（ファイルの更新を毎回確かめない）。コンパイル済みのコードをメモリから使います。</li>
+          <li><strong>同時に処理する数（php-fpm の枠）は <code>.env</code> で変えられる</strong>（既定 20）。<span class="ltag">数字 1 つ</span></li>
+          <li>メールは<strong>非同期で送れる</strong>（Messenger）。メールサーバーが止まっていても、注文の確定は待たされません。<span class="ltag">スイッチ 1 つ</span></li>
+        </ul>
+      </li>
+      <li class="layer">
+        <div class="lname"><span class="lstep">4</span>Redis<small>キャッシュ・ログイン</small></div>
+        <ul>
+          <li><strong>同じ計算と DB への同じ問い合わせを、キャッシュから返す。</strong><span class="ltag">スイッチ 1 つ</span></li>
+          <li><strong>ログインとカートを Redis に置く</strong>（キャッシュとは別の Redis。あふれても消えない設定）。サーバーを何台に増やしても、同じ人が同じサーバーに当たる必要がありません。<span class="ltag">上と同じスイッチ</span></li>
+        </ul>
+      </li>
+      <li class="layer">
+        <div class="lname"><span class="lstep">5</span>DB・画像<small>MariaDB / PostgreSQL</small></div>
+        <ul>
+          <li><strong>DB の設定は EC-CUBE 向けに調整済み</strong>（メモリの使い方、接続数）。マネージド DB へは <code>bin/setup.sh db</code> で移せます。<span class="ltag">スイッチ 1 つ</span></li>
+          <li><strong>商品画像はアプリと別の置き場</strong>にあり、NFS / EFS へ差し替えれば全サーバーで共有できます。</li>
+        </ul>
+      </li>
+      <li class="layer wide">
+        <div class="lname"><span class="lstep">+</span>サーバーを並べる<small>ロードバランサー</small></div>
+        <ul>
+          <li><strong>アプリだけを動かす構成（<code>compose.app.yaml</code>）を何台でも並べ、前にロードバランサーを置けます。</strong>DB・Redis・画像は共有。<span class="ltag multi">台数を増やすとき</span></li>
+          <li>反映は 1 台ずつ（止めずに更新）、EC-CUBE を上げるときだけ全台を止めます。手順は<a href="#multihost">下の「複数のサーバーに分ける」</a>。</li>
+        </ul>
+      </li>
+    </ol>
+
+    <div class="note">
+      <b>強くする前に測る</b>
+      <span>どこが先に詰まるかは店ごとに違うので、<code>bin/loadtest.sh</code>（k6）で「毎秒何 PV」を流して確かめてから、詰まった場所の仕組みを足します。注文は流さず、本番には流れないようにしてあります。下の表が、詰まった場所ごとの打つ手です。</span>
+    </div>
+  </div>
+</section>
 
 <section id="scale">
   <div class="wrap">
