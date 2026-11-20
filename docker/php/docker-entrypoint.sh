@@ -267,20 +267,36 @@ else
     #   DB に店があり、印がある           → インストール済み（migration とキャッシュ）
     #   DB に店があり、印が無い           → install しない。印を置いて migration へ（新しいホスト・作り直したボリューム）
     #   DB に店があり、失敗の印の指紋が同じ → このボリュームが作りかけた DB なので install をやり直す
+    #   DB に店があり、失敗の印があるが指紋が読めない → 何もしない（install も印もなし。次の起動でまた見る）
     #   DB に繋がらない                   → install しない（印があれば、今までどおり migration とキャッシュへ）
     shop=0; db_has_shop || shop=$?
-    do_install=0
+    do_install=0; hold=0
     if [ "$shop" = 1 ]; then
         do_install=1
     elif [ "$shop" = 0 ] && [ -f "$INSTALL_FAILED" ]; then
-        if [ "$(cat "$INSTALL_FAILED" 2>/dev/null)" = "$(db_shop_stamp)" ]; then
-            log "前回このボリュームで途中まで進んだインストールを、最初からやり直します（DB はそのときのまま）。"
-            do_install=1
-        else
-            log "前回のインストールは途中で失敗しましたが、そのあと DB が変わっています（別のホストが店を作った可能性）。"
-            log "消してしまわないよう、eccube:install はやり直しません。"
-            rm -f "$INSTALL_FAILED"
-        fi
+        # 指紋は**両方とも読めたときだけ**比べる。どちらかが読めない（unknown）なら、同じ DB だとも
+        # 違う DB だとも言えないので、install もしないし失敗の印も消さない（次の起動でまた見る）。
+        saved="$(cat "$INSTALL_FAILED" 2>/dev/null || true)"
+        cur="$(db_shop_stamp)"
+        case "$saved|$cur" in
+            stamp:?*\|stamp:?*)
+                if [ "$saved" = "$cur" ]; then
+                    log "前回このボリュームで途中まで進んだインストールを、最初からやり直します（DB はそのときのまま）。"
+                    do_install=1
+                else
+                    log "前回のインストールは途中で失敗しましたが、そのあと DB が変わっています（別のホストが店を作った可能性）。"
+                    log "消してしまわないよう、eccube:install はやり直しません。"
+                    rm -f "$INSTALL_FAILED"
+                fi ;;
+            stamp:*\|stamp:?*)
+                # 失敗した時点では店の表が無かったのに、いまはある → 別のホストが作った
+                log "前回のインストールは途中で失敗しましたが、そのあと別のところで店の表が作られています。"
+                log "消してしまわないよう、eccube:install はやり直しません。"
+                rm -f "$INSTALL_FAILED"
+                ;;
+            *)
+                hold=1 ;;
+        esac
     fi
     if [ "$do_install" = 1 ]; then
         log "eccube:install（初回セットアップ）"
@@ -300,6 +316,10 @@ else
             db_shop_stamp > "$INSTALL_FAILED"
             log "eccube:install が失敗しました。ログを確認してください。直して起動し直すと、最初からやり直します。"
         fi
+    elif [ "$hold" = 1 ]; then
+        log "エラー: 前回のインストールが途中で失敗しています。DB が同じものかを確かめられなかったので、"
+        log "消してしまわないよう eccube:install は打たず、インストール済みの印も置きません（起動し直すとまた確かめます）。"
+        log "DB に繋がるようにして起動し直してください。それでも続くなら、DB を空にしてから起動し直すと最初からインストールします。"
     elif [ "$shop" = 2 ] && [ ! -f "$MARKER" ]; then
         log "エラー: DB に店があるかを確かめられませんでした（繋がらない）。消してしまわないよう、eccube:install は打ちません。"
         log "DB の設定（DB_HOST / DB_USER / DB_PASSWORD / DB_NAME）を確かめて、コンテナを起動し直してください。"
