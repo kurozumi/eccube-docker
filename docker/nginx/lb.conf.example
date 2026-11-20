@@ -1,7 +1,8 @@
 # 自前運用の外部ロードバランサ（別ホスト/別コンテナの nginx）の設定例。
 # 複数のアプリホスト（各ホストで compose.app.yaml を起動）へ振り分ける。
 # クラウドの Cloudflare Load Balancing / AWS ALB を使う場合はこのファイルは不要
-# （それぞれのダッシュボードで同じことを設定する。README 参照）。
+# （それぞれのダッシュボードで同じことを設定する。docs/scale.md「複数ホスト + ロードバランサ」）。
+# ホストを 1 台ずつ更新するときは、その行に down を付けて nginx -s reload する。
 #
 # 使い方の例（LB ホストで）:
 #   docker run -d --name eccube-lb -p 80:80 -p 443:443 \
@@ -11,9 +12,10 @@
 upstream eccube_app_hosts {
     # セッションは Redis 共有なのでスティッキー不要。接続数最少のホストへ回す。
     least_conn;
-    server 10.0.0.11:80 max_fails=3 fail_timeout=10s;
-    server 10.0.0.12:80 max_fails=3 fail_timeout=10s;
-    # server 10.0.0.13:80 max_fails=3 fail_timeout=10s;
+    # 各アプリホストの nginx（compose.app.yaml の HTTP_PORT。既定 8080）
+    server 10.0.0.11:8080 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:8080 max_fails=3 fail_timeout=10s;
+    # server 10.0.0.13:8080 max_fails=3 fail_timeout=10s;
     keepalive 32;
 }
 
@@ -44,8 +46,9 @@ server {
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Host  $host;
         proxy_set_header X-Forwarded-Port  $server_port;
-        # ↓ アプリ側が HTTPS を認識するために必須。あわせて各アプリホストの
-        #   .env に TRUSTED_PROXIES=<この LB の IP/サブネット> を設定すること。
+        # ↓ アプリ側が HTTPS を認識するために必須。各アプリホストの TRUSTED_PROXIES は
+        #   既定（REMOTE_ADDR）のままにする。LB のサブネットを書くと HTTPS と判定されない
+        #   （各ホストの nginx がお客さんの IP に置き換えて渡すため。docs/scale.md「HTTPS の判定」）。
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_next_upstream error timeout http_502 http_503;
     }
