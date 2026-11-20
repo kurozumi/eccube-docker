@@ -88,16 +88,18 @@ guard_destructive() {
 
 # 消す直前に、いまの DB・画像・ファイルを backups/<日時>-before-<名前>/ へ取る。取れなければ止める。
 #   guard_backup_before_destroy <名前（英小文字・数字・-）>
-# **DB のボリュームが無ければ取らない**（消えるものが無い）。止まっているスタックでは DB に繋がらず
+# **このプロジェクトのボリュームが 1 つも無ければ取らない**（消えるものが無い）。止まっているスタックでは DB に繋がらず
 # 取れないので、そのときは「db を起こしてから」と言って止める。取らずに消すのは
 # DESTROY_WITHOUT_BACKUP=<プロジェクト名> のときだけ。
 guard_backup_before_destroy() {
-    local label="$1" proj engine vol
+    local label="$1" proj vols
     proj="$(guard_project_name)"
-    engine="$(grep -E '^DB_ENGINE=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
-    case "$engine" in postgresql) vol="${proj}_pg_data" ;; *) vol="${proj}_db_data" ;; esac
-    if ! docker volume inspect "$vol" >/dev/null 2>&1; then
-        echo "[${label}] DB のボリューム（${vol}）がまだ無いので、退避は取りません。"
+    # **このプロジェクトのボリュームが 1 つでもあれば取る。** DB のボリュームだけを見ていると、外部 DB の店
+    # （compose.externaldb.yaml・compose.app.yaml。手元に DB のボリュームが無い）で「消えるものが無い」と
+    # 判断し、画像（eccube_upload）を退避なしで消していた
+    vols="$(docker volume ls -q --filter "label=com.docker.compose.project=${proj}" 2>/dev/null || true)"
+    if [ -z "$vols" ]; then
+        echo "[${label}] このプロジェクト（${proj}）のボリュームがまだ無いので、退避は取りません。"
         return 0
     fi
     if [ -n "${DESTROY_WITHOUT_BACKUP:-}" ]; then

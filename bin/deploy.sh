@@ -296,7 +296,16 @@ on_fail() {
 # **表示を先に立ててから退避を取る。** 逆だと、取ってから表示までの間に入った注文が退避に無く、
 # migration が壊れて退避から戻したときに、その注文が消える。
 maint_on
+# 退避の途中で Ctrl-C・ssh の切断があっても、表示を出しっぱなしにしない（まだ何も変えていない）
+backup_interrupted() {
+    trap - INT TERM HUP
+    rm -f "${bk_result:-}"
+    maint_off
+    deploy_record "${planned:-?}" "$([ -d .git ] && echo pull || echo push)" "$by" "failed${sent_note:-} (backup interrupted)"
+    die "退避の途中で止められました。何も変えていません。"
+}
 if [ "$do_backup" = 1 ]; then
+    trap backup_interrupted INT TERM HUP
     log "退避します（DB・画像・管理画面が書いたファイル）..."
     # **出力を捨てない。** backup.sh は「管理画面が書いたのにコミットされていないファイル」を
     # 挙げる。deploy はそれを上書きしない（pull は同じファイルを触らない限り通る）が、
@@ -306,7 +315,9 @@ if [ "$do_backup" = 1 ]; then
     if ! out="$(BACKUP_LABEL=deploy BACKUP_RESULT_FILE="$bk_result" bin/backup.sh 2>&1)"; then
         printf '%s\n' "$out" | tail -5 >&2
         rm -f "$bk_result"
+        trap - INT TERM HUP
         maint_off
+        deploy_record "${planned:-?}" "$([ -d .git ] && echo pull || echo push)" "$by" "failed${sent_note:-} (backup)"
         die "退避に失敗しました。何も変えていません。bin/backup.sh を単体で打って原因を見てください。"
     fi
     if printf '%s\n' "$out" | grep -q 'コミットされていない変更'; then
@@ -314,6 +325,7 @@ if [ "$do_backup" = 1 ]; then
         log "  手元へ取り込むには（あなたのパソコンで）: bin/pull-admin-files.sh <host>:<path>"
     fi
     backup_dir="$(cat "$bk_result")"; rm -f "$bk_result"
+    trap - INT TERM HUP
     log "退避先: ${backup_dir}"
 fi
 trap on_fail ERR

@@ -53,8 +53,9 @@ echo "[switch] ECCUBE_VERSION=${ver} に切り替えます。既存の DB とア
 echo "[switch] 注意: アップロード画像（eccube_upload）も削除されます（消す前に backups/ へ退避します）。"
 echo "         （NFS/EFS ドライバで運用していれば外部データは消えません）"
 guard_destructive switch-version.sh "DB・アップロード画像・セッション"
-# .env を書き換える前に取る（退避の host.env を切り替える前のものにするため。取れなければ何も変えずに止まる）
-guard_backup_before_destroy switch-version
+# 退避は消す直前に取る（イメージの用意は数分かかりうるので、先に取るとその間の変更が退避から漏れる）。
+# 退避の host.env は切り替える前のものにしたいので、.env をここで写しておき、取るときだけ戻す。
+env_before="$(mktemp)"; cp -p .env "$env_before"
 
 current="$(grep -E '^ECCUBE_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
 current_redis="$(grep -E '^PHPREDIS_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
@@ -131,7 +132,14 @@ if ! image_provision docker compose; then
     exit 1
 fi
 
-# ビルドが通ってから破棄する（退避は .env を書き換える前に取ってある）。
+# ビルドが通ってから、退避を取って破棄する（取れなければ .env を戻して止まる）。
+env_new="$(mktemp)"; cp -p .env "$env_new"; cp -p "$env_before" .env
+if ! ( guard_backup_before_destroy switch-version ); then
+    echo "[switch] .env は切り替える前のままにしてあります。" >&2
+    rm -f "$env_new" "$env_before"
+    exit 1
+fi
+cp -p "$env_new" .env; rm -f "$env_new" "$env_before"
 docker compose down -v
 docker compose up -d
 echo "[switch] 完了。進捗: docker compose logs -f ec-cube"
