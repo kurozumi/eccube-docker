@@ -81,7 +81,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `bin/deploy.sh` は v1.0.16 まで ec-cube しか pull しておらず、nginx は最初に引いた日の版で
   止まっていた。いまは `pull --ignore-buildable` で全部引き直す。
   **保守が終わった系列はタグを追っても直らない**（`nginx:1.27-alpine` は 2025-04 から作り直されず、
-  NGINX2Root の修正が届かなかった）。あえて配る保守終了の版は `.github/security-accept.json` に理由と期限を書く。
+  NGINX2Root の修正が届かなかった）。あえて配る保守終了の版は `.github/security-accept.json` の `accept` に理由と期限を書く。
+  **上流がまだ直していない CVE は `vuln` に、イメージ・パッケージ・番号で並べて期限付きで受け入れる**（番号に無い CVE や
+  期限切れはまた挙がる）。`compose.override.yaml` にだけ出てくる開発用のイメージは「参考」に回す。
 - **Dockerfile の `apt-get upgrade` を外さない。** 土台の `php:8.1` は EOL で二度と焼き直されず、
   upgrade 無しだと Debian の修正済み CVE が数百件残ったまま毎週配ることになる（v1.0.3 の Trivy）。
   vendor の advisories（twig / composer / symfony、4.2・4.3 で 31 件）は EC-CUBE 側の lock で、
