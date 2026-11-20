@@ -25,7 +25,7 @@
   <div class="wrap">
     <p class="eyebrow">eccube-docker · __TAG__</p>
     <h1>大規模アクセス</h1>
-    <p class="lede">どこが先に詰まるかを測り、詰まった場所に合う手を、安くて効く順に打ちます。</p>
+    <p class="lede">どの規模まで受け止められるか、どこが先に詰まるかを測り、詰まった場所に合う手を、安くて効く順に打ちます。</p>
   </div>
 </header>
 
@@ -84,6 +84,67 @@
     <div class="note">
       <b>強くする前に測る</b>
       <span>どこが先に詰まるかは店ごとに違うので、<code>bin/loadtest.sh</code>（k6）で「毎秒何 PV」を流して確かめてから、詰まった場所の仕組みを足します。注文は流しません。流す先は、本番と切り離した検証環境にしてください（手元以外へはホスト名を打たないと流れないのは、向き先の取り違えを防ぐためで、本番を見分けているわけではありません）。下の表が、詰まった場所ごとの打つ手です。</span>
+    </div>
+  </div>
+</section>
+
+<section id="size">
+  <div class="wrap">
+    <h2>どの<em class="k">規模</em>まで受け止められるか</h2>
+    <p class="sub">1 日の PV を 1 秒あたりに直し、混む時間（平均のおよそ 4 倍）でどれだけ来るかを見ます。サーバー 1 台で受けられる量は<strong>推定</strong>です（下の「正直に」）。</p>
+
+    <div class="tablewrap">
+      <table class="stack">
+        <tr><th>1 日の PV</th><th>混む時間の毎秒 PV</th><th>構成の目安</th><th>この環境で</th></tr>
+        <tr><td><strong>10 万</strong></td><td data-label="混む時間の毎秒 PV">約 5</td><td data-label="構成の目安">サーバー 1 台</td><td data-label="この環境で">余裕</td></tr>
+        <tr><td><strong>100 万</strong></td><td data-label="混む時間の毎秒 PV">約 50</td><td data-label="構成の目安">強めの 1 台 + Redis + CDN。足りなければアプリを 2 台に</td><td data-label="この環境で">範囲内</td></tr>
+        <tr><td><strong>1,000 万</strong></td><td data-label="混む時間の毎秒 PV">約 500</td><td data-label="構成の目安">アプリのサーバー 10〜20 台 + 大きなマネージド DB。ページを使い回せるようにテーマを作り直す</td><td data-label="この環境で">挑戦できる上限</td></tr>
+        <tr><td><strong>1 億</strong></td><td data-label="混む時間の毎秒 PV">約 5,000</td><td data-label="構成の目安">作りそのものを変える（下）</td><td data-label="この環境で"><strong>範囲外</strong></td></tr>
+      </table>
+    </div>
+
+    <div class="two" style="margin-top:28px">
+      <div class="box"><h3>数え方</h3><ul>
+        <li>平均の毎秒 PV = 1 日の PV ÷ 86,400 秒（1 億なら約 1,200）。</li>
+        <li>混む時間は平均のおよそ 4 倍。セールやテレビの直後は、さらに何倍にもなります。</li>
+        <li>PV は「ページの表示」の数です。画像・CSS・JS は CDN が受けるので、ここには数えていません。</li>
+      </ul></div>
+      <div class="box no"><h3>1 億 PV で壁になるもの</h3><ul>
+        <li><strong>ページを使い回せない</strong>: 商品ページに人ごとのカート・ログイン・トークンが入るので、毎回 PHP で作ることになります。</li>
+        <li><strong>DB が 1 台</strong>: 1 ページで何十回も問い合わせるので、毎秒数十万回になり、いちばん大きい DB でも足りません。EC-CUBE は読み取り用の複製を使えません。</li>
+        <li><strong>セールの殺到</strong>: 強くするだけでは受け切れず、入場待ちの列（Cloudflare Waiting Room など）で絞ることになります。</li>
+      </ul></div>
+    </div>
+
+    <p style="margin-top:20px">1 億 PV を本当にやるなら、画面を作る部分と注文を受ける部分を分け（ヘッドレス）、商品ページは CDN から配って人ごとの部分だけを後から取りに行き、検索は専用の検索エンジンへ、DB はデータの種類ごとに分けます。日本でも最大級の通販サイトの規模で、EC-CUBE を土台にするかどうかから考え直す話になります。</p>
+
+    <div class="note">
+      <b>正直に</b>
+      <span>実際に測れたのは、手元の Mac（8 CPU、サンプルデータ）で毎秒 20 PV までです。本番の大きなサーバー 1 台で毎秒 30〜50 PV と見込んでいますが、本番と同じ形の環境ではまだ測っていません。プラグインとデータの量で大きく変わるので、自分の店の数字は、検証環境で <code>bin/loadtest.sh</code> を流して確かめてください。</span>
+    </div>
+
+    <h3 style="font-family:var(--f-display);font-size:20px;margin:48px 0 6px">よくある疑問</h3>
+    <div class="two faq">
+      <div class="box"><h3>DB も複数台に分けるの？</h3><ul>
+        <li><strong>分けません。1 台のまま大きくします。</strong>増やすのはアプリのサーバーだけで、全台が同じ DB を見ます。</li>
+        <li>読み取り用の複製（リードレプリカ）は、EC-CUBE がリクエストのたびに書き込み用の接続を使うので効きません。データを複数の DB に分けるのも、EC-CUBE の作りでは現実的ではありません。</li>
+        <li>DB が詰まったら、遅い SQL を直す → Redis で問い合わせを減らす → DB を大きくする、の順です。</li>
+      </ul></div>
+      <div class="box"><h3>1 台で動いている店から、途中で分けられる？</h3><ul>
+        <li><strong>分けられます。部品を 1 つずつ、別の日に外へ出します。</strong></li>
+        <li>DB（<code>bin/setup.sh db</code>）→ Redis（<code>.env</code> を書き換える）→ 商品画像（NFS / EFS）→ アプリのサーバーを足して LB を置く、の順。</li>
+        <li>アプリを増やすときは、先に今のサーバーの前に LB を置き、そこへ 2 台目を足すので、止めずにできます。</li>
+      </ul></div>
+      <div class="box"><h3>お店が止まる時間は？</h3><ul>
+        <li>毎日の反映・PHP の更新: 複数台なら <strong>0</strong>（1 台ずつ LB から外して反映）。</li>
+        <li>EC-CUBE 本体の更新: <strong>数分</strong>。古い版と新しい版を同時に動かせないので、全台を止めます。</li>
+        <li>DB を外へ移す（1 回だけ）: <strong>数分〜数十分</strong>（データの量しだい）。Redis を入れる瞬間は止まりませんが、全員ログアウトになります。</li>
+      </ul></div>
+      <div class="box"><h3>AWS を使えば考えなくてよくなる？</h3><ul>
+        <li><strong>減るのは「機械の面倒を見る手間」で、「どう分けるか」は残ります。</strong></li>
+        <li>任せられる: DB のバックアップと故障時の切り替え（RDS）、Redis（ElastiCache）、画像の共有（EFS）、LB と証明書（ALB）。</li>
+        <li>残る: DB は 1 台のまま。ログイン・画像・管理画面が書くファイルを共有する設計。EC-CUBE の更新は全台を止める。台数の自動の増減は、この環境の docker compose のままではできません（ECS などへの載せ替えが要る）。料金も上がります。</li>
+      </ul></div>
     </div>
   </div>
 </section>
