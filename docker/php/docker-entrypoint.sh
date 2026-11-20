@@ -194,6 +194,21 @@ db_ready() {
             php -r 'exit(@mysqli_connect(getenv("DB_HOST"), getenv("DB_USER"), getenv("DB_PASSWORD"), getenv("DB_NAME"), (int) (getenv("DB_PORT") ?: 3306)) ? 0 : 1);' 2>/dev/null ;;
     esac
 }
+# DB にもう店があるか（EC-CUBE の表 dtb_base_info があるか）。0 = ある、1 = 無い、2 = 分からない（繋がらない）。
+# **eccube:install は最初に doctrine:schema:drop --force を打ち、全部の表を消してから作り直す。**
+# 印（var/.eccube_installed）はボリュームの中にしか無いので、ボリュームが新しいだけで DB には店がある
+# ことがある（複数ホストで新しいホストを init ロールにした、アプリのボリュームだけ作り直した、など）。
+# そのまま install すると、受注も会員も消える。だから install の前にここを見る。
+db_has_shop() {
+    local out
+    case "${DB_ENGINE:-mysql}" in
+        postgresql)
+            out="$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT to_regclass('dtb_base_info') IS NOT NULL" 2>/dev/null)" || return 2 ;;
+        *)
+            out="$(php -r '$c = @mysqli_connect(getenv("DB_HOST"), getenv("DB_USER"), getenv("DB_PASSWORD"), getenv("DB_NAME"), (int) (getenv("DB_PORT") ?: 3306)); if (!$c) { exit(2); } $r = mysqli_query($c, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '"'"'dtb_base_info'"'"'"); if (!$r) { exit(2); } echo mysqli_fetch_row($r)[0] > 0 ? "t" : "f";' 2>/dev/null)" || return 2 ;;
+    esac
+    case "$out" in t) return 0 ;; f) return 1 ;; *) return 2 ;; esac
+}
 until db_ready; do
     i=$((i + 1))
     if [ "$i" -ge 60 ]; then
@@ -226,6 +241,19 @@ if [ "${ECCUBE_SKIP_DB_INIT:-0}" = "1" ]; then
         log "app ロール: DB 初期化/マイグレーションをスキップ（cache:clear のみ）"
         clear_twig_runtime
         runuser -u www-data -- php bin/console cache:clear --no-interaction || true
+    fi
+elif [ ! -f "$MARKER" ] && { db_has_shop; shop=$?; [ "$shop" != 1 ]; }; then
+    # 印は無いが、DB に店がある（0）か、確かめられない（2）。**install しない。**
+    if [ "$shop" = 0 ]; then
+        log "DB にはもう店があります（dtb_base_info）。eccube:install は打ちません（打つと全部の表を消して作り直します）。"
+        log "インストール済みとして扱い、未適用の migration を適用します。"
+        touch "$MARKER"
+        runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true
+        clear_twig_runtime
+        runuser -u www-data -- php bin/console cache:clear --no-interaction || true
+    else
+        log "エラー: DB に店があるかを確かめられませんでした（繋がらない）。消してしまわないよう、eccube:install は打ちません。"
+        log "DB の設定（DB_HOST / DB_USER / DB_PASSWORD / DB_NAME）を確かめて、コンテナを起動し直してください。"
     fi
 elif [ ! -f "$MARKER" ]; then
     log "eccube:install（初回セットアップ）"

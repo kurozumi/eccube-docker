@@ -315,6 +315,11 @@ DB が外部になっても `bin/backup.sh` はそのまま使える（`db` サ�
 3. **スキーマ移行は 1 台だけ**: どこか 1 台を `ECCUBE_SKIP_DB_INIT=0` で起動して
    `migrate` を済ませ、以降の app ホストは `ECCUBE_SKIP_DB_INIT=1`（既定）で起動する
    （全台が一斉に migrate すると競合するため）。
+   **v1.0.19 までの配布イメージでは、DB に店がある状態で新しいホスト（新しいボリューム）を
+   `ECCUBE_SKIP_DB_INIT=0` で起動すると、`eccube:install` が共有の DB の表を全部消して作り直す。**
+   v1.0.20 からは、起動時に DB に店（`dtb_base_info`）があれば install せずに migration へ回る
+   （繋がらなくて確かめられないときも install しない）。古いイメージのままなら、init ロールは
+   最初にデータを入れた 1 台から動かさないこと。
 4. **前段の LB**:
    - 自前 nginx: `docker/nginx/lb.conf.example` を参照（`upstream` に各 app ホストを列挙）。
    - Cloudflare Load Balancing: 各 app ホスト（の nginx:80/443）をオリジンプールに登録。
