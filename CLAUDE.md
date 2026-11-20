@@ -194,6 +194,15 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   向こうが**止まっていて判定できないときは本番として扱う**（guard.sh と同じ）。開発/検証サーバーには
   掛からない。GitHub 側の PR 必須・承認必須は `bin/setup.sh protect`（**非公開リポジトリは有料プラン**が
   要る。無料なら 403 で止まり、手元とサーバーの壁だけになる）。詳細は `docs/deploy.md`。
+- **起動時の migration は、未適用が確かにあるときだけ、DB を取ってから流す。** entrypoint は DB に繋がるかと
+  `doctrine:migrations:up-to-date` の出力（`Out-of-date`）で見る。**確かめられない（DB が起きていない・コンソールが
+  起動しない）ときは何もしない**（メンテナンスにもしない。次の起動でまた見る）。`deploy.sh` の最中（`deploy:` の表示）も
+  流さない（deploy が退避してから流す。同時に流すと二重に当たる）。未適用があれば `var/migrate-backup/` へダンプしてから
+  流し、成功したらダンプは消す。取れない・失敗したらメンテナンス表示（`entrypoint:`）にして止める。表示は、後の起動で
+  未適用が無くなっていれば entrypoint が外し、`deploy.sh` の成功でも外れる（`doctor` は外さない）。
+  **イメージの `pg_dump` は Debian の 15 で、16 以上のサーバーは取れない**（取れない側に倒れてメンテナンスになる。
+  PostgreSQL は deploy.sh で反映する）。**entrypoint は `/bin/sh`（dash）で `pipefail` が無い。**
+  **メンテナンス表示はそのホストのボリュームにしか無い**ので、複数ホストのアプリホストは守れない。
 - **`bin/upgrade.sh` は失敗したら自動で元の版に戻す。** 止める前に `.env` を `var/upgrade/env.before` へ写し、
   動いているイメージの ID を控え、**メンテナンス表示の中で**バックアップ（`-before-upgrade`）を取り、本体ボリュームを
   `<プロジェクト>_eccube_app_before_upgrade` へ写す。新しい版のボリュームにも表示を置いて起動し、token の cookie で
