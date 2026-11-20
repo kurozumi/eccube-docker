@@ -194,6 +194,15 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   向こうが**止まっていて判定できないときは本番として扱う**（guard.sh と同じ）。開発/検証サーバーには
   掛からない。GitHub 側の PR 必須・承認必須は `bin/setup.sh protect`（**非公開リポジトリは有料プラン**が
   要る。無料なら 403 で止まり、手元とサーバーの壁だけになる）。詳細は `docs/deploy.md`。
+- **起動時の migration は、未適用が確かにあるときだけ、DB を取ってから流す。** entrypoint は DB に繋がるかと
+  `doctrine:migrations:up-to-date` の出力（`Out-of-date`）で見る。**確かめられない（DB が起きていない・コンソールが
+  起動しない）ときは何もしない**（メンテナンスにもしない。次の起動でまた見る）。`deploy.sh` の最中（`deploy:` の表示）も
+  流さない（deploy が退避してから流す。同時に流すと二重に当たる）。未適用があれば `var/migrate-backup/` へダンプしてから
+  流し、成功したらダンプは消す。取れない・失敗したらメンテナンス表示（`entrypoint:`）にして止める。表示は、後の起動で
+  未適用が無くなっていれば entrypoint が外し、`deploy.sh` の成功でも外れる（`doctor` は外さない）。
+  **イメージの `pg_dump` は Debian の 15 で、16 以上のサーバーは取れない**（取れない側に倒れてメンテナンスになる。
+  PostgreSQL は deploy.sh で反映する）。**entrypoint は `/bin/sh`（dash）で `pipefail` が無い。**
+  **メンテナンス表示はそのホストのボリュームにしか無い**ので、複数ホストのアプリホストは守れない。
 - **`bin/upgrade.sh` は失敗したら自動で元の版に戻す。** 止める前に `.env` を `var/upgrade/env.before` へ写し、
   動いているイメージの ID を控え、**メンテナンス表示の中で**バックアップ（`-before-upgrade`）を取り、本体ボリュームを
   `<プロジェクト>_eccube_app_before_upgrade` へ写す。新しい版のボリュームにも表示を置いて起動し、token の cookie で
@@ -419,6 +428,11 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **性能/スケール（Tier 1）**: php-fpm は `.env` の `PHP_FPM_*`、OPcache は entrypoint が
   `APP_ENV` で切替、Redis 共有キャッシュは `optional/redis/redis_cache.yaml`（任意）、DB は
   `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は `docs/scale.md`。
+- **nginx の `real_ip_recursive` は off、PHP へ渡す `X-Forwarded-For` は `$remote_addr` に置き換える。** on だと
+  信じる範囲が全アドレスなので左端（お客さんが書ける値）まで遡り、ヘッダーを変えるだけでログインの回数制限が一度も
+  効かなかった（試験で確かめた）。`trusted_proxies.yaml` は `X-Forwarded-Host` / `-Port` を信じない（ALB・Cloudflare LB
+  は素通しするので、パスワード再設定のリンクを別ドメインへ向けられる）。nginx に**直接**届けば今も詐称できるので、
+  公開層・LB 以外から届かないことが前提（本番は 127.0.0.1、`compose.app.yaml` は `HTTP_BIND` 必須）。
 - **静的ファイルのキャッシュは、名前の変わらないもの（CSS・JS・テーマの画像）を 5 分、商品画像（`save_image`）だけ 30 日。**
   nginx と caddy の両方で揃える。EC-CUBE 4.2 / 4.3 は URL に版を付けず、`customize.css` は管理画面の「CSS 管理」と
   deploy が同じ名前のまま書き換えるので、長くすると直した CSS がブラウザと CDN の中継点に残る（v1.0.17 までは 30 日で、

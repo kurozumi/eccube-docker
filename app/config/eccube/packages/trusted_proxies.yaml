@@ -6,12 +6,14 @@
 #     - 生成 URL やリダイレクトが http:// になる
 #   といった不具合が起きる。
 #
-# TRUSTED_PROXIES には「直前のプロキシ（LB）の IP / サブネット」だけを入れること。
-# 広く信頼しすぎると X-Forwarded-For 詐称を許すセキュリティリスクになる。
-#   例: TRUSTED_PROXIES=10.0.0.0/8      （プライベート網の LB）
-#       TRUSTED_PROXIES=REMOTE_ADDR     （直前の peer を常に信頼＝単純だが緩い）
-# 既定は空＝どのプロキシも信頼しない。**本番は compose.prod.yaml が REMOTE_ADDR を入れる**
-# （tunnel / caddy / ホスト nginx はどれも直前の peer が公開層だけなので）。
+# 既定は空＝どのプロキシも信頼しない。**本番（compose.prod.yaml）と複数ホスト（compose.app.yaml）は
+# REMOTE_ADDR**。nginx が X-Forwarded-For の右端（直前の公開層・LB が付けた値）を本当の IP として
+# REMOTE_ADDR に入れ、PHP へ渡す X-Forwarded-For もその 1 つに置き換えるので（docker/nginx/default.conf）、
+# LB のサブネットを書くとかえって HTTPS と判定されない。前提は「nginx に公開層・LB からしか届かない」こと。
+#
+# **X-Forwarded-Host / X-Forwarded-Port は信じない。** AWS ALB や Cloudflare LB はお客さんが送った
+# X-Forwarded-Host をそのまま通すので、信じるとパスワード再設定のメールのリンクを別のドメインへ
+# 向けられる。Host はどの LB もそのまま渡すので、要らない。
 parameters:
     env(TRUSTED_PROXIES): ''
 
@@ -19,6 +21,4 @@ framework:
     trusted_proxies: '%env(TRUSTED_PROXIES)%'
     trusted_headers:
         - 'x-forwarded-for'
-        - 'x-forwarded-host'
         - 'x-forwarded-proto'
-        - 'x-forwarded-port'
