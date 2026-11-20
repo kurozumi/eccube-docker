@@ -361,17 +361,57 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
 <section id="scale">
   <div class="wrap">
     <h2>アクセスが増えたら、<em class="k">測ってから</em>強くする</h2>
-    <p class="sub">どこが先に詰まるかは、店のプラグインとデータの量で変わります。だから最初に測り、安くて効く順に手を打ちます。</p>
-    <div class="steps">
-      <div class="step"><div class="num">0</div><h3>測る</h3><pre>bin/loadtest.sh stress --rate=100</pre><p>「毎秒何 PV」で流し、段ごとに応答時間と失敗を出す。手元ならコンテナの CPU と php-fpm の上限も。月間 PV から山の PV/秒を出す式は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/loadtest.md">負荷試験</a> に。<strong>本番には流さない</strong>（手元以外はホスト名を打たないと流れない）。</p></div>
-      <div class="step"><div class="num">1</div><h3>CDN — 静的ファイルを中継点に</h3><pre>curl -sI https://shop.example.com/…/style.css | grep cf-cache-status
-<span class="c">  cf-cache-status: HIT</span></pre><p>Cloudflare Tunnel で公開していれば<strong>もう効いています。</strong>商品画像は 30 日、名前の変わらない CSS・JS は 5 分（管理画面で直した CSS がすぐ出るように）。HTML はキャッシュしない。</p></div>
-      <div class="step"><div class="num">2</div><h3>Redis とアプリを並べる</h3><pre>COMPOSE_PROFILES=tunnel,redis</pre><p>キャッシュとセッションを Redis へ。次に php-fpm の枠を広げ、足りなければ DB・Redis・画像を外に出してホストを並べる（<code>compose.app.yaml</code> + LB）。セッションは共有なので、同じ人を同じホストへ寄せる設定は要らない。</p></div>
-      <div class="step"><div class="num">3</div><h3>DB とページ — これから</h3><pre><span class="c">  読み取りを複製へ / 匿名の GET をキャッシュ</span></pre><p>DB の読み取りを複製へ振り分ける仕組みと、ページのキャッシュは<strong>まだありません。</strong>DB が先に詰まり、遅い SQL を直しても Redis を入れても足りないときに作ります。</p></div>
+    <p class="sub">どこが先に詰まるかは、店のプラグインとデータの量で変わります。最初に測り、詰まった場所に合う手を、安くて効く順に打ちます。</p>
+
+    <div class="tablewrap">
+      <table>
+        <tr><th>先に詰まったもの</th><th>打つ手</th></tr>
+        <tr><td>画像・CSS・JS の数</td><td>① CDN（トンネルで公開していれば、もう効いている）</td></tr>
+        <tr><td>PHP の CPU</td><td>② Redis → ③ php-fpm の枠 → ④ アプリのホストを並べる</td></tr>
+        <tr><td>DB の CPU</td><td>⑤ 遅い SQL を直す → ② Redis → DB を大きくする</td></tr>
+        <tr><td>特定のページだけ</td><td>そのページで動くプラグインを疑う（外した検証環境で同じ試験を流して比べる）</td></tr>
+      </table>
     </div>
+
+    <div class="steps" style="margin-top:28px">
+      <div class="step"><div class="num">0</div><h3>測る</h3><pre>bin/loadtest.sh stress --rate=100</pre><p>「毎秒何 PV」で流し、段ごとに応答時間と失敗を出す。手元ならコンテナの CPU と php-fpm の上限も。月間 PV から山の PV/秒を出す式は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/loadtest.md">負荷試験</a> に。<strong>本番には流さない</strong>（手元以外はホスト名を打たないと流れない）。</p></div>
+
+      <div class="step"><div class="num">①</div><h3>CDN — 静的ファイルを中継点に</h3><pre><span class="c"># caddy で直接公開しているなら、トンネルへ</span>
+bin/setup.sh tunnel
+<span class="c"># 確かめる（2 回目で HIT）</span>
+curl -sI https://店/…/style.css \
+  | grep -i cf-cache-status</pre><p>Cloudflare Tunnel で公開していれば<strong>設定は要りません。</strong>商品画像は 30 日、名前の変わらない CSS・JS は 5 分（管理画面で直した CSS がすぐ出るように）。Cloudflare の画面では Browser Cache TTL を「Respect Existing Headers」に。<strong>「Cache Everything」にはしない</strong>（ほかの人のカートが入ったページを配ってしまう）。</p></div>
+
+      <div class="step"><div class="num">②</div><h3>Redis — 同じ計算をしない</h3><pre><span class="c"># .env</span>
+COMPOSE_PROFILES=tunnel,redis
+<span class="c"># 反映</span>
+bin/deploy.sh</pre><p>キャッシュとセッションを Redis へ。DB への同じ問い合わせと PHP の計算が減ります。<strong>切り替えた瞬間に全員ログアウトになり、カートも空になる</strong>ので、お客さんの少ない時間に。</p></div>
+
+      <div class="step"><div class="num">③</div><h3>php-fpm の枠を広げる</h3><pre><span class="c"># .env（既定 20。1 本 80MB ほど）</span>
+PHP_FPM_MAX_CHILDREN=40
+<span class="c"># 反映</span>
+bin/deploy.sh</pre><p>CPU に余裕があるのに、負荷試験で「php-fpm の上限に達した」と出るときに効きます。CPU が張り付いているなら、サーバーを大きくするか ④ へ。</p></div>
+
+      <div class="step"><div class="num">④</div><h3>アプリのホストを並べる</h3><pre><span class="c"># 各ホストで（DB・Redis・画像は外へ）</span>
+docker compose \
+  -f compose.app.yaml up -d
+<span class="c"># 前に LB を置く</span></pre><p>DB と Redis はマネージドへ、画像は NFS / EFS へ出し、アプリだけを並べます。セッションは Redis で共有なので、同じ人を同じホストへ寄せる設定は要りません。<strong>全ホストの php-fpm の枠の合計が DB の接続数の上限（既定 200）を超えると落ちる</strong>ので、合わせて上げます。</p></div>
+
+      <div class="step"><div class="num">⑤</div><h3>DB が詰まったら</h3><pre><span class="c"># 動いている DB にその場で（MariaDB）</span>
+SET GLOBAL slow_query_log = 1;
+<span class="c"># 設定ファイルは再起動まで効かない</span></pre><p>まず遅い SQL を探す（プラグインの 1 本が原因のことが多い）。次に ② の Redis。それでも足りなければ、マネージド DB の上の型へ上げます。</p></div>
+    </div>
+
+    <div class="two" style="margin-top:28px">
+      <div class="box no"><h3>入れていないもの</h3><ul>
+        <li><strong>DB の読み取りを複製へ振り分ける</strong>: EC-CUBE 本体がリクエストのたびにトランザクションを始めるので、設定を足しても複製は一度も使われません。</li>
+        <li><strong>ページ（HTML）のキャッシュ</strong>: 商品一覧・詳細には人ごとのトークンが、ヘッダーには人ごとのカートとログインの欄があります。そのまま配ると、ほかの人のカートが見え、「カートに入れる」が失敗します。</li>
+      </ul></div>
+    </div>
+
     <div class="note">
       <b>正直に</b>
-      <span>何 PV まで耐えるかは、まだ本番と同じ形の環境で測っていません。手元の Mac（8 CPU、サンプルデータ）では 20 PV/秒までが安全で、先に詰まったのは PHP の CPU でした。詳しくは <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/scale.md">大規模アクセス</a>。</span>
+      <span>何 PV まで耐えるかは、まだ本番と同じ形の環境で測っていません。手元の Mac（8 CPU、サンプルデータ）では 20 PV/秒までが安全で、先に詰まったのは PHP の CPU でした。設定の詳しい手順は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/scale.md">大規模アクセス</a>。</span>
     </div>
   </div>
 </section>
