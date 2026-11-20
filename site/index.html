@@ -604,8 +604,8 @@ bin/setup.sh backup --remote=user@サーバー:/srv/myshop</pre></li>
 <p>下の <a href="#flow-env">C</a> を済ませます。古い道具で新しい EC-CUBE を扱わないためです。</p></li>
         <li><h4><span class="where pc">パソコン</span>パソコンで上げて、試す</h4>
 <pre>bin/upgrade.sh ~4.3.0</pre>
-<p><code>~4.3.0</code> は「4.3 の中で一番新しい版」。<strong>「取得したイメージの EC-CUBE: 4.3.2」と出た番号を控えて</strong> <code>y</code>。終わったら <code>http://localhost:8080/</code> で、トップ・商品・カート・管理画面を開いてみます。</p>
-<p><strong>できれば本番のデータで試します。</strong>本番のバックアップを手元で <code>bin/restore.sh</code> してから上げると、本番にだけ残っているプラグインの列なども、ここで見つかります（<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/backup.md">バックアップ / 復元</a>）。</p></li>
+<p><code>~4.3.0</code> は「4.3 の中で一番新しい版」。「取得したイメージの EC-CUBE: 4.3.2」と出たら、<strong>案内にあった版（またはそれより新しい版）か</strong>を見ます。古ければ <code>n</code> で止め、翌朝の配布イメージを待ちます。合っていれば番号を控えて <code>y</code>。終わったら <code>http://localhost:8080/</code> で、トップ・商品・カート・管理画面を開いてみます。</p>
+<p><strong>できれば本番のデータで試します。</strong>本番にだけ残っているプラグインの列なども、そこで見つかります。いつもの手元の環境に戻すと作業中のデータが上書きされるので、<strong>別のフォルダに検証用を作って</strong>本番のバックアップを戻します（<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md#2-ステージングで予行演習">ステージングで予行演習</a>）。</p></li>
         <li><h4><span class="where srv">サーバー</span>お客さんに告知してから、サーバーで上げる</h4>
 <pre>ssh user@サーバー
 cd /srv/myshop
