@@ -214,3 +214,14 @@
   .ltag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: var(--sunk); color: var(--ink-soft); border: 1px solid var(--line); white-space: nowrap; }
   .ltag.multi { background: #FFFFFF; color: var(--accent-deep); border-color: #F6C9AE; }
   @media (max-width: 720px) { .layer { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 18px 18px; } .layer + .layer::before { left: 32px; } }
+
+  /* 狭い画面では表を行ごとに縦に積む（3 列が収まらないもの） */
+  @media (max-width: 640px) {
+    table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+    table.stack tr:first-child { display: none; }
+    table.stack tr { padding: 14px 0; border-bottom: 1px solid var(--line); }
+    table.stack td { border: 0; padding: 3px 0; }
+    table.stack td[data-label]::before { content: attr(data-label); display: block; font-size: 11.5px; font-weight: 700; color: var(--ink-mute); margin-top: 6px; }
+    .note { flex-direction: column; gap: 4px; }
+    .note b { white-space: normal; }
+  }
