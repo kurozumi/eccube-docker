@@ -178,7 +178,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   列挙せず `.env.app` に逃がす。`DB_PASSWORD` / `DB_ROOT_PASSWORD` / `ECCUBE_AUTH_MAGIC`
   は `:?` で必須（既定値 `eccube_pass` で黙って立ち上がらない。#110）。
 - **`bin/reset.sh` と `bin/switch-version.sh` は `down -v` する。** DB・画像・
-  セッションが消え、**その場では戻せない。** 稼働中が本番構成なら
+  セッションが消える。**消す前に `backups/<日時>-before-<名前>/` へ退避し、取れなければ何も消さずに止まる**
+  （`guard_backup_before_destroy`。止まっているスタックは DB に繋がらず取れないので止まる。取らずに消すのは
+  `DESTROY_WITHOUT_BACKUP=<プロジェクト名>`）。`deploy.sh` も**メンテナンス表示を立ててから**退避する。 稼働中が本番構成なら
   `CONFIRM_DESTROY=<プロジェクト名>` が無いと止まる（`bin/lib/guard.sh`）。
   **停止中は判定できない**ので、止まっている本番で打てば消える。
   上げたいだけなら `upgrade.sh`。詳細は `docs/data-safety.md`。

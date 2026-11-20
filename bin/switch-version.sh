@@ -50,10 +50,11 @@ if [ -z "$base_php" ]; then
 fi
 php_ver="$(image_resolve_php "$(image_series "$ver")" "$want_php" "$base_php")" || exit 1
 echo "[switch] ECCUBE_VERSION=${ver} に切り替えます。既存の DB とアプリのデータは破棄されます。"
-echo "[switch] 注意: アップロード画像（eccube_upload）も削除されます。残したい場合は先にバックアップを:"
-echo "         docker compose cp ec-cube:/var/www/html/html/upload/. ./upload-backup/"
+echo "[switch] 注意: アップロード画像（eccube_upload）も削除されます（消す前に backups/ へ退避します）。"
 echo "         （NFS/EFS ドライバで運用していれば外部データは消えません）"
 guard_destructive switch-version.sh "DB・アップロード画像・セッション"
+# .env を書き換える前に取る（退避の host.env を切り替える前のものにするため。取れなければ何も変えずに止まる）
+guard_backup_before_destroy switch-version
 
 current="$(grep -E '^ECCUBE_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
 current_redis="$(grep -E '^PHPREDIS_VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
@@ -130,7 +131,7 @@ if ! image_provision docker compose; then
     exit 1
 fi
 
-# ビルドが通ってから破棄する。
+# ビルドが通ってから破棄する（退避は .env を書き換える前に取ってある）。
 docker compose down -v
 docker compose up -d
 echo "[switch] 完了。進捗: docker compose logs -f ec-cube"
