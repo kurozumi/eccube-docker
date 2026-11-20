@@ -382,10 +382,14 @@ done
 # 確かめで落ちたら再起動しない（古い設定の nginx が動き続け、メンテナンス表示のまま止まる）。
 # DB は再起動すると接続が全部切れるので、自分では再起動せず、変わったことだけを言う。
 conf_stamp_dir=var/deploy-conf
+sha256_stdin() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -c1-64; }
 conf_hash() { # conf_hash <ファイル…>（無いものは飛ばす）
+    # ファイルごとに指紋を取り、「名前 指紋」の並びの指紋にする。中身をつないでから取ると、ファイルの
+    # 境目が動いても（a の末尾が b の先頭へ移る）同じ値になり、MariaDB のようにファイルごとに読む設定の変更を見落とす
     local f
-    for f in "$@"; do [ -f "$f" ] && cat "$f"; done \
-        | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-64
+    for f in "$@"; do
+        if [ -f "$f" ]; then printf '%s %s\n' "$f" "$(sha256_stdin < "$f")"; fi   # && だと最後が無いとき失敗で返り、pipefail で deploy が落ちる
+    done | LC_ALL=C sort | sha256_stdin
 }
 service_running() { [ -n "$("${dc[@]}" ps -q --status running "$1" 2>/dev/null)" ]; }
 apply_proxy_conf() { # apply_proxy_conf <サービス> <設定ファイル> <確かめるコマンド…>
@@ -410,7 +414,9 @@ apply_proxy_conf() { # apply_proxy_conf <サービス> <設定ファイル> <確
 mkdir -p "$conf_stamp_dir"
 apply_proxy_conf nginx docker/nginx/default.conf nginx -t
 apply_proxy_conf caddy docker/caddy/Caddyfile caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-if service_running db; then
+# PostgreSQL の db はこの設定を mount していないので、言わない（再起動しても何も変わらない）
+db_id="$("${dc[@]}" ps -q --status running db 2>/dev/null || true)"
+if [ -n "$db_id" ] && docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' "$db_id" 2>/dev/null | grep -q '/etc/mysql/conf.d'; then
     db_now="$(conf_hash docker/mariadb/conf.d/*.cnf)"
     db_old="$(cat "${conf_stamp_dir}/db.sha256" 2>/dev/null || true)"
     if [ -n "$db_old" ] && [ "$db_now" != "$db_old" ]; then
