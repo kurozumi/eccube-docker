@@ -414,7 +414,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   ローカルデータは消えるので事前バックアップ。詳細は `docs/scale.md`。
 - **複数ホスト + LB（Tier 2）**: 各アプリホストは `compose.app.yaml`（db/redis を含まない
   app 層のみ、外部共有サービスを参照）。init ロール 1 台だけ `ECCUBE_SKIP_DB_INIT=0` で
-  migrate、他は 1。HTTPS 終端 LB では `TRUSTED_PROXIES` 必須（本体未配線を
+  migrate、他は 1。**entrypoint は印（`var/.eccube_installed`）が無くても、DB に店（`dtb_base_info`）が
+  あれば `eccube:install` を打たない**（install は `schema:drop --force` から始まる。印はボリュームの中にしか
+  無いので、新しいホストやボリュームの作り直しで共有の DB を消していた。v1.0.20）。HTTPS 終端 LB では `TRUSTED_PROXIES` 必須（本体未配線を
   `app/config/eccube/packages/trusted_proxies.yaml` で補う）。LB 例は `docker/nginx/lb.conf.example`。
 - **どこまで強くするかは `bin/loadtest.sh` で測ってから決める**（k6、`docs/loadtest.md`）。到着数を固定して流す
   （VU 固定だと遅くなるほど送る数も減り、限界の手前で余裕があるように見える）。**注文は流さない**（本物の受注と
