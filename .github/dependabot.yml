@@ -30,6 +30,10 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: postgres
         update-types: ["version-update:semver-major"]
+      # Redis 8 は保存ファイルの形式が上がって 7 へ戻せず、ライセンスも変わった（AGPLv3 ほかの 3 択）。
+      # 7.2 / 7.4 は 2029-12 まで保守される。乗り換えは保守期限の点検で挙げて人が決める（#187 で見送り）
+      - dependency-name: redis
+        update-types: ["version-update:semver-major"]
 
   # ワークフローの actions（SHA 固定のまま上げる）
   - package-ecosystem: github-actions
