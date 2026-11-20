@@ -199,3 +199,29 @@
   a.nextpage h3 { font-family: var(--f-display); font-weight: 900; font-size: 19px; margin: 0 0 8px; }
   a.nextpage h3::after { content: " →"; color: var(--accent); }
   a.nextpage p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+
+  /* 大規模アクセスの仕組み（リクエストが通る順の層） */
+  .layers { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
+  .layer { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; position: relative; }
+  .layer + .layer::before { content: ""; position: absolute; left: 39px; top: -11px; width: 2px; height: 10px; background: var(--accent); }
+  .layer.wide { background: var(--accent-soft); border-color: #F6C9AE; }
+  .lname { font-family: var(--f-display); font-weight: 900; font-size: 18px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .lname small { flex-basis: 100%; padding-left: 40px; font-family: var(--f-body); font-weight: 500; font-size: 12.5px; color: var(--ink-mute); }
+  .lstep { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 15px; flex: none; }
+  .layer ul { margin: 0; padding-left: 1.1em; font-size: 14.5px; color: var(--ink-soft); }
+  .layer li { margin: 4px 0; }
+  .layer li strong { color: var(--ink); }
+  .ltag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: var(--sunk); color: var(--ink-soft); border: 1px solid var(--line); white-space: nowrap; }
+  .ltag.multi { background: #FFFFFF; color: var(--accent-deep); border-color: #F6C9AE; }
+  @media (max-width: 720px) { .layer { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 18px 18px; } .layer + .layer::before { left: 32px; } }
+
+  /* 狭い画面では表を行ごとに縦に積む（3 列が収まらないもの） */
+  @media (max-width: 640px) {
+    table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+    table.stack tr:first-child { display: none; }
+    table.stack tr { padding: 14px 0; border-bottom: 1px solid var(--line); }
+    table.stack td { border: 0; padding: 3px 0; }
+    table.stack td[data-label]::before { content: attr(data-label); display: block; font-size: 11.5px; font-weight: 700; color: var(--ink-mute); margin-top: 6px; }
+    .note { flex-direction: column; gap: 4px; }
+    .note b { white-space: normal; }
+  }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>更新と反映 | eccube-docker</title>
-<meta name="description" content="EC-CUBE・PHP・環境を別々に更新する仕組みと、本番にはレビュー済みの main しか出ない 3 枚の壁。">
+<meta name="description" content="EC-CUBE・PHP・環境を別々に更新する仕組み、失敗したら元に戻る仕組み、本番にはレビュー済みの main しか出ない 3 枚の壁。">
 <meta property="og:title" content="eccube-docker — EC-CUBE 4 の運用を、いつもの 1 コマンドに">
 <meta property="og:description" content="インストール・バージョンアップ・サーバー移転・引き継ぎ。EC-CUBE 4 で止まりがちな 4 つを、手順ではなくコマンドにした Docker 環境。">
 <meta property="og:type" content="website">
@@ -25,7 +25,7 @@
   <div class="wrap">
     <p class="eyebrow">eccube-docker · __TAG__</p>
     <h1>更新と反映</h1>
-    <p class="lede">パッチはその日のうちに当て、本番にはレビュー済みのものしか出さない。そのための置き場所の分け方と、3 枚の壁です。</p>
+    <p class="lede">パッチはその日のうちに当て、失敗したら元に戻し、本番にはレビュー済みのものしか出さない。そのための置き場所の分け方と、先に退避する仕組みと、3 枚の壁です。</p>
   </div>
 </header>
 
@@ -35,7 +35,7 @@
     <p class="sub">EC-CUBE のパッチ（4.3.1 → 4.3.2 など）は、やることが 2 つだけ。プラグインの移植が要るのはメジャー・マイナー（4.3 → 4.4）だけです。</p>
     <div class="steps">
       <div class="step"><div class="num">1</div><h3>環境（eccube-docker）を新しくする</h3><pre>bin/self-update.sh</pre><p>コマンド・compose・スクリプトが新しいリリースに揃う。差分は git で見えるので、何が変わるか分かってから進める。</p></div>
-      <div class="step"><div class="num">2</div><h3>EC-CUBE を上げる</h3><pre>bin/upgrade.sh ~4.3.0 --prod</pre><p>退避 → 新しい EC-CUBE でプラグインが動くかを、お店に触る前に確認 → メンテナンス表示 → migration → 疎通。<strong>危ないものを見つけたら、お店に触る前に止まる。</strong></p></div>
+      <div class="step"><div class="num">2</div><h3>EC-CUBE を上げる</h3><pre>bin/upgrade.sh ~4.3.0 --prod</pre><p>新しい EC-CUBE でプラグインが動くかを、お店に触る前に確認 → メンテナンス表示 → 退避 → migration → 疎通。失敗したら自動で元の版に戻る。<strong>危ないものを見つけたら、お店に触る前に止まる。</strong></p></div>
     </div>
     <h3 style="font-family:var(--f-display);font-size:20px;margin:36px 0 6px">速い理由は 1 つ。<em class="k">あなたが直したものと EC-CUBE が、別々に更新される</em></h3>
     <p class="sub">EC-CUBE の中身を直接編集した環境は、上げるたびに「どこを直したか」の調査から始まります。ここでは置き場所が最初から分かれています。</p>
@@ -78,7 +78,7 @@
           <tr>
             <td><strong>EC-CUBE</strong><br><span style="color:var(--ink-mute);font-size:13px">4.3.1 → 4.3.2 など</span></td>
             <td><code>bin/upgrade.sh ~4.3.0 --prod</code></td>
-            <td>数分<br><span style="color:var(--ink-mute);font-size:13px">失敗したら何も変えずに止まる</span></td>
+            <td>数分<br><span style="color:var(--ink-mute);font-size:13px">失敗したら自動で元の版に戻る</span></td>
           </tr>
           <tr>
             <td><strong>eccube-docker</strong><br><span style="color:var(--ink-mute);font-size:13px">v1.0.18 → v1.0.19 など</span></td>
@@ -91,6 +91,32 @@
     <div class="note">
       <b>PHP だけ変えても EC-CUBE はそのまま</b>
       <span>PHP はイメージの中に、EC-CUBE と <code>vendor</code> はボリュームの中にあります。だからイメージを差し替えても<strong>入れ替わるのは PHP だけ</strong>で、店のデータにも EC-CUBE の版にも触りません（作り直されるのはアプリのコンテナ 1 つ、約 20 秒）。合わない組み合わせのタグは存在しないので、<strong>壊れる前に <code>pull</code> が失敗します</strong>。選べる PHP は<a href="guide.html#support">対応する EC-CUBE</a>の表のとおりです。</span>
+    </div>
+  </div>
+</section>
+
+<section id="safety">
+  <div class="wrap">
+    <h2>どのコマンドも、<em class="k">先に退避</em>してから</h2>
+    <p class="sub">消す・書き換えるコマンドは、まずいまの状態を取っておき、取れなければ始めません。途中で失敗したら、取っておいたものから元に戻します。お客さんの注文が退避から漏れないよう、退避はメンテナンス表示を立て、処理中の注文が終わるのを待ってから取ります（待つのは最大 30 秒。ログイン中の管理者の操作などで終わらなければ、注意を出してそのまま取るので、そのあいだに確定した注文が漏れることはありえます）。</p>
+
+    <div class="tablewrap">
+      <table class="stack">
+        <tr><th>コマンド</th><th>先に取っておくもの</th><th>途中で失敗したら</th></tr>
+        <tr><td><code>bin/upgrade.sh</code><br><small>EC-CUBE を上げる</small></td><td data-label="先に取っておくもの">DB・画像・ファイル、<code>.env</code>、いま動いているイメージ、EC-CUBE 本体</td><td data-label="途中で失敗したら"><strong>自動で元の版に戻し</strong>、開くことを確かめてから表示を外す</td></tr>
+        <tr><td><code>bin/self-update.sh</code><br><small>環境を新しくする</small></td><td data-label="先に取っておくもの">書き換える・消すファイル全部（上書きするあなたの変更も）</td><td data-label="途中で失敗したら"><strong>自動で全部戻す</strong>。古いファイルと新しいファイルが混ざらない</td></tr>
+        <tr><td><code>bin/deploy.sh</code><br><small>毎日の反映</small></td><td data-label="先に取っておくもの">DB・画像・ファイル</td><td data-label="途中で失敗したら">メンテナンス表示のまま止まり、壊れた画面を出さない。戻すコマンドを表示</td></tr>
+        <tr><td><code>bin/restore.sh</code><br><small>バックアップから戻す</small></td><td data-label="先に取っておくもの">戻す前の、いまの状態</td><td data-label="途中で失敗したら"><strong>自動で元の状態に戻す</strong>。途中で切れたダンプは、流す前に見抜いて止まる</td></tr>
+        <tr><td><code>bin/reset.sh</code>・<code>switch-version.sh</code><br><small>作り直す</small></td><td data-label="先に取っておくもの">DB・画像・ファイル</td><td data-label="途中で失敗したら">退避が取れなければ、何も消さずに止まる</td></tr>
+        <tr><td><code>bin/plugin.sh remove</code><br><small>プラグインを外す</small></td><td data-label="先に取っておくもの">DB を含めた全部。フォルダは消さずに移す（git ごと）</td><td data-label="途中で失敗したら">外せなければ、ファイルを消さずに止まる</td></tr>
+        <tr><td><code>bin/setup.sh db</code><br><small>外部 DB へ移す</small></td><td data-label="先に取っておくもの">写す先の DB（もう店があるとき）</td><td data-label="途中で失敗したら">写す先に店があれば、名前を打つまで進まない。写せなければ切り替えない</td></tr>
+        <tr><td>起動時の migration<br><small>インストール済みの店</small></td><td data-label="先に取っておくもの">DB</td><td data-label="途中で失敗したら">途中まで変わった DB でお店を開けず、メンテナンス表示にして止まる</td></tr>
+      </table>
+    </div>
+
+    <div class="note">
+      <b>正直に</b>
+      <span>退避はどれも同じサーバーに置くので、サーバーごと失うと一緒に消えます（ほとんどは <code>backups/</code>。環境の更新の控えは <code>var/self-update/</code>、起動時の migration の前のダンプはコンテナの中の <code>var/migrate-backup/</code>）。<code>bin/setup.sh backup</code> を設定すると、<code>backups/</code> の分を外（S3・R2・NAS など）へ送れます。どの退避も、失敗の表示に場所と戻し方が出ます。詳しくは <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/data-safety.md">データを失わないために</a>。</span>
     </div>
   </div>
 </section>

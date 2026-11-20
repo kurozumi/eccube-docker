@@ -53,8 +53,8 @@
             <small>制作会社に頼むと数十万で数週間。自分でやると壊れそうで、戻し方も分からない。</small></p>
         </div>
         <div class="fix">
-          <h3>その日に当てる。上げる前に止まる</h3>
-          <p>バックアップを取り、新しい EC-CUBE でプラグインが動くかを<strong>お店に触る前に</strong>確かめ、ダメなら何も変えずに止まります。スキーマの差分に「列の削除」が混じっていれば、それも止まる。</p>
+          <h3>その日に当てる。失敗したら元に戻る</h3>
+          <p>新しい EC-CUBE でプラグインが動くかを<strong>お店に触る前に</strong>確かめ、ダメなら何も変えずに止まります。スキーマの差分に「列の削除」「列の名前の変更」が混じっていれば、それも止まる。途中で失敗しても、<strong>取っておいたバックアップから自動で元の版に戻して</strong>起動し直します。</p>
           <pre>bin/upgrade.sh ~4.3.2 --prod</pre>
         </div>
       </div>
@@ -110,7 +110,7 @@ bin/init.sh &amp;&amp; bin/restore.sh backups/&lt;日時&gt;</pre>
         </div>
         <div class="fix">
           <h3>直す場所と動かす場所を分け、反映を 1 コマンドに</h3>
-          <p>退避 → メンテナンス表示 → 取り込み → DB 更新 → キャッシュ → 確認 → 解除。<strong>失敗したらメンテナンス表示のまま止まり</strong>、壊れた画面をお客さんに出しません。どの案件でも同じ手順。</p>
+          <p>メンテナンス表示 → 退避 → 取り込み → DB 更新 → キャッシュ → 確認 → 解除。<strong>失敗したらメンテナンス表示のまま止まり</strong>、壊れた画面をお客さんに出しません。どの案件でも同じ手順。</p>
           <pre>bin/deploy.sh --remote=shop:/srv/myshop</pre>
         </div>
       </div>
@@ -137,7 +137,7 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
   <div class="wrap">
     <h2>くわしくは<em class="k">ページごとに</em></h2>
     <p class="sub">やりたいことが決まっているなら、そのページから読んでください。</p>
-    <div class="nextpages"><a class="nextpage" href="guide.html"><span class="tag">はじめる・上げる</span><h3>やりたいことから<em class="k">選ぶ</em></h3><p>新規作成・EC-CUBE のバージョンアップ・環境のアップデートを、どこで何を打つかの流れ図で。</p></a><a class="nextpage" href="ops.html"><span class="tag">更新と反映</span><h3>パッチを<em class="k">その日のうちに</em></h3><p>あなたのものと EC-CUBE を別々に更新する仕組みと、本番にはレビュー済みの main しか出ない 3 枚の壁。</p></a><a class="nextpage" href="scale.html"><span class="tag">大規模アクセス</span><h3>アクセスが増えたら、<em class="k">測ってから</em></h3><p>負荷試験、CDN、Redis、php-fpm の枠、複数サーバーとロードバランサー、DB。</p></a></div>
+    <div class="nextpages"><a class="nextpage" href="guide.html"><span class="tag">はじめる・上げる</span><h3>やりたいことから<em class="k">選ぶ</em></h3><p>新規作成・EC-CUBE のバージョンアップ・環境のアップデートを、どこで何を打つかの流れ図で。</p></a><a class="nextpage" href="ops.html"><span class="tag">更新と反映</span><h3>パッチを<em class="k">その日のうちに</em></h3><p>あなたのものと EC-CUBE を別々に更新する仕組み、失敗したら元に戻る仕組み、本番にはレビュー済みの main しか出ない 3 枚の壁。</p></a><a class="nextpage" href="scale.html"><span class="tag">大規模アクセス</span><h3>アクセスが増えたら、<em class="k">測ってから</em></h3><p>負荷試験、CDN、Redis、php-fpm の枠、複数サーバーとロードバランサー、DB。</p></a></div>
   </div>
 </section>
 

@@ -123,7 +123,7 @@ bin/setup.sh backup --remote=user@サーバー:/srv/myshop</pre></li>
         <h3>EC-CUBE のバージョンアップ</h3>
         <p>例: EC-CUBE 4.3.1 → 4.3.2。<strong>パソコンで試してから、サーバーで上げます。</strong></p>
         <p>時間: お店が止まるのは数分。</p>
-        <div class="keep"><b>そのまま残るもの:</b> 受注・会員・商品・画像、あなたが直したテンプレートや CSS、プラグイン。<br><b>止まったら:</b> たいていはお店に触る前に止まり、そのまま動き続けます。DB を変える途中で止まったときはメンテナンス表示のまま止まるので、<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md#4-失敗したとき">失敗したとき</a>の表に沿って戻します（バックアップは自動で取ってあります）。</div>
+        <div class="keep"><b>そのまま残るもの:</b> 受注・会員・商品・画像、あなたが直したテンプレートや CSS、プラグイン。<br><b>止まったら:</b> たいていはお店に触る前に止まり、そのまま動き続けます。DB を変える途中で失敗したときは、<strong>自動で元の版に戻して</strong>起動し直します（バックアップはメンテナンス表示の中で自動で取ってあります。<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md#4-失敗したとき">失敗したとき</a>）。</div>
       </div>
       <ol class="steps-v">
         <li><h4>どの番号が変わるかを見る</h4>
@@ -153,7 +153,7 @@ bin/upgrade.sh ~4.3.0 --prod</pre>
         <h3>環境のアップデート</h3>
         <p>例: eccube-docker v1.0.18 → v1.0.19。<strong>パソコンで取り込み、いつもの deploy でサーバーへ。</strong>サーバーで直接は取り込みません。</p>
         <p>時間: 5 分ほど。お店はほとんど止まりません。</p>
-        <div class="keep"><b>触らないもの:</b> EC-CUBE の版、お店のデータ、あなたが直したもの、<code>.env</code>。<br><b>新しくなるもの:</b> <code>bin/</code> のコマンド、サーバーの組み立て、文書。</div>
+        <div class="keep"><b>触らないもの:</b> EC-CUBE の版、お店のデータ、あなたが直したもの、<code>.env</code>。<br><b>新しくなるもの:</b> <code>bin/</code> のコマンド、サーバーの組み立て、文書。<br><b>止まったら:</b> 書き換えるファイルは先に全部控えてあり、途中で失敗すると自動で元に戻ります。</div>
       </div>
       <ol class="steps-v">
         <li><h4><span class="where pc">パソコン</span>何が変わるかを見る</h4>
@@ -194,7 +194,7 @@ bin/upgrade.sh ~4.3.0 --prod</pre>
 <section class="band">
   <div class="wrap">
     <h2>ほかのページ</h2>
-    <div class="nextpages"><a class="nextpage" href="ops.html"><span class="tag">更新と反映</span><h3>パッチを<em class="k">その日のうちに</em></h3><p>あなたのものと EC-CUBE を別々に更新する仕組みと、本番にはレビュー済みの main しか出ない 3 枚の壁。</p></a><a class="nextpage" href="scale.html"><span class="tag">大規模アクセス</span><h3>アクセスが増えたら、<em class="k">測ってから</em></h3><p>負荷試験、CDN、Redis、php-fpm の枠、複数サーバーとロードバランサー、DB。</p></a></div>
+    <div class="nextpages"><a class="nextpage" href="ops.html"><span class="tag">更新と反映</span><h3>パッチを<em class="k">その日のうちに</em></h3><p>あなたのものと EC-CUBE を別々に更新する仕組み、失敗したら元に戻る仕組み、本番にはレビュー済みの main しか出ない 3 枚の壁。</p></a><a class="nextpage" href="scale.html"><span class="tag">大規模アクセス</span><h3>アクセスが増えたら、<em class="k">測ってから</em></h3><p>負荷試験、CDN、Redis、php-fpm の枠、複数サーバーとロードバランサー、DB。</p></a></div>
   </div>
 </section>
 
