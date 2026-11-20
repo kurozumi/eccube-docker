@@ -40,9 +40,12 @@ Cloudflare などの前段が攻撃と見て止めることもあります。
 ```bash
 docker compose stop worker                                  # 1. 送る係を止める
 # 2. .env の MAILER_DSN=null://null にする
-docker compose up -d --force-recreate ec-cube worker        # 3. 新しい値でコンテナを作り直す
+docker compose up -d --force-recreate ec-cube               # 3. 新しい値でコンテナを作り直す
 docker compose exec ec-cube printenv MAILER_DSN             # 4. null://null と出ることを確かめる
-docker compose exec worker  printenv MAILER_DSN             #    worker も（messenger を使っているとき）
+# messenger を使っているとき（COMPOSE_PROFILES に messenger）だけ、worker も作り直して確かめる。
+# 使っていないのに worker を名指しすると、profile を無視して要らない worker が立つ
+docker compose up -d --force-recreate worker
+docker compose exec worker printenv MAILER_DSN
 bin/restore.sh backups/<日時>                                # 5. ここで初めて戻す
 ```
 
