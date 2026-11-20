@@ -244,20 +244,193 @@ docker compose cp ./upload-backup/. ec-cube:/var/www/html/html/upload/   # 復�
 
 # 複数ホスト + ロードバランサ
 
-これまでの強化でアプリ層はステートレス（セッション/キャッシュ=Redis、画像=共有ストレージ、
-DB=外部）になっているので、**アプリホストを N 台並べて前段に LB** を置ける。
+**1 台で足りるうちは 1 台で。** 複数台にすると、更新・バックアップ・管理画面の運用がどれも手間になる。
+`bin/loadtest.sh` で測って、1 台の中の手（php-fpm の枠、Redis、CDN）を打っても PHP が詰まるときに
+使う（`docs/loadtest.md`）。
+
+アプリ層はステートレスにできる（セッションとキャッシュ = Redis、画像 = 共有ストレージ、DB = 外部）ので、
+**アプリホストを N 台並べて前段に LB** を置ける。
 
 ## 構成
 
 ```
-            ┌─ 外部 LB（HTTPS 終端 / nginx・Cloudflare LB・ALB）
-            │        │ 振り分け
+                   お客さん（HTTPS）
+                        │
+            ┌─ LB（HTTPS 終端。自前 nginx・Cloudflare LB・ALB）
+            │        │ 振り分け（スティッキー不要）
    ┌────────┴──┐  ┌──┴────────┐
-   │ app host1 │  │ app host2 │  … 各ホストで compose.app.yaml（ec-cube+nginx）
+   │ app host1 │  │ app host2 │  … 各ホストで compose.app.yaml（ec-cube + nginx + worker）
+   │ init 役   │  │           │     host1 だけが migration を流す（ECCUBE_SKIP_DB_INIT=0）
    └────┬──────┘  └────┬──────┘
-        └──────┬───────┘  すべて同じ外部サービスを参照
-        共有: DB / Redis(cache) / Redis(session) / アップロード画像(NFS/EFS)
+        └──────┬───────┘  すべて同じ外部サービスを見る
+   共有: DB / Redis（キャッシュ）/ Redis（セッション）/ 画像（NFS・EFS）
 ```
+
+## 始める前に決めること
+
+| 決めること | 選びかた |
+|---|---|
+| DB | マネージド DB（RDS・Cloud SQL など）か、別のサーバー。全ホストが同じものを見る |
+| Redis 2 つ | キャッシュ用とセッション用を**別々に**（セッションが LRU で消えないように）。マネージド Redis でよい |
+| 画像の置き場 | NFS か EFS。ローカルのボリュームのままだと、ホストごとに別の画像になる |
+| init 役のホスト | migration を流す 1 台。ほかは流さない（全台が一斉に流すと競合する） |
+| 管理画面が書くファイル | 共有ストレージに載せるか、管理画面を 1 台に固定するか（下の「管理画面が書くファイル」） |
+| イメージのタグ | **日付タグで全ホストを揃える**（`4.3-php8.3-20261123` のような形。月曜の日付は全部の組にある）。追跡タグ（`4.3`）だと、ホストごとに引いた日の中身になる |
+
+## 手順
+
+### 1. まず 1 台で店を作る
+
+いつもどおり 1 台で店を立て（`docs/install.md`）、本番構成で動くところまで持っていく。
+**アプリホストの上では新しく店を作れない**（`compose.app.yaml` は `html/user_data` を読み取り専用で
+mount するので、インストールが初期ファイルを置けずに止まる）。
+
+### 2. 共有サービスへ移す（1 台目で）
+
+1. **DB**: `bin/setup.sh db` で外部 DB へ写して切り替える（写す先に店があれば止まる。写している間は
+   メンテナンス表示）。
+2. **Redis**: `.env` の `COMPOSE_PROFILES` に `redis` を入れ、`REDIS_URL` と `SESSION_REDIS_URL` を
+   共有の Redis 2 つへ向けて `docker compose up -d`。**この瞬間に全員ログアウトになる**ので時間を選ぶ。
+3. **画像**: いまの画像を退避してから（`bin/backup.sh`）、`eccube_upload` を NFS / EFS のボリュームに
+   差し替えて中身を写す（下の「アップロード画像の共有ストレージ」）。
+
+ここで一度 `bin/plugin.sh doctor` と画面で確かめる。1 台のまま、共有サービスで動く状態になっていればよい。
+
+### 3. アプリホストを用意する（各ホストで）
+
+コードは `bin/bootstrap-server.sh <host>:<path>` で送るか、店のリポジトリを clone する。
+`.env` は **1 台目のものを写してから**、ホストごとに直す。
+
+| キー | 値 | なぜ |
+|---|---|---|
+| `ECCUBE_AUTH_MAGIC` | **1 台目と同じ**（写したまま） | 全パスワードのハッシュの鍵。違うとそのホストでは誰もログインできない |
+| `DB_*` / `REDIS_URL` / `SESSION_REDIS_URL` | 共有サービス（写したまま） | |
+| `COMPOSE_FILE` | `compose.app.yaml` | DB と Redis を手元に立てない。`bin/*.sh` もこれを見て本番として扱う |
+| `COMPOSE_PROJECT_NAME` | 全ホストで同じ名前（例 `myshop`） | ボリューム名とバックアップの名前が揃う |
+| `ECCUBE_IMAGE` | 日付タグ（全ホスト同じ） | 全ホストで同じ中身にする |
+| `ECCUBE_SKIP_DB_INIT` | init 役は `0`、ほかは書かない（既定 `1`） | migration を流すのは 1 台だけ |
+| `HTTP_BIND` | **必須。** そのホストのプライベート IP（例 `10.0.0.11`） | 公開 IP にも開くと、LB を通らずに直接届き、`X-Forwarded-For` で IP を詐称できる（無いと起動しない） |
+| `HTTP_PORT` | 既定 `8080` のままでよい | LB からはこのポートへ振る |
+| `TRUSTED_PROXIES` | **書かない**（既定 `REMOTE_ADDR`） | 下の「HTTPS の判定」 |
+
+**v1.0.19 までの配布イメージでは、DB に店がある状態で新しいホスト（新しいボリューム）を
+`ECCUBE_SKIP_DB_INIT=0` で起動すると、`eccube:install` が共有の DB の表を全部消して作り直す。**
+v1.0.20 からは、起動時に DB に店（`dtb_base_info`）があれば install せずに migration へ回る
+（繋がらなくて確かめられないときも install しない）。古いイメージのままなら、init 役は
+最初にデータを入れた 1 台から動かさないこと。
+
+PostgreSQL のときは、さらに `DB_ENGINE=postgresql`・`DB_PORT=5432`・`DATABASE_SERVER_VERSION=16`
+（実物の版）・`DB_CHARSET=utf8` を書く（1 台構成では `compose.postgresql.yaml` が足していたもの）。
+
+起動して確かめる:
+
+```bash
+docker compose pull
+docker compose up -d
+bin/healthcheck.sh          # このホストの nginx に直接聞く
+bin/plugin.sh doctor        # Redis は「外部」と出れば正しい
+```
+
+`messenger`（メールの非同期送信）を使っているなら、`COMPOSE_PROFILES` に `messenger` が入っていれば
+各ホストで `worker` も立つ。
+
+### 4. LB を置く
+
+- **自前の nginx**: `docker/nginx/lb.conf.example`。`upstream` に各ホストの `<プライベート IP>:8080` を並べる。
+- **Cloudflare Load Balancing / AWS ALB**: 各ホストの `:8080` をオリジン（ターゲット）に登録する。
+  ヘルスチェックは `/` が 200。
+- **スティッキーセッションは要らない**（セッションは Redis で共有）。
+- LB は `X-Forwarded-Proto` と `X-Forwarded-For` を付けて送る（ALB・Cloudflare は自分で付ける）。
+
+### 5. 確かめる
+
+- 何度か開いて、両方のホストのログ（`docker compose logs nginx`）に届いていること。
+- ログインして別のページへ移っても、ログインが切れないこと（セッションの共有）。
+- ブラウザの開発者ツールで、Cookie `eccube` に `Secure` が付いていること（HTTPS の判定）。
+- 管理画面で商品画像を入れ、別のホストに振られても表示されること（画像の共有）。
+
+## HTTPS の判定（TRUSTED_PROXIES）
+
+**既定の `REMOTE_ADDR` のままにする。** 各ホストの nginx が `X-Forwarded-For` から本当のお客さんの IP を
+取り出して EC-CUBE に渡すので、EC-CUBE から見た直前の相手は「LB」ではなく「お客さん」になる。
+LB のサブネット（`10.0.0.0/8` など）を書くと、お客さんの IP がその中に無いので信頼されず、
+**HTTPS と判定されない**（Cookie に `Secure` が付かない、生成する URL が `http://` になる、決済の
+戻りで弾かれる）。以前の案内はサブネットを書かせていて、2 台で試してこれを確かめた。
+
+そのぶん、**nginx に LB 以外から届かないこと**が前提になる。nginx は `X-Forwarded-For` の右端（直前の LB が
+付けた値）をお客さんの IP として使うので、直接届くとその値を偽れて、管理画面の IP 制限とログインの回数制限が
+抜ける。`HTTP_BIND` をプライベート IP にし（必須）、ファイアウォールでも `8080` を LB の IP にだけ開ける。
+
+## 管理画面が書くファイルは 1 台にしか無い
+
+管理画面は DB だけでなくファイルにも書く（ページ管理 → `app/template/user_data/`、ブロック管理 →
+`app/template/<テーマ>/Block/`、CSS・JS 管理 → `html/user_data/assets/`、ファイル管理 →
+`html/user_data/`、プラグインの導入 → `app/Plugin/`）。**複数ホストでは、それが起きたホストにしか
+無い。** 別のホストに振られた人には「保存したのに変わらない」「ページが 500」になる（#100）。
+アプリホストでは `app/Plugin` と `html/user_data` を読み取り専用で mount しているので、プラグインの
+導入とファイル管理はそもそも失敗する。
+
+対処は 2 つのどちらか:
+
+1. **共有ストレージに載せる**。アップロード画像と同じ NFS / EFS に `app/template`、
+   `html/user_data`、`app/Plugin` も置き、全ホストで同じものを bind mount する。プラグインの
+   有効化はキャッシュの組み立て直しを伴うので、その後に各ホストで `bin/plugin.sh reload`
+2. **管理画面を 1 台に固定する**（共有ストレージが無いとき）。LB で `/<管理画面のパス>` を init 役のホストに
+   だけ振り、そこで書いたものを `bin/pull-admin-files.sh` → git → 各ホストで `bin/deploy.sh` で配る
+
+どちらも取らないなら、複数ホストでは管理画面からファイルを書く操作をしない
+（テンプレートは git で、`docs/customize.md`）。
+
+## 運用
+
+### 毎日のコードの反映（ローリング）
+
+1 台ずつ、LB から外して反映し、戻す。**migration を含むときは init 役から。**
+
+```bash
+# 1. LB からこのホストを外す（nginx: upstream の行に down を付けて reload / Cloudflare: プールで無効 / ALB: deregister）
+# 2. 反映する（本番なのでプロジェクト名を打たせる。非対話は CONFIRM_DEPLOY=<名前>）
+bin/deploy.sh
+# 3. 開くことを確かめる（deploy.sh も最後に確かめる）
+bin/healthcheck.sh
+# 4. LB に戻して、次のホストへ
+```
+
+- `deploy.sh` は外部 DB のバックアップも取る。**全ホストで取ると同じものが台数分できる**ので、
+  2 台目以降は `bin/deploy.sh --no-backup` でよい（init 役で取った直後なら）。
+- migration は**古いコードでも壊れない形**（列を足すだけ、など）にする。init 役で流したあと、残りの
+  ホストが新しいコードになるまでの間、古いコードが新しいスキーマで動く。
+
+### PHP と Debian のパッチ（イメージの更新）
+
+日付タグで固定しているので、**自動では変わらない。** 週に一度（月曜の焼き直しのあと）、全ホストの
+`.env` の `ECCUBE_IMAGE` を新しい日付タグに書き換え、上の手順で 1 台ずつ `bin/deploy.sh`。
+急ぎの脆弱性（`security-scan` の Issue）は、その日の日付タグで同じことをする。
+
+### EC-CUBE を上げる（`bin/upgrade.sh`）
+
+**全ホストを止める時間が要る。** 版の違う本体がキャッシュの Redis を共有すると、片方が書いたものを
+もう片方が読んで壊れる。
+
+1. LB を「メンテナンス中」にする（自前 nginx なら `return 503`。Cloudflare / ALB は固定の応答）
+2. init 役**以外**のホストを止める: `docker compose stop ec-cube`（`messenger` を使っていれば `worker` も）
+3. init 役で `bin/self-update.sh` → `bin/upgrade.sh <制約>`（外部 DB の退避・失敗したら自動で戻す、は
+   1 台のときと同じ）。終わったら新しい日付タグを `.env` に控える
+4. 残りのホストで、`.env` の `ECCUBE_IMAGE` を同じタグにして `bin/upgrade.sh <制約>`（スキーマはもう
+   合っているので、差分なしで通る）
+5. キャッシュの Redis を空にする（`redis-cli -u "$REDIS_URL" FLUSHDB`。セッションの Redis は消さない）
+6. LB を戻す
+
+### バックアップは 1 台で
+
+DB が外部になっても `bin/backup.sh` はそのまま使える（`db` サービスが無ければ `.env` の `DB_*` で
+外部 DB に繋ぐ）。**init 役の 1 台だけ**で cron を回し、`BACKUP_SYNC` で外へ送る。
+全ホストで回すと同じダンプが台数分できるだけ。画像は NFS / EFS 側でも別に取っておく。
+
+### ホストを足す・外す
+
+- **足す**: 手順 3 で用意し（`ECCUBE_SKIP_DB_INIT` は書かない）、確かめてから LB に入れる。
+- **外す**: LB から外してから `docker compose down`（`-v` は付けない）。
 
 ## DB を外に出す（マネージド DB）
 
@@ -267,7 +440,7 @@ DB=外部）になっているので、**アプリホストを N 台並べて前
 
 写すときは:
 - **写す先にもう店があれば止まり、データベース名を打たせる。** 打てば、写す前にその DB の中身を
-  `backups/<日時>-before-setup-db-target/db.sql.gz` へ取ってから上書きする（向き先の取り違えで別の店の DB を消さない）。
+  `backups/<日時>-setup-db-target/` へ取ってから上書きする（向き先の取り違えで別の店の DB を消さない）。
 - **写している間はメンテナンス表示。** 切り替えて起動し直したあとに外す（写してから切り替えるまでの注文が、
   古い DB にだけ残って新しい店から消える、を防ぐ）。
 - PostgreSQL は 1 つのトランザクションで流し、エラーで止める。写せなければ `.env` は変えない。
@@ -283,89 +456,6 @@ DB=外部）になっているので、**アプリホストを N 台並べて前
   認証なしのまま動く。足すなら `.env` に `REDIS_PASSWORD` を書き、`REDIS_URL` /
   `SESSION_REDIS_URL` を `redis://:<pass>@redis:6379` の形にして `docker compose up -d`
   （**全員ログアウトになる**）
-
-## 管理画面が書くファイルは 1 台にしか無い
-
-管理画面は DB だけでなくファイルにも書く（ページ管理 → `app/template/user_data/`、ブロック管理 →
-`app/template/<テーマ>/Block/`、CSS・JS 管理 → `html/user_data/assets/`、ファイル管理 →
-`html/user_data/`、プラグインの導入 → `app/Plugin/`）。**複数ホストでは、それが起きたホストにしか
-無い。** 別のホストに振られた人には「保存したのに変わらない」「ページが 500」になる（#100）。
-
-対処は 2 つのどちらか:
-
-1. **共有ストレージに載せる**（推奨）。アップロード画像と同じ NFS / EFS に `app/template`、
-   `html/user_data`、`app/Plugin` も置き、全ホストで同じものを bind mount する。プラグインの
-   有効化はキャッシュの組み立て直しを伴うので、その後に各ホストで `bin/plugin.sh reload`
-2. **管理画面を 1 台に固定する**。LB で `/admin` をホスト 1 台にだけ振り（sticky ではなく固定）、
-   そこで書いたものを `bin/pull-admin-files.sh` → git → `bin/deploy.sh` で他へ配る。
-   手順が増えるが、共有ストレージが無い環境でも成り立つ
-
-どちらも取らないなら、複数ホストでは管理画面からファイルを書く操作をしない
-（テンプレートは git で、`docs/customize.md`）。
-
-## バックアップは 1 台で
-
-DB が外部になっても `bin/backup.sh` はそのまま使える（`db` サービスが無ければ `.env` の `DB_*` で
-外部 DB に繋ぐ）。**複数ホストのうち 1 台だけ**で cron を回し、`BACKUP_SYNC` で外へ送る。
-全ホストで回すと同じダンプが台数分できるだけ。
-
-## 手順
-
-1. **共有サービスを用意**（別ホスト or マネージド）: DB、Redis（キャッシュ）、Redis
-   （セッション）、アップロード用 NFS/EFS。
-2. **各アプリホスト**で `compose.app.yaml`（db/redis を含まない app 層のみ）を起動:
-   ```bash
-   docker compose -f compose.app.yaml up -d   # .env の ECCUBE_IMAGE で配布イメージを指定して pull（build しない）
-   ```
-   `.env` に外部エンドポイント（`DB_HOST` / `REDIS_URL` / `SESSION_REDIS_URL`）と
-   `TRUSTED_PROXIES=<LB の IP/サブネット>` を設定する。
-3. **スキーマ移行は 1 台だけ**: どこか 1 台を `ECCUBE_SKIP_DB_INIT=0` で起動して
-   `migrate` を済ませ、以降の app ホストは `ECCUBE_SKIP_DB_INIT=1`（既定）で起動する
-   （全台が一斉に migrate すると競合するため）。
-   **v1.0.19 までの配布イメージでは、DB に店がある状態で新しいホスト（新しいボリューム）を
-   `ECCUBE_SKIP_DB_INIT=0` で起動すると、`eccube:install` が共有の DB の表を全部消して作り直す。**
-   v1.0.20 からは、起動時に DB に店（`dtb_base_info`）があれば install せずに migration へ回る
-   （繋がらなくて確かめられないときも install しない）。古いイメージのままなら、init ロールは
-   最初にデータを入れた 1 台から動かさないこと。
-4. **前段の LB**:
-   - 自前 nginx: `docker/nginx/lb.conf.example` を参照（`upstream` に各 app ホストを列挙）。
-   - Cloudflare Load Balancing: 各 app ホスト（の nginx:80/443）をオリジンプールに登録。
-   - AWS ALB: ターゲットグループに各 app ホストを登録。ヘルスチェックは `/`。
-
-> **重要**: LB で HTTPS を終端する場合、各アプリホストの `.env` に `TRUSTED_PROXIES` を
-> 設定し、LB は `X-Forwarded-Proto` を送ること。これが無いと EC-CUBE が HTTPS を認識できず、
-> セッション Cookie の `secure`/`SameSite=None` が付かず（決済で問題）、生成 URL も http に
-> なる。セッションは Redis 共有なので **スティッキーセッションは不要**。
-
-## デプロイ / 更新（CI とローリング更新）
-
-**イメージは CI が 1 回だけ build** し、各ホストは pull する（全ホスト同一の保証）。
-
-- `.github/workflows/build-image.yml`: main への push（`docker/php/**` 変更時）で
-  `ghcr.io/<owner>/<repo>/ec-cube:latest` と `:<git-sha>` を push。手動実行では
-  `ECCUBE_VERSION` を指定できる。認証は `GITHUB_TOKEN`（追加シークレット不要）。
-- 各アプリホストの `.env` に `ECCUBE_IMAGE=ghcr.io/<owner>/<repo>/ec-cube:<sha>` を設定
-  （`latest` より **sha 固定を推奨**。ロールバック = 前の sha に戻して pull）。
-
-**ローリング更新**（無停止。1 台ずつ）:
-
-```bash
-# ホスト A で（他ホストは稼働継続）
-# 1. LB からホスト A を外す（nginx LB: upstream をコメントアウトして reload /
-#    Cloudflare LB: プールで無効化 / ALB: deregister）
-# 2. 新イメージへ更新
-docker compose -f compose.app.yaml pull ec-cube
-docker compose -f compose.app.yaml up -d --no-build
-# 3. ヘルス確認（healthy になるまで）
-docker compose -f compose.app.yaml ps
-curl -fsS http://localhost:8080/ -o /dev/null && echo OK
-# 4. LB に戻す → 次のホストへ
-```
-
-- マイグレーションを伴う更新は、**先に 1 台（init ロール）で `ECCUBE_SKIP_DB_INIT=0`
-  にして適用**してから残りを更新する（後方互換のあるスキーマ変更にすること）。
-- 単一ホスト（compose.yaml）の場合はこの手順は使えず、`up -d --build` の数十秒の
-  停止を許容するか、メンテナンス画面を挟む。
 
 ## さらに上（Tier 3）
 
