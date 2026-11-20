@@ -113,6 +113,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **リリースの添付（`eccube-docker-<ver>.tar.gz` / `SHA256SUMS` / attestation）を取り、sha256 と
   署名を確かめてから展開する**（`release-assets.yml` が publish 時に付ける。#120）。添付の
   無いリリースは codeload に落ちて「検証なし」と出す。
+  **書き換える前に、書き換える・消すファイルを `var/self-update/<日時>-from-<版>/before.tar` に控え**（`--force` で
+  上書きする店の変更もここに残る）、新しいファイルは同じディスクの置き場へ先に全部写してから `mv` で 1 つずつ入れ替える。
+  入れ替えの途中の失敗・Ctrl-C は `undo_apply` が控えから戻す。
   **`mapfile` を使わないこと。** bash 4 以降の組み込みで、**macOS の bash は 3.2**。
   `command not found` で `set -e` が働き、何も出さずに死ぬ。
 - **「更新」は 3 つあり、別物。** 自分のコードは `bin/deploy.sh`（毎日）、環境（`bin/` や
