@@ -434,12 +434,13 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **アップロード画像（Tier 2）**: `html/upload` は専用ボリューム `eccube_upload` に分離。
   複数ホストは NFS/EFS ドライバに差し替えて共有。`down -v`（reset/switch-version）で
   ローカルデータは消えるので事前バックアップ。詳細は `docs/scale.md`。
-- **複数ホスト + LB（Tier 2）**: 各アプリホストは `compose.app.yaml`（db/redis を含まない
-  app 層のみ、外部共有サービスを参照）。init ロール 1 台だけ `ECCUBE_SKIP_DB_INIT=0` で
-  migrate、他は 1。**entrypoint は印（`var/.eccube_installed`）が無くても、DB に店（`dtb_base_info`）が
-  あれば `eccube:install` を打たない**（install は `schema:drop --force` から始まる。印はボリュームの中にしか
-  無いので、新しいホストやボリュームの作り直しで共有の DB を消していた。v1.0.20）。HTTPS 終端 LB では `TRUSTED_PROXIES` 必須（本体未配線を
-  `app/config/eccube/packages/trusted_proxies.yaml` で補う）。LB 例は `docker/nginx/lb.conf.example`。
+- **複数ホスト + LB（Tier 2）**: 各アプリホストは `.env` の `COMPOSE_FILE=compose.app.yaml`（db/redis を含まない
+  app 層。外部の共有サービスを見る）。**店は 1 台で作ってから移す**（アプリホストは `html/user_data` が ro で install できない）。
+  init 役 1 台だけ `ECCUBE_SKIP_DB_INIT=0`、ほかは既定 1。**`TRUSTED_PROXIES` は既定の `REMOTE_ADDR` のまま**
+  （nginx が X-Forwarded-For でお客さんの IP に置き換えるので、LB のサブネットを書くと HTTPS と判定されない。2 台で確かめた）。
+  `ECCUBE_AUTH_MAGIC` は全台同じ、イメージは日付タグで揃える。EC-CUBE を上げるときは init 役以外を止め、init 役 → 残り
+  （アプリホストの `upgrade.sh` はスキーマに触らない）。手順は `docs/scale.md`「複数ホスト + ロードバランサ」、LB 例は
+  `docker/nginx/lb.conf.example`（各ホストの `:8080`）。
 - **どこまで強くするかは `bin/loadtest.sh` で測ってから決める**（k6、`docs/loadtest.md`）。到着数を固定して流す
   （VU 固定だと遅くなるほど送る数も減り、限界の手前で余裕があるように見える）。**注文は流さない**（本物の受注と
   メール）。手元以外へはホスト名を打たないと流さず、手元でもこのプロジェクトの nginx のポートでなければ止める

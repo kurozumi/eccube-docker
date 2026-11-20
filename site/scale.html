@@ -66,7 +66,7 @@ bin/deploy.sh</pre><p>CPU に余裕があるのに、負荷試験で「php-fpm �
       <div class="step"><div class="num">④</div><h3>アプリのホストを並べる</h3><pre><span class="c"># 各ホストで（DB・Redis・画像は外へ）</span>
 docker compose \
   -f compose.app.yaml up -d
-<span class="c"># 前に LB を置く</span></pre><p>DB と Redis はマネージドへ、画像は NFS / EFS へ出し、アプリだけを並べます。セッションは Redis で共有なので、同じ人を同じホストへ寄せる設定は要りません。<strong>全ホストの php-fpm の枠の合計が DB の接続数の上限（既定 200）を超えると落ちる</strong>ので、合わせて上げます。</p></div>
+<span class="c"># 前に LB を置く</span></pre><p>DB と Redis はマネージドへ、画像は NFS / EFS へ出し、アプリだけを並べます。セッションは Redis で共有なので、同じ人を同じホストへ寄せる設定は要りません。<strong>全ホストの php-fpm の枠の合計が DB の接続数の上限（既定 200）を超えると落ちる</strong>ので、合わせて上げます。手順は<a href="#multihost">下の「複数のサーバーに分ける」</a>。</p></div>
 
       <div class="step"><div class="num">⑤</div><h3>DB が詰まったら</h3><pre><span class="c"># 動いている DB にその場で（MariaDB）</span>
 SET GLOBAL slow_query_log = 1;
@@ -83,6 +83,56 @@ SET GLOBAL slow_query_log = 1;
     <div class="note">
       <b>正直に</b>
       <span>何 PV まで耐えるかは、まだ本番と同じ形の環境で測っていません。手元の Mac（8 CPU、サンプルデータ）では 20 PV/秒までが安全で、先に詰まったのは PHP の CPU でした。設定の詳しい手順は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/scale.md">大規模アクセス</a>。</span>
+    </div>
+  </div>
+</section>
+
+<section id="multihost">
+  <div class="wrap">
+    <h2>複数のサーバーに<em class="k">分ける</em></h2>
+    <p class="sub">1 台で足りるうちは 1 台で。更新もバックアップも管理画面も、台数ぶん手間が増えます。上の ①〜③ を打っても PHP が詰まるときに使います。</p>
+
+    <div class="tablewrap">
+      <table>
+        <tr><th>置くもの</th><th>どこに</th></tr>
+        <tr><td>DB</td><td>マネージド DB か別のサーバー（全台が同じものを見る）</td></tr>
+        <tr><td>Redis 2 つ</td><td>キャッシュ用とログイン用を別々に</td></tr>
+        <tr><td>商品画像</td><td>NFS / EFS（サーバーごとに別の画像にならないように）</td></tr>
+        <tr><td>アプリ</td><td>各サーバーで <code>compose.app.yaml</code>。1 台だけが DB の構造を変える役（init 役）</td></tr>
+        <tr><td>前の振り分け（LB）</td><td>自前の nginx・Cloudflare Load Balancing・AWS ALB。HTTPS はここで終える</td></tr>
+      </table>
+    </div>
+
+    <div class="steps" style="margin-top:28px">
+      <div class="step"><div class="num">1</div><h3>まず 1 台で店を作る</h3><pre>bin/init.sh
+bin/publish.sh</pre><p>アプリ専用のサーバーの上では、新しく店を作れません。いつもどおり 1 台で本番まで持っていきます。</p></div>
+      <div class="step"><div class="num">2</div><h3>DB・Redis・画像を外へ</h3><pre>bin/setup.sh db
+<span class="c"># .env で redis を有効に</span>
+<span class="c"># URL を外の Redis へ</span></pre><p>DB は写す先に店があれば止まり、写している間はメンテナンス表示です。Redis を切り替えた瞬間に全員ログアウトになるので、時間を選びます。</p></div>
+      <div class="step"><div class="num">3</div><h3>アプリのサーバーを用意する</h3><pre><span class="c"># .env は 1 台目を写してから直す</span>
+COMPOSE_FILE=compose.app.yaml
+HTTP_BIND=10.0.0.11
+ECCUBE_IMAGE=…:4.3-php8.3-20261123</pre><p><strong>ECCUBE_AUTH_MAGIC は全台同じに</strong>（違うと、そのサーバーでは誰もログインできません）。イメージは日付タグで全台を揃えます。init 役だけ <code>ECCUBE_SKIP_DB_INIT=0</code>。</p></div>
+      <div class="step"><div class="num">4</div><h3>LB を前に置く</h3><pre><span class="c"># 自前の nginx なら</span>
+docker/nginx/lb.conf.example</pre><p>各サーバーの <code>:8080</code> へ振ります。<code>TRUSTED_PROXIES</code> は書きません（書くと HTTPS と判定されず、Cookie に Secure が付きません）。</p></div>
+    </div>
+
+    <div class="two" style="margin-top:28px">
+      <div class="box"><h3>毎日の反映は 1 台ずつ</h3><ul>
+        <li>LB から外す → <code>bin/deploy.sh</code> → 開くのを確かめて戻す、を 1 台ずつ。</li>
+        <li>DB の構造が変わるときは init 役から。古いコードでも壊れない変え方にします。</li>
+        <li>バックアップは init 役の 1 台だけで取り、外へ送ります。</li>
+      </ul></div>
+      <div class="box"><h3>EC-CUBE を上げるときは全台を止める</h3><ul>
+        <li>LB をメンテナンス表示にし、init 役以外を止めます。</li>
+        <li>init 役で <code>bin/upgrade.sh</code>（失敗したら自動で元の版に戻ります）。</li>
+        <li>残りのサーバーも同じタグで <code>bin/upgrade.sh</code>。DB には触りません。</li>
+      </ul></div>
+    </div>
+
+    <div class="note">
+      <b>管理画面が書くファイル</b>
+      <span>ページ管理・ブロック管理・CSS 管理が書くファイルは、書いたサーバーにしかありません。共有ストレージに置くか、管理画面を 1 台に固定します。詳しい手順は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/scale.md#複数ホスト--ロードバランサ">大規模アクセス「複数ホスト + ロードバランサ」</a>。</span>
     </div>
   </div>
 </section>
