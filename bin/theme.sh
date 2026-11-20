@@ -81,12 +81,22 @@ case "$cmd" in
   init)
     if [ -f "$base" ] && [ "${2:-}" != "--force" ]; then
         die "すでに写してあります（$(head -1 "$base")）。写し直すなら bin/theme.sh init --force
-       （自分で直した分は消えます。先に bin/theme.sh diff で確かめてください）"
+       （自分で直した分は置き換わります。いまの写しは var/theme-backup/ に控えます。先に bin/theme.sh diff で確かめてください）"
     fi
     ver="$(core_version)"
     [ -n "$ver" ] || die "本体のバージョンを読めませんでした（ボリュームが無い？ docker compose up -d）"
     log "本体（EC-CUBE ${ver}）のテーマ assets を ${dir}/assets へ写します..."
     src="$(fetch_core_assets)"
+    # **写し直す前に、いまの写しを控える。** 自分で直した CSS・画像も丸ごと置き換わるので、
+    # git にコミットしていなければ、ここが唯一の残り先になる。
+    if [ -d "${dir}/assets" ]; then
+        keep="var/theme-backup/$(date +%Y%m%d-%H%M%S)-${code}"
+        mkdir -p "$keep"
+        items=(assets); [ -f "$base" ] && items+=(.base)
+        COPYFILE_DISABLE=1 tar -czf "${keep}/assets.tar.gz" -C "$dir" "${items[@]}" \
+            || { rm -rf "$src"; die "いまの写しを控えられませんでした。何も変えていません。"; }
+        log "いまの写しを ${keep}/assets.tar.gz に控えました（戻すなら: tar -xzf ${keep}/assets.tar.gz -C ${dir}）"
+    fi
     rm -rf "${dir}/assets"
     mkdir -p "$dir"
     cp -a "$src/assets" "${dir}/assets"

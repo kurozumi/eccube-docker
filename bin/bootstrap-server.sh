@@ -35,7 +35,13 @@ fi
 REMOTE
 log "${host}:${path} へ店のファイルを送ります..."
 ssh "$host" "mkdir -p '${path}'" 2>/dev/null || ssh "$host" "sudo mkdir -p '${path}' && sudo chown \"\$(id -u):\$(id -g)\" '${path}'" || die "${path} を作れません"
-git ls-files -z | rsync -az --from0 --files-from=- ./ "${host}:${path}/" || die "送れませんでした"
+# **向こうにもうファイルがあれば、上書きする前に控える**（var/bootstrap-backup/<日時>/。送り先の中の相対パス）。
+# 動いている店へ打ち直したとき、管理画面が向こうで書いたファイル（customize.css など）を黙って消さない。
+bstamp="$(date +%Y%m%d-%H%M%S)"
+git ls-files -z | rsync -az --from0 --files-from=- --backup --backup-dir="var/bootstrap-backup/${bstamp}" ./ "${host}:${path}/" || die "送れませんでした"
+if ssh "$host" "test -d '${path}/var/bootstrap-backup/${bstamp}'" 2>/dev/null; then
+    log "向こうで上書きしたファイルは ${path}/var/bootstrap-backup/${bstamp}/ に控えました"
+fi
 img="$(grep -E '^ECCUBE_IMAGE=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
 log "向こうで .env を作ります（パスワード類を生成。起動はしません）..."
 ssh "$host" "cd '${path}' && bin/init.sh --no-start" | sed 's/^/  /'
