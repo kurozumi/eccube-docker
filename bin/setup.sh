@@ -116,14 +116,67 @@ EOS
     elif [ -n "$(docker compose ps -q db 2>/dev/null)" ]; then
         echo "[setup] 注意: 種類が違う（${cur_engine} → ${engine}）ので、データは写せません。新しい DB は空から始まります。"
     fi
+    # 写す先にもう店があるか。**あれば、写すとその DB の表は上書きされる**（向き先を取り違えると、別の店の
+    # 本番 DB を消す）。DB 名を打たせ、写す前にその DB の中身を backups/ へ取る。
     if [ "$migrate" = y ]; then
-        echo "[setup] 写しています（お店は一時的に古いほうを見たままです）..."
         if [ "$engine" = postgresql ]; then
+            tshop="$(docker run --rm --network "$net" -e PGPASSWORD="$pass" "$client" psql -h "$host" -p "$port" -U "$user" -d "$name" -tAc "SELECT to_regclass('dtb_base_info') IS NOT NULL" 2>/dev/null || echo unknown)"
+        else
+            tshop="$(docker run --rm --network "$net" -e MYSQL_PWD="$pass" "$client" mysql -N -h "$host" -P "$port" -u "$user" "$name" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'dtb_base_info'" 2>/dev/null || echo unknown)"
+        fi
+        case "$(printf '%s' "$tshop" | tr -d '[:space:]')" in
+            f|0) ;;
+            *)
+                echo "[setup] **写す先の DB（${name}@${host}）には、もう店があります**（または確かめられませんでした）。"
+                echo "        写すと、その DB の表は上書きされます。写す前に、その DB の中身を backups/ へ取ります。"
+                ask confirm_name "よければ、写す先のデータベース名（${name}）を打ってください"
+                [ "$confirm_name" = "$name" ] || { echo "[setup] 中止しました（何も変えていません）。"; exit 1; }
+                tdir="backups/$(date +%Y%m%d-%H%M%S)-before-setup-db-target"
+                mkdir -p "$tdir"
+                echo "[setup] 写す先の DB を ${tdir}/ へ取っています..."
+                if [ "$engine" = postgresql ]; then
+                    docker run --rm --network "$net" -e PGPASSWORD="$pass" "$client" pg_dump --clean --if-exists -h "$host" -p "$port" -U "$user" "$name" | gzip > "${tdir}/db.sql.gz" \
+                        || { echo "[setup] 写す先の DB を取れませんでした。中止します（何も変えていません）。" >&2; exit 1; }
+                else
+                    docker run --rm --network "$net" -e MYSQL_PWD="$pass" "$client" mysqldump --single-transaction --triggers --no-tablespaces -h "$host" -P "$port" -u "$user" "$name" | gzip > "${tdir}/db.sql.gz" \
+                        || { echo "[setup] 写す先の DB を取れませんでした。中止します（何も変えていません）。" >&2; exit 1; }
+                fi
+                gunzip -c "${tdir}/db.sql.gz" | tail -c 1024 | grep -qE -- '-- (PostgreSQL database dump complete|Dump completed)' \
+                    || { echo "[setup] 写す先の DB のダンプが最後までありません。中止します（何も変えていません）。" >&2; exit 1; }
+                echo "[setup] 取りました（この DB 単独のダンプ。戻すなら同じクライアントで流し込む）。"
+                ;;
+        esac
+    fi
+    if [ "$migrate" = y ]; then
+        # **写している間はメンテナンス表示。** 以前は「お店は古いほうを見たまま」で、写してから切り替える
+        # までに入った注文は古い DB にしか無く、切り替えたあとの店から消えていた。
+        sm=/var/www/html/.maintenance; smine=0
+        if [ -n "$(docker compose ps -q --status running ec-cube 2>/dev/null)" ] && ! docker compose exec -T ec-cube test -f "$sm" 2>/dev/null; then
+            docker compose exec -T ec-cube runuser -u www-data -- sh -c "printf 'setup:%s' '$(openssl rand -hex 16)' > $sm" \
+                || { echo "[setup] メンテナンス表示を立てられませんでした。注文を受けたまま写さないよう、中止します（何も変えていません）。" >&2; exit 1; }
+            smine=1; echo "[setup] メンテナンス ON（写している間、お客さんには「メンテナンス中」）"
+        fi
+        setup_maint_off() {
+            if [ "$smine" = 1 ] && docker compose exec -T ec-cube sh -c "grep -q '^setup:' $sm && rm -f $sm" 2>/dev/null; then
+                echo "[setup] メンテナンス OFF"
+            fi
+            return 0
+        }
+        echo "[setup] 写しています..."
+        copy_ok=1
+        if [ "$engine" = postgresql ]; then
+            # 1 つのトランザクションで流し、エラーで止める（途中で失敗したら写す先は流す前のまま）
             docker compose exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" exec pg_dump --clean --if-exists -U "$POSTGRES_USER" "$POSTGRES_DB"' \
-              | docker run --rm -i --network "$net" -e PGPASSWORD="$pass" "$client" psql -q -v ON_ERROR_STOP=0 -h "$host" -p "$port" -U "$user" -d "$name" >/dev/null
+              | docker run --rm -i --network "$net" -e PGPASSWORD="$pass" "$client" psql -q -v ON_ERROR_STOP=1 --single-transaction -h "$host" -p "$port" -U "$user" -d "$name" >/dev/null || copy_ok=0
         else
             docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump --single-transaction --triggers --no-tablespaces -u root "$MYSQL_DATABASE"' \
-              | docker run --rm -i --network "$net" -e MYSQL_PWD="$pass" "$client" mysql -h "$host" -P "$port" -u "$user" "$name"
+              | docker run --rm -i --network "$net" -e MYSQL_PWD="$pass" "$client" mysql -h "$host" -P "$port" -u "$user" "$name" || copy_ok=0
+        fi
+        if [ "$copy_ok" != 1 ]; then
+            setup_maint_off
+            echo "[setup] 写せませんでした。.env は変えていません（お店はいままでの DB のまま）。" >&2
+            [ -n "${tdir:-}" ] && echo "        写す先の DB が途中まで書き換わっているかもしれません。元の中身: ${tdir}/db.sql.gz" >&2
+            exit 1
         fi
         echo "[setup] 写しました。"
     fi
@@ -136,6 +189,9 @@ EOS
     docker compose stop db >/dev/null 2>&1 || true
     echo "[setup] 手元の db は止めました（データのボリュームは残っています。戻すなら COMPOSE_FILE から compose.externaldb.yaml を外して docker compose up -d）。"
     restart_app
+    # 表示はボリュームの中にあるので、作り直したあとも残っている。新しい DB で起動してから外す
+    [ "$migrate" = y ] && setup_maint_off
+    return 0
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
