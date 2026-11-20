@@ -16,6 +16,99 @@
 | Tier 2 | アップロード画像の共有ストレージ（NFS/EFS） | アップロード画像 |
 | Tier 2 | 複数ホスト + 外部 LB（`compose.app.yaml`） | 複数ホスト + LB |
 
+## 打ち手は 3 つ（安くて効く順）
+
+| | 打ち手 | 減るもの | いまの状態 |
+|---|---|---|---|
+| 1 | **CDN**（静的ファイルを中継点に持たせる） | 画像・CSS・JS のリクエスト。ページの 5〜10 倍の数がある | **Cloudflare のトンネルなら、もう効いている**（下の「CDN」で確かめ方） |
+| 2 | **Redis のキャッシュ + アプリを並べる** | PHP の計算と、DB への同じ問い合わせ | 設定 1 行と台数で効く（下の「Redis とアプリを並べる」） |
+| 3 | **DB の読み取りを振り分ける・ページをキャッシュする** | DB の負荷・PHP を通るページそのもの | **まだ無い**（下の「さらに上」） |
+
+負荷試験で先に詰まったのが PHP の CPU なら 2、DB なら 2 の Redis → 3、と進みます。1 はどちらでも先にやってよい（安い）。
+
+## 1. CDN
+
+### Cloudflare のトンネルで公開しているとき（既定）
+
+**お客さんのリクエストはもう Cloudflare を通っているので、静的ファイルは中継点がキャッシュしています。**
+Cloudflare は拡張子（CSS・JS・画像・フォントなど）で決め、元の `Cache-Control` に従って持ちます。
+HTML はキャッシュしません（カート・ログイン状態・CSRF トークンが入るので、それで正しい）。
+
+この環境が付けている `Cache-Control`（`docker/nginx/default.conf`・`docker/caddy/Caddyfile`）:
+
+| もの | 持つ時間 | 理由 |
+|---|---|---|
+| 商品画像（`/html/upload/save_image/`） | 30 日 | 登録のたびに名前が変わる。同じ名前で中身は変わらない |
+| CSS・JS・テーマの画像・フォント | 5 分 | **名前が変わらない。** EC-CUBE 4.2 / 4.3 は URL に版を付けず（4.4 も `user_data` だけ）、`customize.css` は管理画面の「CSS 管理」と deploy が同じ名前のまま書き換える。長く持たせると、直した CSS が中継点とブラウザに残る（v1.0.17 までは 30 日で、そうなっていた） |
+
+5 分でも、中継点から元のサーバーに届くのは「中継点の数 × ファイルの数」が 5 分に 1 回だけです。
+
+**Cloudflare の Browser Cache TTL を「Respect Existing Headers」にしておく**（Caching → Configuration）。
+ここに 4 時間などの値が入っていると、Cloudflare は元の `max-age=300` をその値まで引き上げてブラウザへ渡し、
+直した CSS がブラウザに何時間も残ります（商品画像の 30 日は元のほうが長いので、そのまま）。
+下の確かめ方で、公開している名前から見た `cache-control` が `max-age=300` になっていれば大丈夫です。
+
+**確かめ方**（2 回目で `HIT` になれば効いている）:
+
+```bash
+curl -sI https://shop.example.com/html/template/default/assets/css/style.css | grep -i -E 'cf-cache-status|cache-control'
+curl -sI https://shop.example.com/html/template/default/assets/css/style.css | grep -i cf-cache-status   # HIT
+```
+
+**やってはいけないこと**: Cloudflare の Cache Rules で「Cache Everything（HTML もキャッシュ）」にしない。
+ほかのお客さんのカート・ログイン状態・CSRF トークンが入ったページを配ってしまいます。HTML のキャッシュは
+3 の「ページのキャッシュ」で、ログインとカートを確実に外してからやる話です。
+
+すぐに反映したいとき（CSS を直してすぐ見せたい・テーマを入れ替えた）は、Cloudflare の画面の
+Caching → Configuration → **Purge Cache**（URL を指定するか、全部）。5 分待てば、何もしなくても入れ替わります。
+
+**Purge で消えるのは中継点の写しだけで、お客さんのブラウザの写しは消えません。** v1.0.17 以前（30 日）から
+上げた直後は、それまでに来たお客さんのブラウザに古い CSS・JS が最長 30 日残ります。新しい `max-age` は、
+ブラウザが次に取り直したときから効きます。すぐ全員に届けたいときは、そのファイルの URL を変えます
+（読み込んでいる自分のテンプレートで `?v=2` を付ける、ファイル名を変える、など）。
+
+### caddy で 80/443 を直接受けているとき
+
+前に CDN がありません。足すなら、**トンネルに切り替えるのがいちばん簡単です**（`bin/setup.sh tunnel`。[本番デプロイ](deploy.md)の
+「公開方式」。80/443 のポートも閉じられる）。DNS で Cloudflare のプロキシ（オレンジの雲）を前に置くこともできますが、
+そうすると caddy から見たお客さんの IP が Cloudflare のものになり、ログインのレート制限やログが効かなくなります
+（Cloudflare の IP 範囲を信じる設定が別に要る）。トンネルなら cloudflared が `X-Forwarded-For` を付け、nginx が
+それを読むので、この問題がありません。
+
+## 2. Redis とアプリを並べる
+
+順番に。どれも、負荷試験（[負荷試験](loadtest.md)）で効いたかを比べながら進めます。
+
+1. **Redis のキャッシュを入れる**: `.env` の `COMPOSE_PROFILES` に `redis` を足して `bin/deploy.sh`
+   （例: `COMPOSE_PROFILES=tunnel,redis`）。Symfony のキャッシュと Doctrine のメタデータが Redis に載り、
+   セッションも `redis-session` に移ります。**切り替えた瞬間、全員ログアウトになり、カートも消えます**
+   （下の「セッションの Redis 共有」）。お客さんの少ない時間に。
+2. **1 台の中で php-fpm を増やす**: まず `.env` の `PHP_FPM_MAX_CHILDREN` をメモリの範囲で上げる（1 本 80MB ほど）。
+   CPU に余裕があるのに php-fpm の上限（max_children）が出ているときに効きます。CPU が張り付いているなら、
+   サーバーを大きくするか、次へ。
+3. **ホストを並べる**: DB・Redis・画像を外に出し（マネージド DB・マネージド Redis・NFS / EFS）、各ホストで
+   `compose.app.yaml` を動かし、前に LB を置きます（下の「複数ホスト + ロードバランサ」）。セッションは Redis に
+   あるので、LB で同じ人を同じホストへ寄せる設定（スティッキーセッション）は要りません。
+   **DB の接続数に気をつける**: 全ホストの `PHP_FPM_MAX_CHILDREN` の合計 + 余裕が、DB の `max_connections`
+   （既定 200）を超えると「Too many connections」で落ちます（下の「単一ホスト強化」の式）。
+
+1 台の中で ec-cube のコンテナを増やす（`--scale`）こともできますが、同じ CPU を分け合うだけなので、
+2 の `PHP_FPM_MAX_CHILDREN` と効き目はほぼ同じです。やるなら、下の「水平スケール」の手順どおりに
+（素の `--scale` だと、増えたコンテナの起動時の `cache:clear` が動いているほうのキャッシュを消し、500 を出します）。
+
+## 3. DB の読み取りを振り分ける・ページをキャッシュする（まだ無い）
+
+この環境には、まだ仕組みがありません。負荷試験で DB が先に詰まり、遅い SQL を直しても、Redis を入れても
+足りないときに作ります。
+
+- **DB の読み取りの振り分け**: マネージド DB（Aurora・RDS など）に読み取り専用の複製（リードレプリカ）を足し、
+  Doctrine の primary / replica の接続で、読み取りを複製へ流す。本体は変えずに
+  `app/config/eccube/optional/` の設定で足せる見込み。書いた直後に読むと、複製がまだ追いついておらず古い値が
+  返ることがあるので、カートと注文の流れで確かめる必要がある
+- **ページのキャッシュ**: ログインしていない人の GET（トップ・一覧・詳細）だけを nginx でキャッシュする。
+  雛形は `docker/nginx/default.conf` の末尾のコメント。ページに CSRF トークンとカートが入るので、
+  **ログイン・カート・注文・管理画面を確実に外さないと、ほかの人のページを配ってしまう**
+
 ## 単一ホスト強化（Tier 1）
 
 （Redis キャッシュは任意。`COMPOSE_PROFILES` に `redis` を足したときだけ。単一ホストなら無くても動く）

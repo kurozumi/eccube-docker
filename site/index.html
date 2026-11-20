@@ -358,6 +358,24 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
   </div>
 </section>
 
+<section id="scale">
+  <div class="wrap">
+    <h2>アクセスが増えたら、<em class="k">測ってから</em>強くする</h2>
+    <p class="sub">どこが先に詰まるかは、店のプラグインとデータの量で変わります。だから最初に測り、安くて効く順に手を打ちます。</p>
+    <div class="steps">
+      <div class="step"><div class="num">0</div><h3>測る</h3><pre>bin/loadtest.sh stress --rate=100</pre><p>「毎秒何 PV」で流し、段ごとに応答時間と失敗を出す。手元ならコンテナの CPU と php-fpm の上限も。月間 PV から山の PV/秒を出す式は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/loadtest.md">負荷試験</a> に。<strong>本番には流さない</strong>（手元以外はホスト名を打たないと流れない）。</p></div>
+      <div class="step"><div class="num">1</div><h3>CDN — 静的ファイルを中継点に</h3><pre>curl -sI https://shop.example.com/…/style.css | grep cf-cache-status
+<span class="c">  cf-cache-status: HIT</span></pre><p>Cloudflare Tunnel で公開していれば<strong>もう効いています。</strong>商品画像は 30 日、名前の変わらない CSS・JS は 5 分（管理画面で直した CSS がすぐ出るように）。HTML はキャッシュしない。</p></div>
+      <div class="step"><div class="num">2</div><h3>Redis とアプリを並べる</h3><pre>COMPOSE_PROFILES=tunnel,redis</pre><p>キャッシュとセッションを Redis へ。次に php-fpm の枠を広げ、足りなければ DB・Redis・画像を外に出してホストを並べる（<code>compose.app.yaml</code> + LB）。セッションは共有なので、同じ人を同じホストへ寄せる設定は要らない。</p></div>
+      <div class="step"><div class="num">3</div><h3>DB とページ — これから</h3><pre><span class="c">  読み取りを複製へ / 匿名の GET をキャッシュ</span></pre><p>DB の読み取りを複製へ振り分ける仕組みと、ページのキャッシュは<strong>まだありません。</strong>DB が先に詰まり、遅い SQL を直しても Redis を入れても足りないときに作ります。</p></div>
+    </div>
+    <div class="note">
+      <b>正直に</b>
+      <span>何 PV まで耐えるかは、まだ本番と同じ形の環境で測っていません。手元の Mac（8 CPU、サンプルデータ）では 20 PV/秒までが安全で、先に詰まったのは PHP の CPU でした。詳しくは <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/scale.md">大規模アクセス</a>。</span>
+    </div>
+  </div>
+</section>
+
 <section class="band">
   <div class="wrap">
     <h2>向いている人・<em class="k">向いていない人</em></h2>
@@ -445,6 +463,8 @@ bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3</pre>
       <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/data-safety.md">データを失わないために</a></h3><p><code>down</code> と <code>down -v</code> の違い、消えるコマンド、消したときの復旧。</p></div>
       <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/deploy.md">本番デプロイ</a></h3><p>誰が・何を・どうやって本番へ出すか。3 枚の壁、<code>--check</code>、記録、緊急時、誰に何を渡すか。</p></div>
       <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/backup.md">バックアップ / 復元</a></h3><p>5 点セット、送り先、暗号化、引っ越し。<code>bin/setup.sh backup</code> が毎日の cron まで入れる。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/scale.md">大規模アクセス</a></h3><p>CDN、Redis、アプリを並べる、DB を外に出す。打ち手を安くて効く順に。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/loadtest.md">負荷試験</a></h3><p>何 PV/秒まで耐えるか・どこが先に詰まるかを測る。目標の決め方と読み方。</p></div>
     </div>
   </div>
 </section>

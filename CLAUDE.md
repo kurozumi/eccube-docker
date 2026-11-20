@@ -395,6 +395,11 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **性能/スケール（Tier 1）**: php-fpm は `.env` の `PHP_FPM_*`、OPcache は entrypoint が
   `APP_ENV` で切替、Redis 共有キャッシュは `optional/redis/redis_cache.yaml`（任意）、DB は
   `docker/mariadb/conf.d/`、nginx は gzip/静的キャッシュ済み。詳細は `docs/scale.md`。
+- **静的ファイルのキャッシュは、名前の変わらないもの（CSS・JS・テーマの画像）を 5 分、商品画像（`save_image`）だけ 30 日。**
+  nginx と caddy の両方で揃える。EC-CUBE 4.2 / 4.3 は URL に版を付けず、`customize.css` は管理画面の「CSS 管理」と
+  deploy が同じ名前のまま書き換えるので、長くすると直した CSS がブラウザと CDN の中継点に残る（v1.0.17 までは 30 日で、
+  トンネルの Cloudflare が元の指定どおり 30 日持っていた）。**Cloudflare で HTML をキャッシュする設定（Cache Everything）に
+  しない**（カート・ログイン・CSRF トークン入りのページを配る）。
 - **セッション Redis 共有（Tier 2）**: 専用 `redis-session` に保存し複数ホストで共有。
   `optional/redis/redis_session.yaml` が **`framework.session.handler_id`** を
   `Customize\Session\RawRedisSessionHandler` に上書きする（`SESSION_REDIS_URL`）。
