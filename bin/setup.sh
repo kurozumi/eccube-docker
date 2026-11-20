@@ -16,6 +16,10 @@ case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next }
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/image.sh
 . bin/lib/image.sh
+# shellcheck source=lib/guard.sh
+. bin/lib/guard.sh     # guard_is_prod_stack（起動し直すときに本番構成のままにする）
+# shellcheck source=lib/compose.sh
+. bin/lib/compose.sh   # compose_files
 
 [ "${1:-}" = protect ] || [ -f .env ] || { echo "[setup] .env がありません。先に bin/init.sh を実行してください。" >&2; exit 1; }
 set_env() { # set_env KEY VALUE（無ければ追記）
@@ -116,26 +120,36 @@ EOS
     elif [ -n "$(docker compose ps -q db 2>/dev/null)" ]; then
         echo "[setup] 注意: 種類が違う（${cur_engine} → ${engine}）ので、データは写せません。新しい DB は空から始まります。"
     fi
-    # 写す先にもう店があるか。**あれば、写すとその DB の表は上書きされる**（向き先を取り違えると、別の店の
-    # 本番 DB を消す）。DB 名を打たせ、写す前にその DB の中身を backups/ へ取る。
+    # 向き先にもう店があるか。**写すならその DB の表は上書きされ**（向き先を取り違えると、別の店の本番 DB を
+    # 消す）、**写さないならその店のデータでこのまま動き出す**（別の店の DB に書き始める）。どちらでも見る。
+    # 写すときは DB 名を打たせ、写す前にその DB の中身を backups/ へ取る。
+    if [ "$engine" = postgresql ]; then
+        tshop="$(docker run --rm --network "$net" -e PGPASSWORD="$pass" "$client" psql -h "$host" -p "$port" -U "$user" -d "$name" -tAc "SELECT to_regclass('dtb_base_info') IS NOT NULL" 2>/dev/null || echo unknown)"
+    else
+        tshop="$(docker run --rm --network "$net" -e MYSQL_PWD="$pass" "$client" mysql -N -h "$host" -P "$port" -u "$user" "$name" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'dtb_base_info'" 2>/dev/null || echo unknown)"
+    fi
+    tshop="$(printf '%s' "$tshop" | tr -d '[:space:]')"
+    if [ "$migrate" != y ] && [ "$tshop" != f ] && [ "$tshop" != 0 ]; then
+        echo "[setup] **向き先の DB（${name}@${host}）には、もう店があります**（または確かめられませんでした）。"
+        echo "        写さずに切り替えると、お店はその DB のデータ（商品・会員・注文）で動き出します。"
+        ask confirm_name "その DB の店で動かすなら、データベース名（${name}）を打ってください"
+        [ "$confirm_name" = "$name" ] || { echo "[setup] 中止しました（何も変えていません）。"; exit 1; }
+    fi
     if [ "$migrate" = y ]; then
-        if [ "$engine" = postgresql ]; then
-            tshop="$(docker run --rm --network "$net" -e PGPASSWORD="$pass" "$client" psql -h "$host" -p "$port" -U "$user" -d "$name" -tAc "SELECT to_regclass('dtb_base_info') IS NOT NULL" 2>/dev/null || echo unknown)"
-        else
-            tshop="$(docker run --rm --network "$net" -e MYSQL_PWD="$pass" "$client" mysql -N -h "$host" -P "$port" -u "$user" "$name" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'dtb_base_info'" 2>/dev/null || echo unknown)"
-        fi
-        case "$(printf '%s' "$tshop" | tr -d '[:space:]')" in
+        case "$tshop" in
             f|0) ;;
             *)
                 echo "[setup] **写す先の DB（${name}@${host}）には、もう店があります**（または確かめられませんでした）。"
                 echo "        写すと、その DB の表は上書きされます。写す前に、その DB の中身を backups/ へ取ります。"
                 ask confirm_name "よければ、写す先のデータベース名（${name}）を打ってください"
                 [ "$confirm_name" = "$name" ] || { echo "[setup] 中止しました（何も変えていません）。"; exit 1; }
-                tdir="backups/$(date +%Y%m%d-%H%M%S)-before-setup-db-target"
-                mkdir -p "$tdir"
+                # 名前は backup.sh の世代管理に数えられない形にする（完全なバックアップではないので、ほかの
+                # 世代と一緒に数えて消さない・消されない）。中身は個人情報なので持ち主だけが読める
+                tdir="backups/$(date +%Y%m%d-%H%M%S)-setup-db-target"
+                mkdir -p backups && mkdir -m 700 "$tdir" || { echo "[setup] ${tdir} を作れません。中止します（何も変えていません）。" >&2; exit 1; }
                 echo "[setup] 写す先の DB を ${tdir}/ へ取っています..."
                 if [ "$engine" = postgresql ]; then
-                    docker run --rm --network "$net" -e PGPASSWORD="$pass" "$client" pg_dump --clean --if-exists -h "$host" -p "$port" -U "$user" "$name" | gzip > "${tdir}/db.sql.gz" \
+                    docker run --rm --network "$net" -e PGPASSWORD="$pass" "$client" pg_dump --clean --if-exists --no-owner --no-privileges -h "$host" -p "$port" -U "$user" "$name" | gzip > "${tdir}/db.sql.gz" \
                         || { echo "[setup] 写す先の DB を取れませんでした。中止します（何も変えていません）。" >&2; exit 1; }
                 else
                     docker run --rm --network "$net" -e MYSQL_PWD="$pass" "$client" mysqldump --single-transaction --triggers --no-tablespaces -h "$host" -P "$port" -u "$user" "$name" | gzip > "${tdir}/db.sql.gz" \
@@ -143,16 +157,26 @@ EOS
                 fi
                 gunzip -c "${tdir}/db.sql.gz" | tail -c 1024 | grep -qE -- '-- (PostgreSQL database dump complete|Dump completed)' \
                     || { echo "[setup] 写す先の DB のダンプが最後までありません。中止します（何も変えていません）。" >&2; exit 1; }
-                echo "[setup] 取りました（この DB 単独のダンプ。戻すなら同じクライアントで流し込む）。"
+                chmod 600 "${tdir}/db.sql.gz"
+                # BACKUP_ENCRYPT_KEY があれば、ほかのバックアップと同じ形で暗号化して平文を残さない（#118）
+                tkey="$(env_get BACKUP_ENCRYPT_KEY)"
+                if [ -n "$tkey" ]; then
+                    BACKUP_ENCRYPT_KEY="$tkey" openssl enc -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -salt \
+                        -pass env:BACKUP_ENCRYPT_KEY -in "${tdir}/db.sql.gz" -out "${tdir}/db.sql.gz.enc" \
+                        || { echo "[setup] 写す先の DB のダンプを暗号化できませんでした。中止します（何も変えていません）。" >&2; exit 1; }
+                    rm -f "${tdir}/db.sql.gz"; chmod 600 "${tdir}/db.sql.gz.enc"
+                fi
+                echo "[setup] 取りました: ${tdir}/（この DB 単独のダンプ。外へも控えておくこと。戻すなら同じクライアントで流し込む）。"
                 ;;
         esac
     fi
     if [ "$migrate" = y ]; then
         # **写している間はメンテナンス表示。** 以前は「お店は古いほうを見たまま」で、写してから切り替える
         # までに入った注文は古い DB にしか無く、切り替えたあとの店から消えていた。
-        sm=/var/www/html/.maintenance; smine=0
+        sm=/var/www/html/.maintenance; smine=0; switched=0; setup_done=0
+        stoken="$(openssl rand -hex 16)"
         if [ -n "$(docker compose ps -q --status running ec-cube 2>/dev/null)" ] && ! docker compose exec -T ec-cube test -f "$sm" 2>/dev/null; then
-            docker compose exec -T ec-cube runuser -u www-data -- sh -c "printf 'setup:%s' '$(openssl rand -hex 16)' > $sm" \
+            docker compose exec -T ec-cube runuser -u www-data -- sh -c "printf 'setup:%s' '${stoken}' > $sm" \
                 || { echo "[setup] メンテナンス表示を立てられませんでした。注文を受けたまま写さないよう、中止します（何も変えていません）。" >&2; exit 1; }
             smine=1; echo "[setup] メンテナンス ON（写している間、お客さんには「メンテナンス中」）"
         fi
@@ -162,11 +186,23 @@ EOS
             fi
             return 0
         }
+        # 途中で止まった・Ctrl-C でも、表示を黙って残さない。切り替える前なら外す（お店はいままでの DB のまま）。
+        # 切り替えたあとなら、壊れた画面を出さないよう残して、外し方を出す
+        setup_on_exit() {
+            [ "$smine" = 1 ] && [ "$setup_done" != 1 ] || return 0
+            if [ "$switched" = 0 ]; then
+                setup_maint_off
+            else
+                echo "[setup] **メンテナンス表示を残しています**（新しい DB で開くことを確かめられませんでした）。" >&2
+                echo "        確かめてから外す: docker compose exec ec-cube rm /var/www/html/.maintenance" >&2
+            fi
+        }
+        trap setup_on_exit EXIT
         echo "[setup] 写しています..."
         copy_ok=1
         if [ "$engine" = postgresql ]; then
             # 1 つのトランザクションで流し、エラーで止める（途中で失敗したら写す先は流す前のまま）
-            docker compose exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" exec pg_dump --clean --if-exists -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+            docker compose exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" exec pg_dump --clean --if-exists --no-owner --no-privileges -U "$POSTGRES_USER" "$POSTGRES_DB"' \
               | docker run --rm -i --network "$net" -e PGPASSWORD="$pass" "$client" psql -q -v ON_ERROR_STOP=1 --single-transaction -h "$host" -p "$port" -U "$user" -d "$name" >/dev/null || copy_ok=0
         else
             docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump --single-transaction --triggers --no-tablespaces -u root "$MYSQL_DATABASE"' \
@@ -180,6 +216,7 @@ EOS
         fi
         echo "[setup] 写しました。"
     fi
+    switched=1
     set_env DB_ENGINE "$engine"; set_env DB_HOST "$host"; set_env DB_PORT "$port"; set_env DB_NAME "$name"; set_env DB_USER "$user"; set_env DB_PASSWORD "$pass"
     files="$(grep -E '^COMPOSE_FILE=' .env | head -1 | cut -d= -f2- || true)"; files="${files:-compose.yaml:compose.override.yaml}"
     files="$(printf '%s' "$files" | tr ':' '\n' | grep -v -x 'compose.externaldb.yaml' | grep -v -x 'compose.postgresql.yaml' | paste -sd: -)"
@@ -189,8 +226,28 @@ EOS
     docker compose stop db >/dev/null 2>&1 || true
     echo "[setup] 手元の db は止めました（データのボリュームは残っています。戻すなら COMPOSE_FILE から compose.externaldb.yaml を外して docker compose up -d）。"
     restart_app
-    # 表示はボリュームの中にあるので、作り直したあとも残っている。新しい DB で起動してから外す
-    [ "$migrate" = y ] && setup_maint_off
+    # 表示はボリュームの中にあるので、作り直したあとも残っている。**新しい DB で開くのを確かめてから外す**
+    # （token の cookie で中から見る。deploy.sh と同じ）
+    if [ "$migrate" = y ] && [ "${smine:-0}" = 1 ]; then
+        echo "[setup] 新しい DB で開くかを確かめています..."
+        sport="$(docker compose port nginx 80 2>/dev/null | tail -1 | sed -E 's/^(0\.0\.0\.0|\[::\]):/localhost:/')"
+        [ -n "$sport" ] || sport="localhost:$(env_get HTTP_PORT)"
+        scode=000
+        for _ in $(seq 1 60); do
+            scode="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' -b "maintenance_token=${stoken}" "http://${sport}/" || echo 000)"
+            [ "$scode" = 200 ] && break
+            sleep 5
+        done
+        if [ "$scode" = 200 ]; then
+            setup_done=1
+            setup_maint_off
+        else
+            echo "[setup] エラー: 新しい DB で開きませんでした（${scode}）。ログ: docker compose logs --tail 30 ec-cube" >&2
+            exit 1
+        fi
+    fi
+    setup_done=1
+    trap - EXIT
     return 0
 }
 
@@ -381,7 +438,13 @@ EOS
 
 restart_app() {
     echo "[setup] 設定を反映するために起動し直します..."
-    docker compose up -d --remove-orphans >/dev/null 2>&1 || { echo "[setup] 起動に失敗しました: docker compose logs --tail 30 ec-cube" >&2; exit 1; }
+    # **本番なら本番構成のまま起動し直す。** 素の `docker compose up -d` は .env の COMPOSE_FILE（開発用の
+    # compose.override.yaml を含む）で作り直し、--remove-orphans が caddy / cloudflared を消していた
+    # （deploy.sh / upgrade.sh と同じ判定。止まっているときは判定できないので、いまの COMPOSE_FILE のまま）
+    local files
+    if guard_is_prod_stack; then files="$(compose_files --prod)"; else files="$(compose_files)"; fi
+    # shellcheck disable=SC2086  # compose_files は -f の並びを単語分割させる
+    docker compose $files up -d --remove-orphans >/dev/null 2>&1 || { echo "[setup] 起動に失敗しました: docker compose logs --tail 30 ec-cube" >&2; exit 1; }
     echo "[setup] 完了。"
 }
 
