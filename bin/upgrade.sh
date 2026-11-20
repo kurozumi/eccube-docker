@@ -121,7 +121,7 @@ if [ "$want_prod" = "0" ]; then
             "$running_cid" 2>/dev/null || true)"
 
         case "$cfg" in
-            *compose.prod.yaml*)
+            *compose.prod.yaml*|*compose.app.yaml*)
                 want_prod=1
                 echo "[upgrade] 稼働中のスタックが本番構成なので、本番構成のまま上げます。"
                 ;;

@@ -36,6 +36,8 @@ case "${1:-}" in -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next }
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/guard.sh
 . bin/lib/guard.sh   # guard_is_prod_stack（doctor が本番かどうかを見る）
+# shellcheck source=lib/compose.sh
+. bin/lib/compose.sh # compose_nginx_url（doctor が疎通を見る先）
 
 ec()  { docker compose exec -T ec-cube runuser -u www-data -- php bin/console "$@"; }
 die() { echo "[plugin] エラー: $*" >&2; exit 1; }
@@ -783,10 +785,7 @@ PHP
     # いたので、8080 の別サイトを点検していた。ECCUBE_BASE_URL があればそれを使う
     base="${ECCUBE_BASE_URL:-}"
     if [ -z "$base" ]; then
-        published="$(docker compose port nginx 80 2>/dev/null | tail -1 || true)"
-        published="${published/0.0.0.0/localhost}"
-        published="${published/\[::\]/localhost}"
-        base="http://${published:-localhost:8080}"
+        base="$(compose_nginx_url)"
     fi
     echo "[doctor] 疎通を確かめる先: ${base}"
     page_ng=0
