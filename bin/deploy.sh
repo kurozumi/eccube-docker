@@ -331,6 +331,31 @@ else
     git --no-pager log --oneline "${before}..${after}" 2>/dev/null | sed 's/^/           /' || true
 fi
 
+# ── 3b. 新しい compose が使うイメージ ──
+# **0. で引いたのは pull する前の compose のイメージ。** サーバーで git pull する形では、新しい compose が
+# 別のイメージ（MariaDB の既定 10.6 → 10.11 など）を指すと、それは手元に無い。4. は配布イメージの環境で
+# --pull never なので、そのまま進むと up が「イメージが無い」で落ち、メンテナンスが ON のまま残る。
+# 手元に無いものだけを引く（普段は 1 つも無いので、待たせない）。ec-cube / worker（＝配布イメージ）は
+# 0. で扱ったので除く。ローカル build の環境は 4. に --pull never が付かず、up が自分で引くので要らない。
+if image_uses_registry; then
+    missing=()
+    while IFS= read -r ref; do
+        [ -n "$ref" ] && [ "$ref" != "$(image_ref)" ] || continue
+        docker image inspect "$ref" >/dev/null 2>&1 || missing+=("$ref")
+    done < <("${dc[@]}" config --images 2>/dev/null | sort -u)
+    if [ "${#missing[@]}" -gt 0 ]; then
+        log "新しい compose が使うイメージを引きます: ${missing[*]}"
+        for ref in "${missing[@]}"; do
+            if ! docker pull --quiet "$ref" >/dev/null; then
+                echo "[deploy] エラー: イメージ ${ref} を取得できませんでした（新しい compose が使うもの）。サーバーから届くかを確かめてください。" >&2
+                trap - ERR
+                on_fail
+                exit 1
+            fi
+        done
+    fi
+fi
+
 # ── 4. compose / イメージ ──
 log "コンテナを揃えます（compose / .env が同じなら何も起きません）..."
 # 配布イメージでは build も pull もさせない。0. で用意したイメージだけを使う。
