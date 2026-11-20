@@ -67,6 +67,11 @@ jobs:
             done
           } | sort -u > images.txt
           cat images.txt
+          # 開発でだけ使うイメージ: compose.override.yaml（開発用の構成）にだけ出てくるもの。本番の構成では動かないので
+          # 報告では「参考」に回す（security_report.py の 4 つ目の引数）
+          norm() { grep -hE '^[[:space:]]*image:' "$@" | sed -E 's/^[[:space:]]*image:[[:space:]]*//; s/\$\{[A-Za-z_]+:-([^}]*)\}/\1/g; s/["'"'"']//g' | sort -u; }
+          comm -23 <(norm compose.override.yaml) <(norm $(ls compose*.yaml | grep -vx compose.override.yaml)) > dev-images.txt
+          echo "開発でだけ使うもの:"; cat dev-images.txt
 
       - name: Trivy
         run: |
@@ -104,7 +109,7 @@ jobs:
         env:
           CONFIG_VIOLATIONS: ${{ steps.config.outputs.violations }}
         run: |
-          python3 .github/scripts/security_report.py images.txt trivy .github/security-accept.json
+          python3 .github/scripts/security_report.py images.txt trivy .github/security-accept.json dev-images.txt
           { echo; cat config-report.md; } >> report.md
           if [ "$CONFIG_VIOLATIONS" = true ]; then
             sed -i 's/^actionable=false$/actionable=true/' "$GITHUB_OUTPUT"

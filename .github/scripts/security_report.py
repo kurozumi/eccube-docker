@@ -5,6 +5,7 @@
   argv[1] … 点検したイメージの一覧（1 行 1 つ）
   argv[2] … Trivy の JSON を置いたディレクトリ（<連番>.json と、同名の .ref にイメージ名）
   argv[3] … 受け入れ済みの一覧（.github/security-accept.json）
+  argv[4] … 開発でだけ使うイメージの一覧（任意。compose.override.yaml にだけ出てくるもの）
 出力:
   report.md       … Issue の本文
   GITHUB_OUTPUT   … actionable=true|false
@@ -15,6 +16,10 @@
   - 修正版のある CRITICAL / HIGH（Trivy の --ignore-unfixed）
 判断（うちの構成で本当に効くか、上流の作り直し待ちか）はここではしない。人がやる（docs/security-updates.md）。
 受け入れ済み（security-accept.json の accept）は、保守終了・まもなく終了のどちらでも「参考」に回す。
+CVE の受け入れ（security-accept.json の vuln）: 上流のイメージがまだ直していないもの。イメージ（タグを除く）・
+パッケージ・CVE の番号で当て、理由と見直し期限（review_by）を必ず書く。期限を過ぎると、また「要対応」に挙がる。
+**番号を並べたものだけ**を受け入れる（同じパッケージに新しい CVE が出たら、それは挙がる）。
+開発でだけ使うイメージ（argv[4]）は、本番の構成では動かないので「参考」に回す。
 """
 import datetime as dt
 import json
@@ -86,10 +91,33 @@ def accepted(accept, product, ver):
     return None
 
 
+def image_repo(img):
+    """タグと digest を除いた名前（cloudflare/cloudflared:2026.11.1 → cloudflare/cloudflared）。"""
+    img = img.split("@", 1)[0]
+    last = img.rsplit("/", 1)[-1]
+    return img[: len(img) - len(last)] + last.split(":", 1)[0]
+
+
+def vuln_accepted(vaccept, img, pkg, vid):
+    repo = image_repo(img)
+    for a in vaccept:
+        if a.get("image") == repo and a.get("package") == pkg and vid in (a.get("ids") or []):
+            review = a.get("review_by")
+            if not review or dt.date.fromisoformat(review) < TODAY:
+                return None  # 期限の無いもの・期限切れは受け入れない。もう一度挙げる
+            return a
+    return None
+
+
 def main():
     images = [l.strip() for l in Path(sys.argv[1]).read_text().splitlines() if l.strip()]
     trivy_dir = Path(sys.argv[2])
-    accept = json.loads(Path(sys.argv[3]).read_text()).get("accept", [])
+    accept_doc = json.loads(Path(sys.argv[3]).read_text())
+    accept = accept_doc.get("accept", [])
+    vaccept = accept_doc.get("vuln", [])
+    dev_images = set()
+    if len(sys.argv) > 4 and Path(sys.argv[4]).exists():
+        dev_images = {l.strip() for l in Path(sys.argv[4]).read_text().splitlines() if l.strip()}
 
     actionable = False
     out = []
@@ -140,6 +168,7 @@ def main():
     out.append("## 修正版のある CRITICAL / HIGH\n")
     any_vuln = False
     failed = []
+    reference = []  # 受け入れ済み・開発用（参考に回すもの）
     for ref_file in sorted(trivy_dir.glob("*.ref")):
         img = ref_file.read_text().strip()
         jf = ref_file.with_suffix(".json")
@@ -152,12 +181,23 @@ def main():
             failed.append(img)
             continue
         vulns = {}
+        accepted_here = {}
         for res in doc.get("Results") or []:
             for v in res.get("Vulnerabilities") or []:
                 if v.get("Severity") not in ("CRITICAL", "HIGH") or not v.get("FixedVersion"):
                     continue
                 key = (v["VulnerabilityID"], v.get("PkgName"))
+                a = vuln_accepted(vaccept, img, v.get("PkgName"), v["VulnerabilityID"])
+                if a:
+                    accepted_here.setdefault(id(a), [a, set()])[1].add(v["VulnerabilityID"])
+                    continue
                 vulns[key] = v
+        for a, ids in accepted_here.values():
+            reference.append(f"| `{img}` | {a.get('package')} {len(ids)} 件 | 受け入れ済み: {a.get('reason')}（見直し {a.get('review_by')}） |")
+        if vulns and img in dev_images:
+            crit = sum(1 for v in vulns.values() if v["Severity"] == "CRITICAL")
+            reference.append(f"| `{img}` | CRITICAL {crit} / HIGH {len(vulns) - crit} | 開発でだけ使う（本番の構成では動かない。127.0.0.1 にしか開かない） |")
+            continue
         if not vulns:
             continue
         any_vuln = True
@@ -173,6 +213,10 @@ def main():
         out.append("")
     if not any_vuln:
         out.append("要対応なし。\n")
+    if reference:
+        out.append("<details><summary>受け入れ済み・開発用（参考）</summary>\n")
+        out += ["| イメージ | 件数 | 扱い |", "|---|---|---|"] + reference
+        out.append("\n</details>\n")
     if failed:
         actionable = True
         out.append("## 点検できなかったイメージ\n")
