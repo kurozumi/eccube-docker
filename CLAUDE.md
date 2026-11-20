@@ -189,6 +189,15 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   向こうが**止まっていて判定できないときは本番として扱う**（guard.sh と同じ）。開発/検証サーバーには
   掛からない。GitHub 側の PR 必須・承認必須は `bin/setup.sh protect`（**非公開リポジトリは有料プラン**が
   要る。無料なら 403 で止まり、手元とサーバーの壁だけになる）。詳細は `docs/deploy.md`。
+- **`bin/upgrade.sh` は失敗したら自動で元の版に戻す。** 止める前に `.env` を `var/upgrade/env.before` へ写し、
+  動いているイメージの ID を控え、**メンテナンス表示の中で**バックアップ（`-before-upgrade`）を取り、本体ボリュームを
+  `<プロジェクト>_eccube_app_before_upgrade` へ写す。新しい版のボリュームにも表示を置いて起動し、token の cookie で
+  中から開くかを見てから外す（確認前に注文が入って、戻したときに消えないように）。失敗・Ctrl-C は `rollback_upgrade` が
+  .env・タグ・本体を戻し、DB に書いていれば `restore.sh --rollback --db-only` で戻して、**`ECCUBE_SKIP_DB_INIT=1` で**
+  起動し直す（entrypoint の migration は失敗を握るので、失敗した独自 migration をもう一度当てて戻した DB を書き換える）。
+  差分の検査は削除に加えて**列の名前の変更**（`CHANGE a b` / `RENAME COLUMN`）も止める。
+  **pipefail の下で `docker compose … | grep -q` を書かない。** grep が先に終わると compose が SIGPIPE で落ち、
+  一致したのに「無い」になる（切り戻しが DB を起こさずに戻そうとして失敗した。5 回に 2 回）。変数に取ってから見る。
 - **本番を上げるときは `bin/upgrade.sh <制約> --prod`。** `--prod` を落とすと
   `compose.override.yaml`（開発用のポートと bind mount）が効いた状態で公開される。
   **画面は出るので気づきにくい。** 稼働中なら自動でも寄せるが、停止中に打つと効かない。
