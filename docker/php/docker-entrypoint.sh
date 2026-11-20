@@ -223,6 +223,10 @@ done
 #    「app ロール（ECCUBE_SKIP_DB_INIT=1）」はスキーマに触らず cache:clear だけ行う
 #    （全 app ホストが一斉に migrate すると競合するため）。単一ホストなら未設定でよい。
 MARKER="$APP_DIR/var/.eccube_installed"
+# このボリュームで始めた eccube:install が途中で失敗した印。**あれば、次の起動でやり直してよい**
+# （表と初期データの一部だけが入った DB は、このボリュームが作りかけたもので、店ではない）。
+# 無いのに DB に店があれば、install しない（下の db_has_shop）。
+INSTALL_FAILED="$APP_DIR/var/.eccube_install_failed"
 # EC-CUBE 4.4 のコンパイル済みテンプレート（var/runtime/<env>/twig）は cache:clear が
 # 消さない。本番モードの Twig は更新を見ないので、残すとテンプレートを直しても
 # 古い画面が出続ける（bin/plugin.sh の clear_twig_runtime と同じ理由）。
@@ -242,11 +246,12 @@ if [ "${ECCUBE_SKIP_DB_INIT:-0}" = "1" ]; then
         clear_twig_runtime
         runuser -u www-data -- php bin/console cache:clear --no-interaction || true
     fi
-elif [ ! -f "$MARKER" ] && { db_has_shop; shop=$?; [ "$shop" != 1 ]; }; then
+elif [ ! -f "$MARKER" ] && [ ! -f "$INSTALL_FAILED" ] && { db_has_shop; shop=$?; [ "$shop" != 1 ]; }; then
     # 印は無いが、DB に店がある（0）か、確かめられない（2）。**install しない。**
     if [ "$shop" = 0 ]; then
         log "DB にはもう店があります（dtb_base_info）。eccube:install は打ちません（打つと全部の表を消して作り直します）。"
         log "インストール済みとして扱い、未適用の migration を適用します。"
+        log "（別の場所で始めたインストールが途中で止まった DB なら、DB を空にしてから起動し直すと、最初からインストールします）"
         touch "$MARKER"
         runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true
         clear_twig_runtime
@@ -258,6 +263,7 @@ elif [ ! -f "$MARKER" ] && { db_has_shop; shop=$?; [ "$shop" != 1 ]; }; then
 elif [ ! -f "$MARKER" ]; then
     log "eccube:install（初回セットアップ）"
     if runuser -u www-data -- php bin/console eccube:install --no-interaction; then
+        rm -f "$INSTALL_FAILED"
         runuser -u www-data -- php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || true
         clear_twig_runtime
         runuser -u www-data -- php bin/console cache:clear --no-interaction || true
@@ -268,7 +274,8 @@ elif [ ! -f "$MARKER" ]; then
             log "警告: 管理者が既定の admin / password です。公開前に必ず変えてください（bin/publish.sh は止まります）"
         fi
     else
-        log "eccube:install が失敗しました。ログを確認してください。"
+        touch "$INSTALL_FAILED"
+        log "eccube:install が失敗しました。ログを確認してください。直して起動し直すと、最初からやり直します。"
     fi
 else
     log "インストール済み。未適用の migration を適用します。"
