@@ -109,7 +109,15 @@ fi
 # .env だけ戻して終わる。
 if ! image_provision docker compose; then
     # まず写しから .env を丸ごと戻す（下の値ごとの戻しでは、足した行が消えない）。戻せたときだけ写しを消す
-    cat "$env_before" > .env && rm -f "$env_before"
+    # 同じフォルダの一時ファイルへ写してから入れ替える（.env へ直接書くと、ディスクがいっぱいのとき途中で切れる）
+    if cp "$env_before" .env.switch-restore && mv -f .env.switch-restore .env; then
+        rm -f "$env_before"
+    else
+        rm -f .env.switch-restore
+        echo "[switch] エラー: .env を元に戻せませんでした。切り替える前の .env はここに残っています: ${env_before}" >&2
+        echo "         cp ${env_before} .env で戻してください。" >&2
+        exit 1
+    fi
     echo "[switch] エラー: イメージを用意できませんでした。既存の環境とデータはそのままです。" >&2
     if [ -n "$current" ]; then
         tmp="$(mktemp)"

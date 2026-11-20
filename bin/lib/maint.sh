@@ -8,19 +8,23 @@
 #   **動いている ec-cube の全部の複製**（--scale）の php-fpm の状態ページで処理中の数を見て、どれも
 #   自分（状態ページへの問い合わせ）だけになるまで待つ（全体で最大 30 秒。1 回の問い合わせは 3 秒まで）。
 #   0 … 待てた（動いている ec-cube が無いときも 0）。
-#   1 … 30 秒たっても残っている（ログイン中の管理者は表示を素通りするので、ありうる）か、数を読めなかった。
+#   1 … 30 秒たっても残っている（ログイン中の管理者は表示を素通りするので、ありうる）か、30 秒のあいだ数を
+#       読めなかったか、複製の一覧を取れなかった。
 #       呼んだ側は注意を出して進む（止めると、管理者がいる限り何もできなくなる）。
 #   例: maint_drain docker compose -f compose.yaml -f compose.prod.yaml
 maint_drain() {
     local deadline ids id n busy
     deadline=$(( $(date +%s) + 30 ))
-    ids="$("$@" ps -q --status running ec-cube 2>/dev/null || true)"
+    # 一覧を取れなかったことを「動いているものが無い」と取り違えない
+    ids="$("$@" ps -q --status running ec-cube 2>/dev/null)" || return 1
     [ -n "$ids" ] || return 0
     while :; do
         busy=0
         for id in $ids; do
             n="$(docker exec "$id" sh -c 'SCRIPT_NAME=/fpm-status SCRIPT_FILENAME=/fpm-status QUERY_STRING= REQUEST_METHOD=GET timeout 3 cgi-fcgi -bind -connect 127.0.0.1:9000 2>/dev/null | sed -n "s/^active processes: *//p"' 2>/dev/null | tr -d '\r' || true)"
-            case "$n" in '' | *[!0-9]*) return 1 ;; esac
+            # 読めない（php-fpm のワーカーが全部ふさがっていて、状態ページの問い合わせ自体が 3 秒で切れた、など）
+            # ときは「まだ処理中」とみなして、30 秒の中でまた聞く
+            case "$n" in '' | *[!0-9]*) busy=1; continue ;; esac
             [ "$n" -le 1 ] || busy=1
         done
         [ "$busy" = 0 ] && return 0
