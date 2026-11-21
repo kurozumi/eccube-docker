@@ -284,8 +284,9 @@ maint_off_mine() {
 maint_off() {
     # deploy: が付いているものだけ消す。手で入れたものは残す（doctor と同じ区別）。
     # entrypoint: は起動時の migration が失敗した・DB を取れなかった印。deploy が退避して migration を
-    # 流し終えたここでは、もう要らない
-    if docker compose exec -T ec-cube sh -c "grep -qE '^(deploy|entrypoint):' $MAINT" 2>/dev/null; then
+    # 流し終えたここでは、もう要らない。setup-switched: は setup.sh db が DB を切り替えたあと、未適用の migration が
+    # あって残したもの。deploy が流して開くのを確かめたので外してよい
+    if docker compose exec -T ec-cube sh -c "grep -qE '^(deploy|entrypoint|setup-switched):' $MAINT" 2>/dev/null; then
         ec rm -f "$MAINT"
         log "メンテナンス OFF"
     fi

@@ -196,7 +196,9 @@ EOS
         # 途中で止まった・Ctrl-C でも、表示を黙って残さない。切り替える前なら外す（お店はいままでの DB のまま）。
         # 切り替えたあとなら、壊れた画面を出さないよう残して、外し方を出す
         setup_on_exit() {
-            rm -f "$S_ERR" "${S_ERR}.env"   # 全体の EXIT の後始末を、この trap が置き換えるので
+            rm -f "$S_ERR"   # 全体の EXIT の後始末を、この trap が置き換えるので
+            # .env の控えは、戻せたときだけ消す（戻せなかったら、手で戻すために残す）
+            [ "${keep_envbak:-0}" = 1 ] || rm -f "${S_ERR}.env"
             [ "$smine" = 1 ] && [ "$setup_done" != 1 ] || return 0
             if [ "$switched" = 0 ]; then
                 setup_maint_off
@@ -233,19 +235,33 @@ EOS
     files="${files}:compose.externaldb.yaml"
     # .env はまとめて書き、途中で失敗したら書く前に戻す（新しい DB_HOST に古い DB_PASSWORD、のような半端を残さない）
     cp -p .env "${S_ERR}.env"
+    undo_env() { # 書く前の .env に戻す。戻せなければ控えと表示を残して、手で戻す道を出す
+        if cp -p "${S_ERR}.env" .env; then
+            rm -f "${S_ERR}.env"
+            echo "[setup] .env は書く前のままです（お店はいままでの DB のまま）。" >&2
+        else
+            keep_envbak=1; switched=1   # 表示も外さない（.env が半端なまま開けない）
+            echo "[setup] エラー: .env を戻せませんでした（ディスクがいっぱい、など）。書く前の .env: ${S_ERR}.env" >&2
+            echo "        空きを作ってから: cp ${S_ERR}.env .env" >&2
+        fi
+    }
     if ! { set_env DB_ENGINE "$engine" && set_env DB_HOST "$host" && set_env DB_PORT "$port" && set_env DB_NAME "$name" &&
            set_env DB_USER "$user" && set_env DB_PASSWORD "$pass" && set_env COMPOSE_FILE "$files"; }; then
-        cp -p "${S_ERR}.env" .env; rm -f "${S_ERR}.env"
-        echo "[setup] エラー: .env に書けませんでした。.env は書く前のままです（お店はいままでの DB のまま）。" >&2
+        echo "[setup] エラー: .env に書けませんでした。" >&2
+        undo_env
+        exit 1
+    fi
+    # 表示の印を変える。**切り替えたあとの表示は、新しい DB で開くと確かめるまで外さない。** doctor は setup: を
+    # 「切り替える前に止まった残り」として外すので、そのままだと確かめていない DB でお店を開けてしまう。
+    # 変えられなければ、切り替えずに戻す（まだ作り直していないので、お店はいままでの DB で動いている）
+    if [ "$migrate" = y ] && [ "${smine:-0}" = 1 ] &&
+       ! docker compose exec -T ec-cube sh -c "if grep -q '^setup:' $sm; then printf 'setup-switched:%s' '${stoken}' > $sm; else grep -q '^setup-switched:' $sm; fi" 2>/dev/null; then
+        echo "[setup] エラー: メンテナンス表示の印を変えられませんでした。切り替えずに戻します。" >&2
+        undo_env
         exit 1
     fi
     rm -f "${S_ERR}.env"
     switched=1
-    # 表示の印を変える。**切り替えたあとの表示は、新しい DB で開くと確かめるまで外さない。** doctor は setup: を
-    # 「切り替える前に止まった残り」として外すので、そのままだと確かめていない DB でお店を開けてしまう
-    if [ "$migrate" = y ] && [ "${smine:-0}" = 1 ]; then
-        docker compose exec -T ec-cube sh -c "grep -q '^setup:' $sm && printf 'setup-switched:%s' '${stoken}' > $sm" 2>/dev/null || true
-    fi
     echo "[setup] .env に書きました（DB_HOST=${host}、COMPOSE_FILE=${files}）。"
     docker compose stop db >/dev/null 2>&1 || true
     echo "[setup] 手元の db は止めました（データのボリュームは残っています。戻すなら COMPOSE_FILE から compose.externaldb.yaml を外して docker compose up -d）。"
@@ -262,7 +278,13 @@ EOS
             [ "$scode" = 200 ] && break
             sleep 5
         done
-        if [ "$scode" = 200 ]; then
+        if [ "$scode" = 200 ] && ! docker compose exec -T ec-cube runuser -u www-data -- php bin/console doctrine:migrations:up-to-date --no-interaction >/dev/null 2>&1; then
+            # 開いても、未適用の migration が残っている（または確かめられない）DB でお店を開けない。表示の中では起動時の
+            # migration も流れないので、deploy.sh に任せる（退避してから流し、終われば表示も外す）
+            echo "[setup] 新しい DB で開きましたが、未適用の migration があるか、確かめられませんでした。" >&2
+            echo "        bin/deploy.sh で流してください（メンテナンス表示は、そのとき外れます）。" >&2
+            exit 1
+        elif [ "$scode" = 200 ]; then
             setup_done=1
             setup_maint_off
         else

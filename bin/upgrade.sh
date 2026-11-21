@@ -242,12 +242,16 @@ restore_env() {
 early_abort() {
     [ "${BASH_SUBSHELL:-0}" = 0 ] || exit 1
     trap - ERR INT TERM HUP
-    # 表示を立てたあとなら外す（maint_off_running は下で定義する。自分で立てたものだけ外す）
-    if declare -F maint_off_running >/dev/null; then maint_off_running; fi
+    # 自分で立てた表示（upgrade:）なら外す。maint_on は表示を書く**前**に 1 にするので、書いた直後の中断でも外れる
+    if [ "${maint_on:-0}" = 1 ]; then
+        "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' ${MAINT:-/var/www/html/.maintenance} && rm -f ${MAINT:-/var/www/html/.maintenance}" 2>/dev/null \
+            && echo "[upgrade] メンテナンス OFF" >&2
+    fi
     restore_env
-    echo "[upgrade] 中止しました。稼働中の環境には触れていません。" >&2
+    echo "[upgrade] 中止しました。.env を元に戻しました（お店は元の版のまま動いています）。" >&2
     exit 1
 }
+maint_on=0   # この upgrade が表示を立てたか（early_abort が見る）
 trap early_abort ERR INT TERM HUP
 if grep -qE '^ECCUBE_VERSION=' .env 2>/dev/null; then
     tmp="$(mktemp)"
@@ -445,10 +449,11 @@ if [ -n "$("${dc[@]}" ps -q --status running ec-cube 2>/dev/null)" ]; then
         manual_maint="$("${dc[@]}" exec -T ec-cube sh -c "head -1 $MAINT" 2>/dev/null | tr -d '\r\n' || true)"
         token="${manual_maint#*:}"
         echo "[upgrade] メンテナンス表示はすでに有効です（そのまま進めます。終わっても外しません）"
-    elif "${dc[@]}" exec -T ec-cube runuser -u www-data -- sh -c "printf 'upgrade:%s' '$token' > $MAINT"; then
-        maint_on=1
+    elif maint_on=1 && "${dc[@]}" exec -T ec-cube runuser -u www-data -- sh -c "printf 'upgrade:%s' '$token' > $MAINT"; then
+        # maint_on は書く前に 1 にする（書いた直後の中断でも、守りが外せるように。外すのは upgrade: だけ）
         echo "[upgrade] メンテナンス ON（お客さんには「メンテナンス中」。ログイン中の管理者は見えます）"
     else
+        maint_on=0
         # 立てられないまま進むと、お客さんが注文できる状態でバックアップを取り、その後の注文が戻すときに消える
         echo "[upgrade] エラー: メンテナンス表示を立てられませんでした。中止します。稼働中の環境には触れていません。" >&2
         restore_env
