@@ -31,11 +31,24 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends \
         libwebp-dev \
         libonig-dev \
         default-mysql-client \
-        # PostgreSQL（DB_ENGINE=postgresql）。pg_isready を entrypoint の起動待ちに使う
-        postgresql-client \
         libpq-dev \
         gettext-base \
         libfcgi-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- PostgreSQL のクライアント（14〜17。PostgreSQL 公式の apt リポジトリ PGDG から）----
+# entrypoint は起動時の migration の前に DB を pg_dump で取る。**pg_dump は自分より新しいサーバーを取れない**
+# （Debian の postgresql-client は 15 で、既定の PG 16 を取れず、毎回メンテナンス表示で止まっていた）。
+# 一方、新しい pg_dump の出力は古いサーバーに戻せないことがある（17 は 16 が知らない SET を書く）ので、
+# 1 つの新しい版ではなく、選べる版（.env の PG_VERSION: 14 / 15 / 16 / 17）を全部入れ、サーバーと同じ版を使う
+# （/usr/lib/postgresql/<版>/bin/pg_dump）。pg_isready も entrypoint の起動待ちに使う。
+# 鍵は .asc のまま signed-by で渡す（apt 2.6 は ASCII のまま読める。gnupg を入れずに済む）。
+RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/keyrings/pgdg.asc \
+    && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        postgresql-client-14 postgresql-client-15 postgresql-client-16 postgresql-client-17 \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- PHP 拡張 ----

@@ -1,6 +1,6 @@
 # AGENTS.md — この場所で作業する AI へ
 
-ここは **EC-CUBE 4 のお店を Docker で動かすための環境**（eccube-docker）です。お店のコードは
+ここは **EC-CUBE 4 のお店を Docker で動かすための環境**（EC-CUBE 運用キット / eccube-kit。旧名 eccube-docker）です。お店のコードは
 このリポジトリに、EC-CUBE 本体はイメージの中にあります。**本体（`/var/www/html` の `src/` や
 `vendor/`）は編集しません。** 直す場所は `app/`（PHP・テンプレート・プラグイン）と `html/user_data/`
 （CSS / JS）だけです。
@@ -14,7 +14,7 @@
 ## 初回
 
 ```bash
-bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3   # これだけ。.env を作り、パスワード類を生成し、空いているポートを選び、起動して、終わるまで待つ（初回は数分）
+bin/init.sh --image=ghcr.io/kurozumi/eccube-kit/ec-cube:4.3-php8.3   # これだけ。.env を作り、パスワード類を生成し、空いているポートを選び、起動して、終わるまで待つ（初回は数分）
 ```
 
 終わると **お店の URL・管理画面の URL（`admin-<乱数>`）・ログイン ID・パスワード** が表示される

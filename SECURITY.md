@@ -7,7 +7,7 @@
 
 | 窓口 | 使いどころ |
 |---|---|
-| **[GitHub の非公開報告](https://github.com/kurozumi/eccube-docker/security/advisories/new)**（推奨） | GitHub アカウントがある。修正までのやり取りをそのまま advisory に残せる |
+| **[GitHub の非公開報告](https://github.com/kurozumi/eccube-kit/security/advisories/new)**（推奨） | GitHub アカウントがある。修正までのやり取りをそのまま advisory に残せる |
 | メール **info@a-zumi.net** | GitHub を使えない。件名に `[security] eccube-docker` と入れてください |
 
 英語・日本語どちらでも構いません。
@@ -79,7 +79,7 @@ docker compose up -d           # entrypoint や設定が変わっていれば作
 ## English
 
 Please **do not open a public issue** for security problems. Report privately via
-[GitHub private vulnerability reporting](https://github.com/kurozumi/eccube-docker/security/advisories/new)
+[GitHub private vulnerability reporting](https://github.com/kurozumi/eccube-kit/security/advisories/new)
 (preferred) or email **info@a-zumi.net** with `[security] eccube-docker` in the subject.
 
 **In scope**: the scripts under `bin/`, everything under `docker/`, the `compose*.yaml` files and
