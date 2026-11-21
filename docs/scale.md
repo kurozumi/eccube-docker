@@ -379,9 +379,12 @@ LB のサブネット（`10.0.0.0/8` など）を書くと、お客さんの IP 
 中継点の IP になる。**お客さんが中継点ごとにまとまり**、ログインの回数制限がよその人まで巻き込み、管理画面の
 IP 制限も効かなくなる。そのときは `docker/nginx/default.conf` の `real_ip_header` を `CF-Connecting-IP` に
 する（Cloudflare）か、`set_real_ip_from` を LB と CDN の範囲に絞って `real_ip_recursive on` にする。
-**`CF-Connecting-IP` にするなら、LB が Cloudflare からの接続しか受けないようにする**（セキュリティグループで Cloudflare の
-IP 範囲だけを開ける、Cloudflare の Authenticated Origin Pulls を使う、など）。nginx はこのヘッダーをどこから来ても信じるので、
-Cloudflare を通らずに LB へ届くと、お客さんが好きな値を書けて、管理画面の IP 制限とログインの回数制限が抜ける。
+**`CF-Connecting-IP` にするなら、LB が「自分の店のゾーンを通った接続」しか受けないようにする。** nginx はこのヘッダーを
+どこから来ても信じるので、ほかから LB へ届くと、好きな値を書けて、管理画面の IP 制限とログインの回数制限が抜ける。
+**Cloudflare の IP 範囲で絞るだけでは足りない。** その範囲は Cloudflare の全利用者が共有していて、よそのアカウントの
+Workers からも、同じ範囲から LB へ好きなヘッダーを付けて送れる。全体共通の証明書の Authenticated Origin Pulls も同じ理由で
+足りない。**ゾーン（またはホスト名）ごとの Authenticated Origin Pulls を、自分の証明書で有効にし、LB でその
+クライアント証明書を確かめる。** それができない構成なら、`CF-Connecting-IP` は使わず、右端の値（既定）のままにする。
 
 ## 管理画面が書くファイルは 1 台にしか無い
 
@@ -422,11 +425,15 @@ bin/healthcheck.sh
   2 台目以降は `bin/deploy.sh --no-backup` でよい（init 役で取った直後なら）。
 - migration は**古いコードでも壊れない形**（列を足すだけ、など）にする。init 役で流したあと、残りの
   ホストが新しいコードになるまでの間、古いコードが新しいスキーマで動く。
-- **エンティティやプラグインが変わる反映は、1 台ずつではなく全部を止めて行う**（下の「EC-CUBE を上げる」と
-  同じ順で、`upgrade.sh` の代わりに `bin/deploy.sh`: LB をメンテナンス中に → init 役以外を止める → init 役で
-  `deploy.sh` → 残りのホストで `deploy.sh` → LB を戻す）。Doctrine のメタデータは共有のキャッシュの Redis に載るので、新しいホストが書いたものを古い
-  ホストが読み、`Unrecognized field` / `Property ... does not exist` で落ちる（最後のホストの反映が
-  キャッシュを消すまで）。
+- **エンティティやプラグインが変わる反映は、1 台ずつではなく、LB をメンテナンス中にして全部まとめて行う。**
+  Doctrine のメタデータは共有のキャッシュの Redis に載るので、1 台ずつだと、新しいホストが書いたものを古いホストが読み、
+  `Unrecognized field` / `Property ... does not exist` で落ちる。順は:
+  1. LB を「メンテナンス中」にする（お客さんの要求をどのホストにも通さない）
+  2. init 役で `bin/deploy.sh`（migration とプラグインの DB を合わせる）
+  3. 残りのホストで、1 台ずつ `bin/deploy.sh`（`deploy.sh` は動いている ec-cube が要るので、ホストは止めない）
+  4. **最後に、キャッシュの Redis を空にする**（init 役で `bin/console.sh cache:pool:clear --all`）。3 の途中では、まだ古い
+     コードのホストがキャッシュを書きうる。全部が新しいコードになってから消せば、残るのは新しいものだけになる
+  5. LB を戻す
 
 ### PHP と Debian のパッチ（イメージの更新）
 
