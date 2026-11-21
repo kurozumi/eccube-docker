@@ -26,7 +26,7 @@
 
 ```bash
 # 引いて使う場合の .env（bin/init.sh --image=<タグ> でも同じことができる）
-ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-kit/ec-cube:4.3-php8.3
 ```
 
 判定はスクリプト側（`bin/lib/image.sh`）が行うので、`bin/init.sh` /
@@ -115,7 +115,7 @@ cp .env.example .env
 `.env` を開かずに済む:
 
 ```bash
-bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+bin/init.sh --image=ghcr.io/kurozumi/eccube-kit/ec-cube:4.3-php8.3
 ```
 
 **PHP はこのタグで決まる**（`.env` の `PHP_VERSION` は手元でビルドするときにしか読まれない）。

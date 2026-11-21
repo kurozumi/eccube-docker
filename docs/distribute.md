@@ -27,7 +27,7 @@
 
 ```bash
 # .env
-ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-kit/ec-cube:4.3-php8.3
 ```
 
 これだけで `bin/init.sh` は build せずに pull する。初回の起動が数分から数十秒になる。
@@ -94,9 +94,10 @@ docker compose up -d --force-recreate
 
 2026-11 に、リポジトリの名前を `kurozumi/eccube-docker` から `kurozumi/eccube-kit` に変えた。
 
-- **配布イメージの名前は変えていない**（`ghcr.io/kurozumi/eccube-docker/ec-cube`）。`.env` の `ECCUBE_IMAGE` はそのままでよい。
-  `build-image.yml` は名前を固定して焼き続ける（`github.repository` から作ると、改名した翌朝から新しい名前へ焼き、
-  古い名前の追跡タグが止まってパッチが届かなくなる）。
+- **配布イメージの名前も変えた**（`ghcr.io/kurozumi/eccube-docker/ec-cube` → `ghcr.io/kurozumi/eccube-kit/ec-cube`）。
+  そのとき使っていたのは作者だけだったので、移行の期間は設けていない。**古い名前のイメージは、もう焼き直されない**
+  （PHP と OS のパッチが入らない）。古い名前を `.env` の `ECCUBE_IMAGE` に書いているなら、新しい名前に書き換えて
+  `bin/deploy.sh` する。
 - **リリースの添付の名前も変えていない**（`eccube-docker-<ver>.tar.gz`・`.eccube-docker-paths`）。古い `self-update.sh` が探す名前だから。
 - `git` と GitHub の API・ダウンロードは、古い名前から GitHub が転送する。
 - **`gh` にログインしていて、古い `self-update.sh` を使っている人は、署名の確認で止まることがある。** 改名後のリリースの

@@ -107,7 +107,7 @@ git clone <this-repo> eccube-docker && cd eccube-docker
 bin/init.sh                       # .env 作成・秘密の生成・build & up（本体を手元でビルド。10 分以上）
 
 # ビルドせずに済ませるなら（数十秒。PHP はタグで選ぶ）
-bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+bin/init.sh --image=ghcr.io/kurozumi/eccube-kit/ec-cube:4.3-php8.3
 ```
 
 | 用途 | URL |

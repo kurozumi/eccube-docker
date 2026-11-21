@@ -89,11 +89,10 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  # **配布イメージの名前はリポジトリ名から切り離して固定する。** リポジトリを eccube-docker から eccube-kit へ
-  # 改名したが、利用者の .env の ECCUBE_IMAGE は ghcr.io/kurozumi/eccube-docker/ec-cube を指している。
-  # github.repository のままだと改名した翌朝から新しい名前へ焼き、古い名前の追跡タグが二度と更新されず、
-  # **PHP と OS のパッチが黙って届かなくなる。**
-  IMAGE_NAME: kurozumi/eccube-docker/ec-cube
+  # 配布イメージの名前はリポジトリ名から作る（ghcr.io/kurozumi/eccube-kit/ec-cube）。**リポジトリの名前を変えると、
+  # 翌朝から新しい名前へ焼き、古い名前の追跡タグは二度と更新されない**（パッチが届かなくなる）。変えるときは、
+  # 利用者の .env の ECCUBE_IMAGE を書き換えてもらう（eccube-docker → eccube-kit のときは利用者が作者だけだった）。
+  IMAGE_NAME: ${{ github.repository }}/ec-cube
 
 jobs:
   # 焼く対象の一覧を作る。

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 初回セットアップ: .env 作成 → シークレット生成 → 起動（配布イメージなら pull、無ければ build）。
 #   使い方: bin/init.sh
-#           bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+#           bin/init.sh --image=ghcr.io/kurozumi/eccube-kit/ec-cube:4.3-php8.3
 #                                     … build せず配布イメージを引く（数十秒。PHP はタグで選ぶ）
 #           bin/init.sh --no-start    … .env を作るだけ（bin/bootstrap-server.sh が使う）
 set -euo pipefail

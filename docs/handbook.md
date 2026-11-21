@@ -96,7 +96,7 @@ gh repo create myshop --private --source=. --push
 このあと、あなたのパソコンでお店が動きます（終わると URL とログイン情報が表示されます）:
 
 ```bash
-bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+bin/init.sh --image=ghcr.io/kurozumi/eccube-kit/ec-cube:4.3-php8.3
 ```
 
 `--image` は「配布イメージを引く」指定で、数十秒で終わります（付けないと手元でビルドするので
