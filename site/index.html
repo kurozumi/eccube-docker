@@ -37,11 +37,11 @@
       <a class="btn ghost" href="https://github.com/kurozumi/eccube-docker">GitHub</a>
       <a class="btn ghost" href="#contact">お問い合わせ / Issue</a>
     </div>
-    <p class="support-line"><b>対応</b>EC-CUBE <strong>4.3（推奨）</strong>・<strong>4.2</strong>　／　4.4 は開発版（試すだけ）　／　4.0・4.1 は対象外　<a href="#support">対応していること・いないこと →</a></p>
+    <p class="support-line"><b>対応</b>EC-CUBE <strong>4.3（推奨）</strong>・<strong>4.2</strong>　／　4.4 は開発版（試すだけ）　／　4.0・4.1 は対象外　<a href="#compat">対応していること・いないこと →</a></p>
   </div>
 </header>
 
-<section id="support">
+<section id="compat">
   <div class="wrap">
     <h2>対応しているもの、<em class="k">いないもの</em></h2>
     <p class="sub">使えるかどうかは、まずここで確かめてください。PHP の版ごとのイメージは<a href="guide.html#support">「はじめる・上げる」の対応表</a>にあります。</p>
@@ -50,7 +50,7 @@
         <tr><th>EC-CUBE</th><th>PHP</th><th>使い方</th></tr>
         <tr><td><strong>4.3</strong><br><small>4.3 系の最新のパッチ</small></td><td data-label="PHP">8.1 / 8.2 / <strong>8.3</strong></td><td data-label="使い方"><strong>推奨。</strong>新しく作るときの既定です</td></tr>
         <tr><td><strong>4.2</strong><br><small>4.2 系の最新のパッチ</small></td><td data-label="PHP">8.1 / <strong>8.2</strong></td><td data-label="使い方">使えます。ただし PHP 8.1 は保守が終わり、8.2 も 2026-12-31 で終わります。早めに 4.3 へ</td></tr>
-        <tr><td><strong>4.4</strong><br><small>開発版（安定版はまだ出ていない）</small></td><td data-label="PHP">8.2 / <strong>8.3</strong> / 8.4 / 8.5</td><td data-label="使い方"><strong>試すだけ。</strong>本番には使わないでください。上流の開発ブランチから焼いているので、中身が日々変わります</td></tr>
+        <tr><td><strong>4.4</strong><br><small>開発版（Packagist には alpha しか無い）</small></td><td data-label="PHP">8.2 / <strong>8.3</strong> / 8.4 / 8.5</td><td data-label="使い方"><strong>試すだけ。</strong>本番には使わないでください。安定版（4.4.0）がまだ出ておらず Packagist には alpha しか無いので、上流の開発ブランチ（4.4.x-dev）から焼いています。中身が日々変わります</td></tr>
         <tr><td>4.0・4.1</td><td data-label="PHP">—</td><td data-label="使い方"><strong>対象外。</strong>イメージを配っておらず、この環境では動かせません</td></tr>
       </table>
     </div>

@@ -103,10 +103,10 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
 - **本体の作りに触る変更は、配っている全部の系列（4.2・4.3・4.4）で確かめる。1 つの系列で確かめて全部に効かせない。**
   同じ名前の設定・クラスでも、系列で中身が違う。実例: #133 は 4.4 のイメージだけを見て、Redis のセッションの
   `SameSiteNoneCompatSessionHandler` の包みを全部の系列で外した。4.4 にはそのクラスが無いが、4.2 / 4.3 はそれが Cookie の
-  SameSite=None・Secure・パスを付けていたので、**決済の戻りでセッションが届かなくなった**（#228 で戻した）。
+  SameSite=None・Secure・パスを付けていたので、**決済の戻りでセッションが届かなくなった**（#228 で包み直す）。
   確かめる順は 3 つ。
   1. **公式ドキュメント**（https://doc4.ec-cube.net/ ）で、本体が想定している作りを知る。
-  2. **全部の系列のソース**（`docker run --rm --entrypoint sh <イメージ>` か `raw.githubusercontent.com/EC-CUBE/ec-cube/<系列>/…`）で、
+  2. **全部の系列のソース**（`docker run --rm --entrypoint sh <イメージ> -c '<読むコマンド>'` か `raw.githubusercontent.com/EC-CUBE/ec-cube/<系列>/…`）で、
      いまもそうかを見る。**設定ファイルは最後まで読む**（`sed -n '/session:/,/cookie_httponly/p'` のように途中で切ったせいで、
      4.4 の `cookie_samesite: none` を見落とし「4.4 は Lax」と書いた）。
   3. **全部の系列で動かす。** 読むだけでは分からないことがある。
