@@ -50,7 +50,10 @@ work=""
 # 配布元。fork して使っている場合はここが自分の repo ではなく**配布元**を指す
 # 必要があるため、origin からは推測しない（推測すると、リリースを持たない
 # 自分の fork を見に行って「更新なし」と言い続けることになる）。
-DEFAULT_REPO="kurozumi/eccube-docker"
+DEFAULT_REPO="kurozumi/eccube-keeper"
+# 改名前の名前（.env の ECCUBE_DOCKER_REPO に書いてあることがある）。GitHub が転送するので取得は通るが、
+# 署名（attestation）は改名後の名前で付くので、古い名前のままだと gh attestation verify が通らない
+OLD_REPO="kurozumi/eccube-docker"
 
 # 環境側のパス。**ここに無いものは絶対に触らない。**
 #
@@ -126,6 +129,7 @@ command -v openssl >/dev/null 2>&1 || die "openssl が必要です（添付の s
 
 repo="$(env_get ECCUBE_DOCKER_REPO)"
 repo="${repo:-$DEFAULT_REPO}"
+[ "$repo" = "$OLD_REPO" ] && repo="$DEFAULT_REPO"
 
 [ -f VERSION ] || die "VERSION がありません。この環境はリリース版ではないようです（更新は git で行ってください）。"
 cur="$(tr -d '[:space:]' < VERSION)"

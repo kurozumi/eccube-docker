@@ -19,7 +19,7 @@
 </head>
 <body>
 
-<div class="topnav"><div class="wrap"><a class="brand" href="index.html"><img src="favicon.svg" alt="">eccube-docker</a><nav aria-label="ページ"><a href="index.html">トップ</a><a href="guide.html">はじめる・上げる</a><a href="ops.html">更新と反映</a><a href="scale.html" aria-current="page">大規模アクセス</a><a href="https://github.com/kurozumi/eccube-docker">GitHub</a></nav></div></div>
+<div class="topnav"><div class="wrap"><a class="brand" href="index.html"><img src="favicon.svg" alt="">eccube-docker</a><nav aria-label="ページ"><a href="index.html">トップ</a><a href="guide.html">はじめる・上げる</a><a href="ops.html">更新と反映</a><a href="scale.html" aria-current="page">大規模アクセス</a><a href="https://github.com/kurozumi/eccube-keeper">GitHub</a></nav></div></div>
 
 <header class="pagehead">
   <div class="wrap">
@@ -165,7 +165,7 @@
     </div>
 
     <div class="steps" style="margin-top:28px">
-      <div class="step"><div class="num">0</div><h3>測る</h3><pre>bin/loadtest.sh stress --rate=100</pre><p>「毎秒何 PV」で流し、段ごとに応答時間と失敗を出す。手元ならコンテナの CPU と php-fpm の上限も。月間 PV から山の PV/秒を出す式は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/loadtest.md">負荷試験</a> に。<strong>本番には流さない</strong>（手元以外はホスト名を打たないと流れない）。</p></div>
+      <div class="step"><div class="num">0</div><h3>測る</h3><pre>bin/loadtest.sh stress --rate=100</pre><p>「毎秒何 PV」で流し、段ごとに応答時間と失敗を出す。手元ならコンテナの CPU と php-fpm の上限も。月間 PV から山の PV/秒を出す式は <a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/loadtest.md">負荷試験</a> に。<strong>本番には流さない</strong>（手元以外はホスト名を打たないと流れない）。</p></div>
 
       <div class="step"><div class="num">①</div><h3>CDN — 静的ファイルを中継点に</h3><pre><span class="c"># caddy で直接公開しているなら、トンネルへ</span>
 bin/setup.sh tunnel
@@ -202,7 +202,7 @@ SET GLOBAL slow_query_log = 1;
 
     <div class="note">
       <b>正直に</b>
-      <span>何 PV まで耐えるかは、まだ本番と同じ形の環境で測っていません。手元の Mac（8 CPU、サンプルデータ）では 20 PV/秒までが安全で、先に詰まったのは PHP の CPU でした。設定の詳しい手順は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/scale.md">大規模アクセス</a>。</span>
+      <span>何 PV まで耐えるかは、まだ本番と同じ形の環境で測っていません。手元の Mac（8 CPU、サンプルデータ）では 20 PV/秒までが安全で、先に詰まったのは PHP の CPU でした。設定の詳しい手順は <a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/scale.md">大規模アクセス</a>。</span>
     </div>
   </div>
 </section>
@@ -252,7 +252,7 @@ docker/nginx/lb.conf.example</pre><p>各サーバーの <code>:8080</code> へ�
 
     <div class="note">
       <b>管理画面が書くファイル</b>
-      <span>ページ管理・ブロック管理・CSS 管理が書くファイルは、書いたサーバーにしかありません。共有ストレージに置くか、管理画面を 1 台に固定します。詳しい手順は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/scale.md#複数ホスト--ロードバランサ">大規模アクセス「複数ホスト + ロードバランサ」</a>。</span>
+      <span>ページ管理・ブロック管理・CSS 管理が書くファイルは、書いたサーバーにしかありません。共有ストレージに置くか、管理画面を 1 台に固定します。詳しい手順は <a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/scale.md#複数ホスト--ロードバランサ">大規模アクセス「複数ホスト + ロードバランサ」</a>。</span>
     </div>
   </div>
 </section>
@@ -267,7 +267,7 @@ docker/nginx/lb.conf.example</pre><p>各サーバーの <code>:8080</code> へ�
 <footer>
   <div class="wrap">
     <p>Apache License 2.0。EC-CUBE は対象外で、EC-CUBE 自身のライセンスがそのまま適用されます（EC-CUBE は一切改変していません）。</p>
-    <p><a href="https://github.com/kurozumi/eccube-docker/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-docker/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-docker/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-docker/security/policy">脆弱性の報告（非公開）</a></p>
+    <p><a href="https://github.com/kurozumi/eccube-keeper/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-keeper/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-keeper/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-keeper/security/policy">脆弱性の報告（非公開）</a></p>
     <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）· <a href="index.html#contact">お問い合わせ</a></p>
     <p>この環境は非公式です。EC-CUBE は株式会社イーシーキューブの登録商標で、同社とは無関係です。</p>
   </div>
@@ -276,7 +276,7 @@ docker/nginx/lb.conf.example</pre><p>各サーバーの <code>:8080</code> へ�
 <div class="fab" id="fab" hidden>
   <div class="fab-menu" id="fab-menu" role="dialog" aria-label="お問い合わせ / Issue">
     <div class="head">困ったこと、こう動いてほしい<small>どちらも歓迎です。うまく書けなくて構いません。</small></div>
-    <a class="fab-item" href="https://github.com/kurozumi/eccube-docker/issues/new" target="_blank" rel="noopener">
+    <a class="fab-item" href="https://github.com/kurozumi/eccube-keeper/issues/new" target="_blank" rel="noopener">
       <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg></span>
       <span><b>Issue を書く</b><span>不具合・要望・質問。GitHub で公開の相談</span></span>
     </a>

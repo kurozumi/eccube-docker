@@ -527,7 +527,7 @@ docker compose exec ec-cube runuser -u www-data -- php bin/console eccube:plugin
 
 ## 開発フロー（重要）
 
-**この節は eccube-docker 本家（kurozumi/eccube-docker）の開発者向け。** 自分の店のリポジトリでは
+**この節は eccube-docker 本家（kurozumi/eccube-keeper）の開発者向け。** 自分の店のリポジトリでは
 `main` に直接 push してよい（`docs/handbook.md` の手順がそう）。
 
 - **`main` へ直接コミット・直接プッシュしない。** 変更は必ず作業ブランチを切り、

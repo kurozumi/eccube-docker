@@ -49,7 +49,7 @@ ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
 
 ```bash
 # 1) リリースを取得する（git 履歴は付いてこない）
-curl -fsSL https://github.com/kurozumi/eccube-docker/releases/latest/download/eccube-docker.tar.gz | tar -xz
+curl -fsSL https://github.com/kurozumi/eccube-keeper/releases/latest/download/eccube-docker.tar.gz | tar -xz
 mv eccube-docker-* myshop && cd myshop
 
 # 2) 自分のリポジトリとして初期化する

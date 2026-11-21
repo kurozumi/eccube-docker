@@ -54,7 +54,7 @@ PHP の脆弱性の案内が来た ──────────────▶
 自分で直したところを出したい ──────────▶ いつもの bin/deploy.sh（毎日やること）
 ```
 
-図で見たいときは [紹介ページの「やりたいことから選ぶ」](https://kurozumi.github.io/eccube-docker/guide.html#howto)。
+図で見たいときは [紹介ページの「やりたいことから選ぶ」](https://kurozumi.github.io/eccube-keeper/guide.html#howto)。
 
 ---
 
@@ -78,7 +78,7 @@ PHP の脆弱性の案内が来た ──────────────▶
 
 ```bash
 # 配布元の最新リリースの中身をもらう（git の履歴は付いてこない）
-curl -fsSL https://github.com/kurozumi/eccube-docker/releases/latest/download/eccube-docker.tar.gz | tar -xz
+curl -fsSL https://github.com/kurozumi/eccube-keeper/releases/latest/download/eccube-docker.tar.gz | tar -xz
 mv eccube-docker-* myshop && cd myshop
 
 # 自分のリポジトリとして始める
@@ -91,7 +91,7 @@ gh repo create myshop --private --source=. --push
 ```
 
 この URL は**常に最新のリリース**を指します（版の番号を調べる必要はありません）。
-何が入っているかは https://github.com/kurozumi/eccube-docker/releases で読めます。
+何が入っているかは https://github.com/kurozumi/eccube-keeper/releases で読めます。
 
 このあと、あなたのパソコンでお店が動きます（終わると URL とログイン情報が表示されます）:
 
