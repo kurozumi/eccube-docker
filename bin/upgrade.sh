@@ -470,7 +470,13 @@ maint_off_running() {
 
 # バックアップの途中で Ctrl-C・ssh の切断があっても、表示と .env を残さない（まだ何も壊していない）
 worker_stopped=0
-worker_back() { [ "$worker_stopped" = 1 ] && "${dc[@]}" start worker >/dev/null 2>&1; return 0; }
+# 起動し直せなくても後始末を止めない（set -e の下で、守りの途中で落ちると .env と表示が残る）
+worker_back() {
+    if [ "$worker_stopped" = 1 ] && ! "${dc[@]}" start worker >/dev/null 2>&1; then
+        echo "[upgrade] 注意: メールの worker を起動し直せませんでした（docker compose start worker）" >&2
+    fi
+    return 0
+}
 backup_interrupted() {
     [ "${BASH_SUBSHELL:-0}" = 0 ] || exit 1
     trap - ERR INT TERM HUP

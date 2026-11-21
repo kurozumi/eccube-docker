@@ -247,6 +247,10 @@ EOS
             echo "        空きを作ってから: cp ${S_ERR}.env .env" >&2
         fi
     }
+    # データを写さないときは setup_on_exit が無いので、書いている途中の中断（Ctrl-C・切断など）はここで戻す
+    if [ "$migrate" != y ]; then
+        trap 'rm -f "$S_ERR"; if [ "${env_writing:-0}" = 1 ]; then env_writing=0; undo_env; fi; [ "${keep_envbak:-0}" = 1 ] || rm -f "${S_ERR}.env"' EXIT
+    fi
     env_writing=1
     if ! { set_env DB_ENGINE "$engine" && set_env DB_HOST "$host" && set_env DB_PORT "$port" && set_env DB_NAME "$name" &&
            set_env DB_USER "$user" && set_env DB_PASSWORD "$pass" && set_env COMPOSE_FILE "$files"; }; then
@@ -297,7 +301,7 @@ EOS
         fi
     fi
     setup_done=1
-    trap - EXIT
+    trap 'rm -f "$S_ERR"' EXIT   # 全体の後始末に戻す
     return 0
 }
 
