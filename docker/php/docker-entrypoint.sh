@@ -291,6 +291,13 @@ migrate_installed() {
         printf '%s\n' "$st" | grep -v '^ *$' | tail -3 | sed 's/^/  /'
         return 0
     fi
+    # **メンテナンス表示があるときは流さない**（前の起動で失敗した entrypoint: も、手で入れたものも、upgrade: も）。
+    # 失敗したあとの再起動のたびに流すと、途中まで当たった DB にもう一度当たる（MySQL の DDL は戻らない）。
+    # deploy.sh が手の表示を借りている最中に、こちらでも流して二重に当たることもあった。直すのは deploy.sh の役目
+    if [ -f "$APP_DIR/.maintenance" ]; then
+        log "未適用の migration がありますが、メンテナンス表示があるので流しません（bin/deploy.sh で反映してください）。"
+        return 0
+    fi
     log "インストール済み。未適用の migration があります。流す前に DB を取ります..."
     mkdir -p "$migrate_backup_dir"; chmod 700 "$migrate_backup_dir"
     local out rcf

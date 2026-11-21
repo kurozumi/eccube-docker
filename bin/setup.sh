@@ -25,8 +25,13 @@ cd "$(dirname "$0")/.."
 
 [ "${1:-}" = protect ] || [ -f .env ] || { echo "[setup] .env がありません。先に bin/init.sh を実行してください。" >&2; exit 1; }
 set_env() { # set_env KEY VALUE（無ければ追記）
+    # **値は awk の ENVIRON で渡す。** sed の置換に素で入れると、`&` が一致した文字列に化け、`|` で sed が落ちる
+    # （DB のパスワードや、`?a=1&b=2` の付いた MAILER_DSN・BACKUP_SYNC で起きる）。-v も `\` を読み替えるので使わない
     local tmp; tmp="$(mktemp)"
-    if grep -qE "^#?${1}=" .env; then sed "s|^#\{0,1\}${1}=.*|${1}=${2}|" .env > "$tmp" && mv "$tmp" .env; else rm -f "$tmp"; printf '%s=%s\n' "$1" "$2" >> .env; fi
+    if grep -qE "^#?${1}=" .env; then
+        SET_K="$1" SET_V="$2" awk 'BEGIN { k = ENVIRON["SET_K"]; v = ENVIRON["SET_V"] }
+            index($0, k "=") == 1 || index($0, "#" k "=") == 1 { print k "=" v; next } { print }' .env > "$tmp" && mv "$tmp" .env
+    else rm -f "$tmp"; printf '%s=%s\n' "$1" "$2" >> .env; fi
 }
 ask() { # ask <変数名> <質問> [既定]
     local v; if [ -n "${3:-}" ]; then read -r -p "$2 [${3}]: " v; v="${v:-$3}"; else read -r -p "$2: " v; fi; printf -v "$1" '%s' "$v"
@@ -183,7 +188,7 @@ EOS
             smine=1; echo "[setup] メンテナンス ON（写している間、お客さんには「メンテナンス中」）"
         fi
         setup_maint_off() {
-            if [ "$smine" = 1 ] && docker compose exec -T ec-cube sh -c "grep -q '^setup:' $sm && rm -f $sm" 2>/dev/null; then
+            if [ "$smine" = 1 ] && docker compose exec -T ec-cube sh -c "grep -qE '^setup(-switched)?:' $sm && rm -f $sm" 2>/dev/null; then
                 echo "[setup] メンテナンス OFF"
             fi
             return 0
@@ -191,6 +196,7 @@ EOS
         # 途中で止まった・Ctrl-C でも、表示を黙って残さない。切り替える前なら外す（お店はいままでの DB のまま）。
         # 切り替えたあとなら、壊れた画面を出さないよう残して、外し方を出す
         setup_on_exit() {
+            rm -f "$S_ERR" "${S_ERR}.env"   # 全体の EXIT の後始末を、この trap が置き換えるので
             [ "$smine" = 1 ] && [ "$setup_done" != 1 ] || return 0
             if [ "$switched" = 0 ]; then
                 setup_maint_off
@@ -221,12 +227,25 @@ EOS
         fi
         echo "[setup] 写しました。"
     fi
-    switched=1
-    set_env DB_ENGINE "$engine"; set_env DB_HOST "$host"; set_env DB_PORT "$port"; set_env DB_NAME "$name"; set_env DB_USER "$user"; set_env DB_PASSWORD "$pass"
     files="$(grep -E '^COMPOSE_FILE=' .env | head -1 | cut -d= -f2- || true)"; files="${files:-compose.yaml:compose.override.yaml}"
     files="$(printf '%s' "$files" | tr ':' '\n' | grep -v -x 'compose.externaldb.yaml' | grep -v -x 'compose.postgresql.yaml' | paste -sd: -)"
     [ "$engine" = postgresql ] && files="${files}:compose.postgresql.yaml"
-    files="${files}:compose.externaldb.yaml"; set_env COMPOSE_FILE "$files"
+    files="${files}:compose.externaldb.yaml"
+    # .env はまとめて書き、途中で失敗したら書く前に戻す（新しい DB_HOST に古い DB_PASSWORD、のような半端を残さない）
+    cp -p .env "${S_ERR}.env"
+    if ! { set_env DB_ENGINE "$engine" && set_env DB_HOST "$host" && set_env DB_PORT "$port" && set_env DB_NAME "$name" &&
+           set_env DB_USER "$user" && set_env DB_PASSWORD "$pass" && set_env COMPOSE_FILE "$files"; }; then
+        cp -p "${S_ERR}.env" .env; rm -f "${S_ERR}.env"
+        echo "[setup] エラー: .env に書けませんでした。.env は書く前のままです（お店はいままでの DB のまま）。" >&2
+        exit 1
+    fi
+    rm -f "${S_ERR}.env"
+    switched=1
+    # 表示の印を変える。**切り替えたあとの表示は、新しい DB で開くと確かめるまで外さない。** doctor は setup: を
+    # 「切り替える前に止まった残り」として外すので、そのままだと確かめていない DB でお店を開けてしまう
+    if [ "$migrate" = y ] && [ "${smine:-0}" = 1 ]; then
+        docker compose exec -T ec-cube sh -c "grep -q '^setup:' $sm && printf 'setup-switched:%s' '${stoken}' > $sm" 2>/dev/null || true
+    fi
     echo "[setup] .env に書きました（DB_HOST=${host}、COMPOSE_FILE=${files}）。"
     docker compose stop db >/dev/null 2>&1 || true
     echo "[setup] 手元の db は止めました（データのボリュームは残っています。戻すなら COMPOSE_FILE から compose.externaldb.yaml を外して docker compose up -d）。"
@@ -235,7 +254,7 @@ EOS
     # （token の cookie で中から見る。deploy.sh と同じ）
     if [ "$migrate" = y ] && [ "${smine:-0}" = 1 ]; then
         echo "[setup] 新しい DB で開くかを確かめています..."
-        sport="$(docker compose port nginx 80 2>/dev/null | tail -1 | sed -E 's/^(0\.0\.0\.0|\[::\]):/localhost:/')"
+        sport="$(docker compose port nginx 80 2>/dev/null | tail -1 | sed -E 's/^(0\.0\.0\.0|\[::\]):/localhost:/' || true)"
         [ -n "$sport" ] || sport="localhost:$(env_get HTTP_PORT)"
         scode=000
         for _ in $(seq 1 60); do

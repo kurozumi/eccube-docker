@@ -236,6 +236,19 @@ restore_env() {
     fi
     return 0
 }
+# **.env を書き換えてから、バックアップの守り（backup_interrupted）に渡すまでの間も戻す。** イメージの pull / build
+# （数分）や確認の質問の途中の Ctrl-C・切断・思わぬ失敗で終わると、.env だけ新しい版のまま古い本体が動き続け、
+# 次の up や deploy が新しいイメージで古い本体を動かす
+early_abort() {
+    [ "${BASH_SUBSHELL:-0}" = 0 ] || exit 1
+    trap - ERR INT TERM HUP
+    # 表示を立てたあとなら外す（maint_off_running は下で定義する。自分で立てたものだけ外す）
+    if declare -F maint_off_running >/dev/null; then maint_off_running; fi
+    restore_env
+    echo "[upgrade] 中止しました。稼働中の環境には触れていません。" >&2
+    exit 1
+}
+trap early_abort ERR INT TERM HUP
 if grep -qE '^ECCUBE_VERSION=' .env 2>/dev/null; then
     tmp="$(mktemp)"
     sed "s|^ECCUBE_VERSION=.*|ECCUBE_VERSION=${ver}|" .env > "$tmp" && mv "$tmp" .env
@@ -449,6 +462,7 @@ maint_off_running() {
     return 0
 }
 
+
 # バックアップの途中で Ctrl-C・ssh の切断があっても、表示と .env を残さない（まだ何も壊していない）
 worker_stopped=0
 worker_back() { [ "$worker_stopped" = 1 ] && "${dc[@]}" start worker >/dev/null 2>&1; return 0; }
@@ -461,6 +475,7 @@ backup_interrupted() {
     echo "[upgrade] バックアップの途中で止められました。稼働中の環境には触れていません。" >&2
     exit 1
 }
+trap - ERR
 trap backup_interrupted INT TERM HUP
 # メールの worker を止める。戻すと送ったはずのメールが DB に戻り、もう一度送られる（注文確認の二重送信）
 if printf '%s\n' "$services_now" | grep -qx worker && [ -n "$("${dc[@]}" ps -q --status running worker 2>/dev/null)" ]; then
