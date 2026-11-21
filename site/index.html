@@ -37,8 +37,48 @@
       <a class="btn ghost" href="https://github.com/kurozumi/eccube-docker">GitHub</a>
       <a class="btn ghost" href="#contact">お問い合わせ / Issue</a>
     </div>
+    <p class="support-line"><b>対応</b>EC-CUBE <strong>4.3（推奨）</strong>・<strong>4.2</strong>　／　4.4 は開発版（試すだけ）　／　4.0・4.1 は対象外　<a href="#support">対応していること・いないこと →</a></p>
   </div>
 </header>
+
+<section id="support">
+  <div class="wrap">
+    <h2>対応しているもの、<em class="k">いないもの</em></h2>
+    <p class="sub">使えるかどうかは、まずここで確かめてください。PHP の版ごとのイメージは<a href="guide.html#support">「はじめる・上げる」の対応表</a>にあります。</p>
+    <div class="tablewrap">
+      <table class="stack">
+        <tr><th>EC-CUBE</th><th>PHP</th><th>使い方</th></tr>
+        <tr><td><strong>4.3</strong><br><small>4.3 系の最新のパッチ</small></td><td data-label="PHP">8.1 / 8.2 / <strong>8.3</strong></td><td data-label="使い方"><strong>推奨。</strong>新しく作るときの既定です</td></tr>
+        <tr><td><strong>4.2</strong><br><small>4.2 系の最新のパッチ</small></td><td data-label="PHP">8.1 / <strong>8.2</strong></td><td data-label="使い方">使えます。ただし PHP 8.1 は保守が終わり、8.2 も 2026-12-31 で終わります。早めに 4.3 へ</td></tr>
+        <tr><td><strong>4.4</strong><br><small>開発版（安定版はまだ出ていない）</small></td><td data-label="PHP">8.2 / <strong>8.3</strong> / 8.4 / 8.5</td><td data-label="使い方"><strong>試すだけ。</strong>本番には使わないでください。上流の開発ブランチから焼いているので、中身が日々変わります</td></tr>
+        <tr><td>4.0・4.1</td><td data-label="PHP">—</td><td data-label="使い方"><strong>対象外。</strong>イメージを配っておらず、この環境では動かせません</td></tr>
+      </table>
+    </div>
+    <p class="sub" style="margin-top:12px">太字の PHP は、何も指定しないときに使われる版です。</p>
+
+    <div class="two" style="margin-top:24px">
+      <div class="box"><h3>対応していること</h3><ul>
+        <li><strong>DB:</strong> MariaDB 10.11（既定）・11.4、MySQL 8.4、PostgreSQL 14〜17。同梱でも、外部・マネージドの DB でも</li>
+        <li><strong>動かす場所:</strong> Mac・Linux、Windows は WSL2（Ubuntu）の中。amd64・arm64</li>
+        <li><strong>要るもの:</strong> Docker Engine と Docker Compose v2.24 以上</li>
+        <li><strong>公開:</strong> Cloudflare Tunnel（既定。ポートを開けない）か caddy（証明書を自動で取る）</li>
+        <li><strong>速さ・広さ:</strong> Redis（キャッシュ・セッション）、メールの非同期送信、複数のサーバー + ロードバランサー</li>
+        <li><strong>守り:</strong> 毎日のバックアップと外への送り出し（S3・R2・Google Drive・NAS など）、暗号化、失敗したら元に戻る更新</li>
+        <li><strong>プラグイン:</strong> オーナーズストアのものも、自作のものも（git で持つ）</li>
+      </ul></div>
+      <div class="box"><h3>対応していないこと</h3><ul>
+        <li><strong>EC-CUBE 4.0・4.1、2 系・3 系</strong></li>
+        <li><strong>Windows の PowerShell・コマンドプロンプト</strong>で直接（<code>bin/</code> は bash。WSL2 の中で使う）</li>
+        <li><strong>DB の種類をまたぐ引っ越し</strong>（MariaDB / MySQL と PostgreSQL の間。バックアップは同じ種類にしか戻らない）</li>
+        <li><strong>DB の版を下げる</strong>こと（MariaDB は上げると戻せない）</li>
+        <li><strong>DB の読み取り専用の複製</strong>（リードレプリカ）と、<strong>ページ（HTML）のキャッシュ</strong>。EC-CUBE の作りのため、入れても効かないか、ほかの人のカートが見える（<a href="scale.html">理由</a>）</li>
+        <li><strong>商品画像を S3 などに直接置く</strong>こと（EC-CUBE 本体が対応していない。複数のサーバーでは NFS / EFS で共有）</li>
+        <li><strong>Kubernetes・オートスケール</strong>の構成は用意していない（Docker Compose で動かす）</li>
+        <li><strong>Cloudflare Workers / Pages</strong> で EC-CUBE を動かすこと（PHP が動かない。前に CDN・トンネルとして置くのは可）</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
 
 <section id="pains" class="band">
   <div class="wrap">
