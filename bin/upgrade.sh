@@ -447,7 +447,16 @@ if [ -n "$("${dc[@]}" ps -q --status running ec-cube 2>/dev/null)" ]; then
 elif docker volume inspect "$app_vol" >/dev/null 2>&1; then
     # **止まっているときも、手で入れていた表示を読む。** 読まないと新しい版のボリュームに upgrade: を置き、
     # 終わったときにそれを外すので、わざと閉じていた店を開けてしまう（#227 のレビュー）
-    if docker run --rm -v "${app_vol}:/v:ro" alpine:3 test -f /v/.maintenance 2>/dev/null; then
+    # 「無い」と「確かめられなかった」を分ける（docker の一時的な失敗を「無い」と取り違えると、閉じていた店を開ける）
+    probe="$(docker run --rm -v "${app_vol}:/v:ro" alpine:3 sh -c 'if [ -f /v/.maintenance ]; then echo present; else echo absent; fi' 2>/dev/null || true)"
+    case "$probe" in
+        present | absent) ;;
+        *)
+            echo "[upgrade] エラー: メンテナンス表示があるかを確かめられませんでした（docker の失敗）。中止します。稼働中の環境には触れていません。" >&2
+            restore_env
+            exit 1 ;;
+    esac
+    if [ "$probe" = present ]; then
         keep_maint=1
         manual_maint="$(docker run --rm -v "${app_vol}:/v:ro" alpine:3 head -1 /v/.maintenance 2>/dev/null | tr -d '\r\n' || true)"
         [ -z "$manual_maint" ] || token="${manual_maint#*:}"
