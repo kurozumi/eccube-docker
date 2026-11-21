@@ -186,7 +186,10 @@ fetch_release() { # fetch_release <タグ> <展開先> [strict] → 展開され
             die "${tag} の tarball が SHA256SUMS と合いません（運搬中に壊れたか、差し替えられています）。展開しません。"
         fi
         if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-            if gh attestation verify "$tgz" --repo "$repo" >/dev/null 2>&1; then
+            # 改名前に出したリリース（いま入っている版・古い版を名指ししたとき）は、署名に改名前の名前が入っている。
+            # どちらも作者のリポジトリの名前（同じ持ち主のもとにしか作れない）なので、両方を受け付ける
+            if gh attestation verify "$tgz" --repo "$repo" >/dev/null 2>&1 \
+               || { [ "$repo" = "$DEFAULT_REPO" ] && gh attestation verify "$tgz" --repo "$OLD_REPO" >/dev/null 2>&1; }; then
                 [ "$strict" = 1 ] && verify_note "sha256 と署名（attestation）を確認"
             else
                 die "${tag} の tarball の署名を確認できません（${repo} のワークフローが作ったものではない可能性）。展開しません。"

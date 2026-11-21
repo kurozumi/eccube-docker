@@ -97,7 +97,8 @@ docker compose up -d --force-recreate
 - **配布イメージの名前も変えた**（`ghcr.io/kurozumi/eccube-docker/ec-cube` → `ghcr.io/kurozumi/eccube-kit/ec-cube`）。
   そのとき使っていたのは作者だけだったので、移行の期間は設けていない。**古い名前のイメージは、もう焼き直されない**
   （PHP と OS のパッチが入らない）。古い名前を `.env` の `ECCUBE_IMAGE` に書いているなら、新しい名前に書き換えて
-  `bin/deploy.sh` する。
+  `bin/deploy.sh` する。**日付やリリースで固定したタグ（`4.3-20260907`・`4.3-v1.0.20`）は、新しい名前には無い**（改名後に焼いた
+  ものしか無い）。系列の追跡タグ（`4.3`・`4.3-php8.3`）か、改名後の日付タグを選ぶ。
 - **リリースの添付の名前も変えていない**（`eccube-docker-<ver>.tar.gz`・`.eccube-docker-paths`）。古い `self-update.sh` が探す名前だから。
 - `git` と GitHub の API・ダウンロードは、古い名前から GitHub が転送する。
 - **`gh` にログインしていて、古い `self-update.sh` を使っている人は、署名の確認で止まることがある。** 改名後のリリースの
