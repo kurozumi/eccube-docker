@@ -291,6 +291,8 @@ jobs:
           done
 
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          # スキャンするのは、この実行で必ず打つ sha 付きのタグ（いま焼いたもの）
+          echo "scan=${img}:${series}-php${php}-${sha}" >> "$GITHUB_OUTPUT"
           echo "$tags" | tr ',' '\n'
 
       # 土台の digest を控え、**その digest で焼く**（PHP_BASE）。タグで焼くと、調べた直後に上流が
@@ -342,7 +344,10 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.target.series }}-php${{ matrix.target.php }}-${{ needs.setup.outputs.ref == github.sha && github.sha || needs.setup.outputs.ref }}
+          # **いま焼いた sha 付きのタグを見る。** 以前は焼き直しでもリリースのタグ（-vX.Y.Z）を見ていた。焼き直しはそのタグを
+          # 動かさないので、**焼き直したものではなく、リリースのときのイメージを毎回スキャンしていた。** リポジトリの改名で
+          # 新しい名前にそのタグが無くなり、全部の組が落ちて気づいた
+          image-ref: ${{ steps.tags.outputs.scan }}
           format: sarif
           output: trivy.sarif
           severity: CRITICAL,HIGH
