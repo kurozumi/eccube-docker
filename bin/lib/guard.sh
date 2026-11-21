@@ -34,7 +34,7 @@ guard_project_name() {
 # deploy.sh は向こうのサーバーで guard.sh だけを読むので、compose.sh に頼らない
 _guard_app_role() {
     local f="${COMPOSE_FILE:-}"
-    [ -n "$f" ] || f="$(sed -n 's/^COMPOSE_FILE=//p' .env 2>/dev/null | tail -1 | tr -d "\"'")"
+    [ -n "$f" ] || f="$(sed -n 's/^COMPOSE_FILE=//p' .env 2>/dev/null | tail -1 | tr -d "\"' \t\r")"
     case ":${f}:" in *:compose.app.yaml:*) return 0 ;; esac
     return 1
 }

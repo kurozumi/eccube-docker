@@ -349,6 +349,8 @@ bin/plugin.sh doctor        # Redis は「外部」と出れば正しい
   - ALB（ヘッダーを足せない）: 正常のコードを `200-399` にする（`TRUSTED_HOSTS` を書いているなら、その中に
     ホストの IP も足す）。これは「nginx と PHP が返事をする」までしか見ないので、画面が組み立つかは
     `bin/healthcheck.sh`（各ホストで）と `deploy.sh` の最後の確かめで見る。
+  - **`TRUSTED_HOSTS` を書いているなら、ホストのプライベート IP も足す。** `bin/healthcheck.sh` も ALB も、ホストの IP に
+    `Host` を付け替えずに聞くので、店のドメインだけだと 400 になる。
 - **スティッキーセッションは要らない**（セッションは Redis で共有）。
 - LB は `X-Forwarded-Proto` と `X-Forwarded-For` を付けて送る（ALB・Cloudflare は自分で付ける）。
 
@@ -377,6 +379,9 @@ LB のサブネット（`10.0.0.0/8` など）を書くと、お客さんの IP 
 中継点の IP になる。**お客さんが中継点ごとにまとまり**、ログインの回数制限がよその人まで巻き込み、管理画面の
 IP 制限も効かなくなる。そのときは `docker/nginx/default.conf` の `real_ip_header` を `CF-Connecting-IP` に
 する（Cloudflare）か、`set_real_ip_from` を LB と CDN の範囲に絞って `real_ip_recursive on` にする。
+**`CF-Connecting-IP` にするなら、LB が Cloudflare からの接続しか受けないようにする**（セキュリティグループで Cloudflare の
+IP 範囲だけを開ける、Cloudflare の Authenticated Origin Pulls を使う、など）。nginx はこのヘッダーをどこから来ても信じるので、
+Cloudflare を通らずに LB へ届くと、お客さんが好きな値を書けて、管理画面の IP 制限とログインの回数制限が抜ける。
 
 ## 管理画面が書くファイルは 1 台にしか無い
 
@@ -418,7 +423,8 @@ bin/healthcheck.sh
 - migration は**古いコードでも壊れない形**（列を足すだけ、など）にする。init 役で流したあと、残りの
   ホストが新しいコードになるまでの間、古いコードが新しいスキーマで動く。
 - **エンティティやプラグインが変わる反映は、1 台ずつではなく全部を止めて行う**（下の「EC-CUBE を上げる」と
-  同じ順）。Doctrine のメタデータは共有のキャッシュの Redis に載るので、新しいホストが書いたものを古い
+  同じ順で、`upgrade.sh` の代わりに `bin/deploy.sh`: LB をメンテナンス中に → init 役以外を止める → init 役で
+  `deploy.sh` → 残りのホストで `deploy.sh` → LB を戻す）。Doctrine のメタデータは共有のキャッシュの Redis に載るので、新しいホストが書いたものを古い
   ホストが読み、`Unrecognized field` / `Property ... does not exist` で落ちる（最後のホストの反映が
   キャッシュを消すまで）。
 
@@ -441,8 +447,8 @@ bin/healthcheck.sh
    して `bin/upgrade.sh <制約>`（スキーマには触らない）
 5. LB を戻す
 
-キャッシュの Redis は `upgrade.sh` が新しい版を起動する前に空にする（`cache:pool:clear --all`。セッションの
-Redis は別なので消えない）。前の版が書いたものを新しい版が読まないためで、ほかのホストを止めてあるのが前提。
+キャッシュの Redis は `upgrade.sh` が空にする（`cache:pool:clear --all`。proxy の生成とスキーマの差分より前、つまり
+新しい版がメタデータを読む前。失敗して元の版に戻すときも、起動し直す前に空にする。セッションの Redis は別なので消えない）。前の版が書いたものを新しい版が読まないためで、ほかのホストを止めてあるのが前提。
 
 ### バックアップは 1 台で
 

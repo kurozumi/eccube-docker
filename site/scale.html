@@ -241,7 +241,7 @@ docker/nginx/lb.conf.example</pre><p>各サーバーの <code>:8080</code> へ�
       <div class="box"><h3>毎日の反映は 1 台ずつ</h3><ul>
         <li>LB から外す → <code>bin/deploy.sh</code> → 開くのを確かめて戻す、を 1 台ずつ。</li>
         <li>DB の構造が変わるときは init 役から。古いコードでも壊れない変え方にします。</li>
-        <li>エンティティやプラグインが変わるときは、1 台ずつにせず、EC-CUBE を上げるときと同じく全台を止めます（共有のキャッシュを古いサーバーが読んで落ちるため）。</li>
+        <li>エンティティやプラグインが変わるときは、1 台ずつにせず、EC-CUBE を上げるときと同じく全台を止め、init 役 → 残りの順に <code>bin/deploy.sh</code>（共有のキャッシュを古いサーバーが読んで落ちるため）。</li>
         <li>バックアップは init 役の 1 台だけで取り、外へ送ります。</li>
       </ul></div>
       <div class="box"><h3>EC-CUBE を上げるときは全台を止める</h3><ul>
