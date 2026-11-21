@@ -291,8 +291,6 @@ jobs:
           done
 
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
-          # スキャンするのは、この実行で必ず打つ sha 付きのタグ（いま焼いたもの）
-          echo "scan=${img}:${series}-php${php}-${sha}" >> "$GITHUB_OUTPUT"
           echo "$tags" | tr ',' '\n'
 
       # 土台の digest を控え、**その digest で焼く**（PHP_BASE）。タグで焼くと、調べた直後に上流が
@@ -307,6 +305,7 @@ jobs:
           echo "php:${{ matrix.target.php }}-fpm-bookworm = $d"
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -344,10 +343,11 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
-          # **いま焼いた sha 付きのタグを見る。** 以前は焼き直しでもリリースのタグ（-vX.Y.Z）を見ていた。焼き直しはそのタグを
+          # **いま焼いたものを digest で見る。** 以前は焼き直しでもリリースのタグ（-vX.Y.Z）を見ていた。焼き直しはそのタグを
           # 動かさないので、**焼き直したものではなく、リリースのときのイメージを毎回スキャンしていた。** リポジトリの改名で
-          # 新しい名前にそのタグが無くなり、全部の組が落ちて気づいた
-          image-ref: ${{ steps.tags.outputs.scan }}
+          # 新しい名前にそのタグが無くなり、全部の組が落ちて気づいた。タグ（sha 付きも）は同じコミットの別の実行が
+          # 上書きしうるので、この実行の build-push-action が返した digest で引く
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: sarif
           output: trivy.sarif
           severity: CRITICAL,HIGH
