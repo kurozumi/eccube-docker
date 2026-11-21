@@ -30,11 +30,22 @@ guard_project_name() {
 #   0 … 本番構成で動いている
 #   1 … 本番構成ではない
 #   2 … 判定できない（停止中）
+# .env（または環境変数）の COMPOSE_FILE に compose.app.yaml が入っているか。
+# deploy.sh は向こうのサーバーで guard.sh だけを読むので、compose.sh に頼らない
+_guard_app_role() {
+    local f="${COMPOSE_FILE:-}"
+    [ -n "$f" ] || f="$(sed -n 's/^COMPOSE_FILE=//p' .env 2>/dev/null | tail -1 | tr -d "\"'")"
+    case ":${f}:" in *:compose.app.yaml:*) return 0 ;; esac
+    return 1
+}
+
 guard_is_prod_stack() {
     local cid cfg
     cid="$(docker compose ps -q ec-cube 2>/dev/null | head -1 || true)"
 
-    [ -n "$cid" ] || return 2
+    # **止まっていても、アプリホスト（compose.app.yaml）なら本番と分かる。** .env の並びは動いていなくても読める。
+    # 上げる手順ではアプリホストをわざと止めるので、ここを「判定できない」にすると reset.sh が y だけで通っていた
+    [ -n "$cid" ] || { _guard_app_role && return 0; return 2; }
 
     cfg="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' \
         "$cid" 2>/dev/null || true)"
@@ -62,7 +73,7 @@ guard_destructive() {
     guard_is_prod_stack || prod=$?
 
     if [ "$prod" = "0" ]; then
-        echo "[${tag}] エラー: 稼働中のスタックは**本番構成**です（compose.prod.yaml）。" >&2
+        echo "[${tag}] エラー: このスタックは**本番構成**です（compose.prod.yaml / compose.app.yaml）。" >&2
         echo "[${tag}] 本番のデータを消そうとしています。" >&2
         echo >&2
         echo "  本当に消すなら、プロジェクト名を渡して実行してください:" >&2

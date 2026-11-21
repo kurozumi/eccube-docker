@@ -190,15 +190,18 @@ nginx は Docker 内蔵 DNS を毎回引き直して各レプリカへ分散す�
 これにより **複数ホスト／複数レプリカでセッションが共有**され、ボリューム共有に依存せず
 カート・ログインが保たれる（LB を前に置いても成立する）。
 
-- 本体の `SameSiteNoneCompatSessionHandler`（決済リダイレクトの SameSite=None 対応）は
-  維持したまま、その内側のハンドラだけを `Customize\Session\RawRedisSessionHandler` で
-  Redis に差し替えている（`app/Customize/Resource/config/services.yaml`）。
+- セッションのハンドラを `Customize\Session\RawRedisSessionHandler` に差し替える
+  （`app/config/eccube/optional/redis/redis_session.yaml` の `framework.session.handler_id`）。
+  **EC-CUBE 4.2 / 4.3 では、本体の `SameSiteNoneCompatSessionHandler` で包み直す**
+  （`app/config/eccube/packages/redis_session_samesite.php`）。Cookie の SameSite=None・Secure・パスは
+  あのハンドラが付けているので、包まないと SameSite がブラウザの既定（Lax）になり、決済の戻り
+  （よそのサイトからの POST）でセッションが届かない。4.4 にはこのクラスが無く、本体も Lax のまま。
 - 接続先は `.env` の `SESSION_REDIS_URL`（本番はマネージド Redis に向けられる）。
 - キャッシュ用 `redis`（`allkeys-lru`）とは別インスタンスにして、セッションが LRU で
   勝手に消えないようにしている。上限は `.env` の `SESSION_REDIS_MAXMEMORY`（既定 256mb）。
   到達時は OOM ではなく新規セッションの書込エラーになり、既存ユーザーは守られる。
-- 単一ホストのみで運用するなら不要。この 3 定義（services.yaml）と `redis-session`
-  サービスを外せばファイルセッションに戻る。
+- 単一ホストのみで運用するなら不要。`.env` の `COMPOSE_PROFILES` から `redis` を外せば、
+  entrypoint が設定を外してファイルのセッションに戻る（`redis-session` も立たない）。
 
 > 実測: ログイン系ページで発行される `eccube` セッション ID が `redis-session` に
 > `ecses:<id>`（TTL≈`gc_maxlifetime`）として保存され、`--scale=2` でも両レプリカから
@@ -338,7 +341,13 @@ bin/plugin.sh doctor        # Redis は「外部」と出れば正しい
 
 - **自前の nginx**: `docker/nginx/lb.conf.example`。`upstream` に各ホストの `<プライベート IP>:8080` を並べる。
 - **Cloudflare Load Balancing / AWS ALB**: 各ホストの `:8080` をオリジン（ターゲット）に登録する。
-  ヘルスチェックは `/` が 200。
+- **ヘルスチェックは `/`。ただし、何を「正常」とするかに気をつける。** LB のヘルスチェックは
+  `X-Forwarded-Proto` を付けず、`Host` はホストの IP になる。**`ECCUBE_FORCE_SSL` の店は `/` に 301 を返し、
+  `TRUSTED_HOSTS` を書いた店は 400 を返す。** 200 だけを正常にすると全部のホストが外れ、サイトが落ちる。
+  - Cloudflare（モニターにヘッダーを足せる）: `Host: <店のドメイン>` と `X-Forwarded-Proto: https` を付け、200 を正常にする。
+  - ALB（ヘッダーを足せない）: 正常のコードを `200-399` にする（`TRUSTED_HOSTS` を書いているなら、その中に
+    ホストの IP も足す）。これは「nginx と PHP が返事をする」までしか見ないので、画面が組み立つかは
+    `bin/healthcheck.sh`（各ホストで）と `deploy.sh` の最後の確かめで見る。
 - **スティッキーセッションは要らない**（セッションは Redis で共有）。
 - LB は `X-Forwarded-Proto` と `X-Forwarded-For` を付けて送る（ALB・Cloudflare は自分で付ける）。
 
@@ -359,7 +368,14 @@ LB のサブネット（`10.0.0.0/8` など）を書くと、お客さんの IP 
 
 そのぶん、**nginx に LB 以外から届かないこと**が前提になる。nginx は `X-Forwarded-For` の右端（直前の LB が
 付けた値）をお客さんの IP として使うので、直接届くとその値を偽れて、管理画面の IP 制限とログインの回数制限が
-抜ける。`HTTP_BIND` をプライベート IP にし（必須）、ファイアウォールでも `8080` を LB の IP にだけ開ける。
+抜ける。`HTTP_BIND` をプライベート IP にし（必須）、`8080` を LB にだけ開ける。**開ける・閉じるはクラウドの
+セキュリティグループ（または `DOCKER-USER` チェーン）で。** Docker が公開したポートは ufw / INPUT の規則より
+先に通るので、ufw で閉じたつもりでも同じネットワークのほかのマシンから届く。
+
+**LB の前にさらに CDN を置くとき**（Cloudflare のプロキシ〔オレンジの雲〕→ ALB、など）、右端の値は CDN の
+中継点の IP になる。**お客さんが中継点ごとにまとまり**、ログインの回数制限がよその人まで巻き込み、管理画面の
+IP 制限も効かなくなる。そのときは `docker/nginx/default.conf` の `real_ip_header` を `CF-Connecting-IP` に
+する（Cloudflare）か、`set_real_ip_from` を LB と CDN の範囲に絞って `real_ip_recursive on` にする。
 
 ## 管理画面が書くファイルは 1 台にしか無い
 
@@ -400,6 +416,10 @@ bin/healthcheck.sh
   2 台目以降は `bin/deploy.sh --no-backup` でよい（init 役で取った直後なら）。
 - migration は**古いコードでも壊れない形**（列を足すだけ、など）にする。init 役で流したあと、残りの
   ホストが新しいコードになるまでの間、古いコードが新しいスキーマで動く。
+- **エンティティやプラグインが変わる反映は、1 台ずつではなく全部を止めて行う**（下の「EC-CUBE を上げる」と
+  同じ順）。Doctrine のメタデータは共有のキャッシュの Redis に載るので、新しいホストが書いたものを古い
+  ホストが読み、`Unrecognized field` / `Property ... does not exist` で落ちる（最後のホストの反映が
+  キャッシュを消すまで）。
 
 ### PHP と Debian のパッチ（イメージの更新）
 
@@ -416,10 +436,12 @@ bin/healthcheck.sh
 2. init 役**以外**のホストを止める: `docker compose stop ec-cube`（`messenger` を使っていれば `worker` も）
 3. init 役で `bin/self-update.sh` → `bin/upgrade.sh <制約>`（外部 DB の退避・失敗したら自動で戻す、は
    1 台のときと同じ）。終わったら新しい日付タグを `.env` に控える
-4. 残りのホストで、`.env` の `ECCUBE_IMAGE` を同じタグにして `bin/upgrade.sh <制約>`（スキーマはもう
-   合っているので、差分なしで通る）
-5. キャッシュの Redis を空にする（`redis-cli -u "$REDIS_URL" FLUSHDB`。セッションの Redis は消さない）
-6. LB を戻す
+4. 残りのホストで、`bin/self-update.sh`（init 役と同じ版にそろえる）→ `.env` の `ECCUBE_IMAGE` を同じタグに
+   して `bin/upgrade.sh <制約>`（スキーマには触らない）
+5. LB を戻す
+
+キャッシュの Redis は `upgrade.sh` が新しい版を起動する前に空にする（`cache:pool:clear --all`。セッションの
+Redis は別なので消えない）。前の版が書いたものを新しい版が読まないためで、ほかのホストを止めてあるのが前提。
 
 ### バックアップは 1 台で
 

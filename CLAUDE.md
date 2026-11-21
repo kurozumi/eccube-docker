@@ -446,7 +446,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   **サービスを定義するだけでは使われない。** 本体の framework.yaml が `native_file` を指すので、
   以前の「SameSite ラッパの内側を差し替える」やり方は 4.4 ではどこからも参照されず、
   **セッションはずっとファイルに書かれていた**（#117 の検証で判明。`debug:config framework session`
-  の `handler_id` で確かめる）。
+  の `handler_id` で確かめる）。**4.2 / 4.3 は本体の `SameSiteNoneCompatSessionHandler` が Cookie の SameSite=None・
+  Secure・パスを付けている**ので、`packages/redis_session_samesite.php` が Redis のハンドラをそれで包む（包まないと
+  Lax になり、決済の戻りでセッションが届かない）。4.4 にはこのクラスが無い。
 - **アップロード画像（Tier 2）**: `html/upload` は専用ボリューム `eccube_upload` に分離。
   複数ホストは NFS/EFS ドライバに差し替えて共有。`down -v`（reset/switch-version）で
   ローカルデータは消えるので事前バックアップ。詳細は `docs/scale.md`。
@@ -454,7 +456,8 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   app 層。外部の共有サービスを見る）。**店は 1 台で作ってから移す**（アプリホストは `html/user_data` が ro で install できない）。
   init 役 1 台だけ `ECCUBE_SKIP_DB_INIT=0`、ほかは既定 1。**`TRUSTED_PROXIES` は既定の `REMOTE_ADDR` のまま**
   （nginx が X-Forwarded-For でお客さんの IP に置き換えるので、LB のサブネットを書くと HTTPS と判定されない。2 台で確かめた）。
-  `ECCUBE_AUTH_MAGIC` は全台同じ、イメージは日付タグで揃える。EC-CUBE を上げるときは init 役以外を止め、init 役 → 残り
+  `ECCUBE_AUTH_MAGIC` は全台同じ、イメージは日付タグで揃える。**止まっているアプリホストも本番として扱う**
+（`guard.sh` が `.env` の `COMPOSE_FILE` を見る）。`upgrade.sh` は起動前に `cache:pool:clear --all` で共有のキャッシュを空にする。EC-CUBE を上げるときは init 役以外を止め、init 役 → 残り
   （アプリホストの `upgrade.sh` はスキーマに触らない）。手順は `docs/scale.md`「複数ホスト + ロードバランサ」、LB 例は
   `docker/nginx/lb.conf.example`（各ホストの `:8080`）。
 - **どこまで強くするかは `bin/loadtest.sh` で測ってから決める**（k6、`docs/loadtest.md`）。到着数を固定して流す

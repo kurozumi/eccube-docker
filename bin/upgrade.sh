@@ -742,6 +742,14 @@ echo "[upgrade] データ移行（migration）を適用します（未公開）.
 offline "migration の適用" doctrine:migrations:migrate --no-interaction --allow-no-migration
 fi
 
+# 7b) 起動する前に、キャッシュプール（Redis のキャッシュも）を消す。**前の版が書いたものを新しい版が読まないように。**
+#     Redis は前の版と同じ名前（prefix_seed）で引くので、残っていると新しい版の起動の確かめで落ち、元に戻すことになる。
+#     複数ホストでは共有の Redis を消す（ほかのホストは止めてある前提。docs/scale.md）。セッションの Redis は別なので消えない。
+if ! "${dc[@]}" run --rm -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
+        ec-cube runuser -u www-data -- php bin/console cache:pool:clear --all --no-interaction >/dev/null 2>&1; then
+    echo "[upgrade] 注意: キャッシュプールを消せませんでした（このまま起動し、開くかで確かめます）。" >&2
+fi
+
 # 8) ここまで整合してから起動する。entrypoint が cache:clear を行う。
 #    **まだメンテナンス表示の中。** token の cookie で中から開くかを確かめ、通ったら外す。
 echo "[upgrade] 起動します（メンテナンス表示のまま）..."
