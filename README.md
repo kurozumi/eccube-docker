@@ -1,4 +1,6 @@
-# EC-CUBE 4 を開発から本番まで同じ構成で動かす Docker 環境
+# EC-CUBE 運用キット（eccube-kit）
+
+**EC-CUBE 4 を開発から本番まで同じ構成で動かす Docker 環境。** バージョンアップ・セキュリティパッチ・本番の反映・バックアップを 1 コマンドで（旧名 eccube-docker）。
 
 各社 VPS でも AWS でも**同じ手順**でインストールから公開までできる。
 `git clone && bin/init.sh` で開発環境が立ち上がり、そのまま `bin/publish.sh` で公開できる。

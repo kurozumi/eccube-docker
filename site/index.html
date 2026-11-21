@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>eccube-docker</title>
-<meta name="description" content="EC-CUBE 4 のインストール・バージョンアップ・サーバー移転を、いつもの 1 コマンドにする Docker 環境。直したのに反映されない、上げるのが怖い、引っ越しが大仕事——そこを片付けます。">
-<meta property="og:title" content="eccube-docker — EC-CUBE 4 の運用を、いつもの 1 コマンドに">
+<title>EC-CUBE 運用キット | EC-CUBE 4 のバージョンアップ・セキュリティパッチ・本番運用を 1 コマンドで</title>
+<meta name="description" content="EC-CUBE 4 のインストール・バージョンアップ・セキュリティパッチ・サーバー移転を、いつもの 1 コマンドにする運用キット（Docker）。直したのに反映されない、上げるのが怖い、引っ越しが大仕事——そこを片付けます。">
+<meta property="og:title" content="EC-CUBE 運用キット — EC-CUBE 4 のバージョンアップ・セキュリティパッチ・本番運用を 1 コマンドで">
 <meta property="og:description" content="インストール・バージョンアップ・サーバー移転・引き継ぎ。EC-CUBE 4 で止まりがちな 4 つを、手順ではなくコマンドにした Docker 環境。">
 <meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -19,11 +19,11 @@
 </head>
 <body>
 
-<div class="topnav"><div class="wrap"><a class="brand" href="index.html"><img src="favicon.svg" alt="">eccube-docker</a><nav aria-label="ページ"><a href="index.html" aria-current="page">トップ</a><a href="guide.html">はじめる・上げる</a><a href="ops.html">更新と反映</a><a href="scale.html">大規模アクセス</a><a href="https://github.com/kurozumi/eccube-keeper">GitHub</a></nav></div></div>
+<div class="topnav"><div class="wrap"><a class="brand" href="index.html"><img src="favicon.svg" alt="">EC-CUBE 運用キット</a><nav aria-label="ページ"><a href="index.html" aria-current="page">トップ</a><a href="guide.html">はじめる・上げる</a><a href="ops.html">更新と反映</a><a href="scale.html">大規模アクセス</a><a href="https://github.com/kurozumi/eccube-kit">GitHub</a></nav></div></div>
 
 <header class="hero">
   <div class="wrap">
-    <p class="eyebrow">eccube-docker · __TAG__ · Apache-2.0</p>
+    <p class="eyebrow">EC-CUBE 運用キット（eccube-kit） · __TAG__ · Apache-2.0</p>
     <h1>EC-CUBE 4 の<em class="k">セキュリティパッチを、出たその日に当てる。</em><br>EC-CUBE も PHP も、<em class="k">1 コマンド</em>で。</h1>
     <p class="lede">
       脆弱性の告知が来ても、当てるのが怖くて何か月も放置される。原因は「上げると壊れるかもしれない」
@@ -33,8 +33,8 @@
     </p>
     <div class="cta">
       <a class="btn" href="guide.html">やりたいことから選ぶ</a>
-      <a class="btn ghost" href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/handbook.md">はじめての人のための手引き</a>
-      <a class="btn ghost" href="https://github.com/kurozumi/eccube-keeper">GitHub</a>
+      <a class="btn ghost" href="https://github.com/kurozumi/eccube-kit/blob/main/docs/handbook.md">はじめての人のための手引き</a>
+      <a class="btn ghost" href="https://github.com/kurozumi/eccube-kit">GitHub</a>
       <a class="btn ghost" href="#contact">お問い合わせ / Issue</a>
     </div>
   </div>
@@ -194,14 +194,14 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
     <h2>文書</h2>
     <p class="sub">理由を書かない手引きと、理由を書いた文書の 2 段構えです。</p>
     <div class="docs">
-      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/handbook.md">はじめての人のための手引き</a></h3><p>登場するものは 5 つ、毎日やることは 3 つ、困ったときは 1 コマンド。理由は書きません。</p></div>
-      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/install.md">導入手順</a></h3><p>取得から公開まで。.env の中身、公開方式、プラグインの扱い、デザインを直す場所。</p></div>
-      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/upgrade.md">バージョンアップ</a></h3><p>運用中の店を上げる手順と切り戻し。マイナーをまたぐときに黙って壊れる 3 つの型。</p></div>
-      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/data-safety.md">データを失わないために</a></h3><p><code>down</code> と <code>down -v</code> の違い、消えるコマンド、消したときの復旧。</p></div>
-      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/deploy.md">本番デプロイ</a></h3><p>誰が・何を・どうやって本番へ出すか。3 枚の壁、<code>--check</code>、記録、緊急時、誰に何を渡すか。</p></div>
-      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/backup.md">バックアップ / 復元</a></h3><p>5 点セット、送り先、暗号化、引っ越し。<code>bin/setup.sh backup</code> が毎日の cron まで入れる。</p></div>
-      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/scale.md">大規模アクセス</a></h3><p>CDN、Redis、アプリを並べる、DB を外に出す。打ち手を安くて効く順に。</p></div>
-      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-keeper/blob/main/docs/loadtest.md">負荷試験</a></h3><p>何 PV/秒まで耐えるか・どこが先に詰まるかを測る。目標の決め方と読み方。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/handbook.md">はじめての人のための手引き</a></h3><p>登場するものは 5 つ、毎日やることは 3 つ、困ったときは 1 コマンド。理由は書きません。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/install.md">導入手順</a></h3><p>取得から公開まで。.env の中身、公開方式、プラグインの扱い、デザインを直す場所。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/upgrade.md">バージョンアップ</a></h3><p>運用中の店を上げる手順と切り戻し。マイナーをまたぐときに黙って壊れる 3 つの型。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/data-safety.md">データを失わないために</a></h3><p><code>down</code> と <code>down -v</code> の違い、消えるコマンド、消したときの復旧。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/deploy.md">本番デプロイ</a></h3><p>誰が・何を・どうやって本番へ出すか。3 枚の壁、<code>--check</code>、記録、緊急時、誰に何を渡すか。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/backup.md">バックアップ / 復元</a></h3><p>5 点セット、送り先、暗号化、引っ越し。<code>bin/setup.sh backup</code> が毎日の cron まで入れる。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/scale.md">大規模アクセス</a></h3><p>CDN、Redis、アプリを並べる、DB を外に出す。打ち手を安くて効く順に。</p></div>
+      <div class="box"><h3><a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/loadtest.md">負荷試験</a></h3><p>何 PV/秒まで耐えるか・どこが先に詰まるかを測る。目標の決め方と読み方。</p></div>
     </div>
   </div>
 </section>
@@ -221,8 +221,8 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
           <li>質問 … 文書のどこを読んで分からなかったか</li>
         </ul>
         <div class="cta">
-          <a class="btn" href="https://github.com/kurozumi/eccube-keeper/issues/new">Issue を書く</a>
-          <a class="btn ghost" href="https://github.com/kurozumi/eccube-keeper/issues">これまでの Issue を見る</a>
+          <a class="btn" href="https://github.com/kurozumi/eccube-kit/issues/new">Issue を書く</a>
+          <a class="btn ghost" href="https://github.com/kurozumi/eccube-kit/issues">これまでの Issue を見る</a>
         </div>
       </div>
       <div class="card">
@@ -242,7 +242,7 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
 <footer>
   <div class="wrap">
     <p>Apache License 2.0。EC-CUBE は対象外で、EC-CUBE 自身のライセンスがそのまま適用されます（EC-CUBE は一切改変していません）。</p>
-    <p><a href="https://github.com/kurozumi/eccube-keeper/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-keeper/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-keeper/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-keeper/security/policy">脆弱性の報告（非公開）</a></p>
+    <p><a href="https://github.com/kurozumi/eccube-kit/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-kit/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-kit/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-kit/security/policy">脆弱性の報告（非公開）</a></p>
     <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）· <a href="index.html#contact">お問い合わせ</a></p>
     <p>この環境は非公式です。EC-CUBE は株式会社イーシーキューブの登録商標で、同社とは無関係です。</p>
   </div>
@@ -251,7 +251,7 @@ bin/plugin.sh template add MyPlugin admin/config.twig</pre>
 <div class="fab" id="fab" hidden>
   <div class="fab-menu" id="fab-menu" role="dialog" aria-label="お問い合わせ / Issue">
     <div class="head">困ったこと、こう動いてほしい<small>どちらも歓迎です。うまく書けなくて構いません。</small></div>
-    <a class="fab-item" href="https://github.com/kurozumi/eccube-keeper/issues/new" target="_blank" rel="noopener">
+    <a class="fab-item" href="https://github.com/kurozumi/eccube-kit/issues/new" target="_blank" rel="noopener">
       <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg></span>
       <span><b>Issue を書く</b><span>不具合・要望・質問。GitHub で公開の相談</span></span>
     </a>

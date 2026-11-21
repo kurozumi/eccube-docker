@@ -1,6 +1,6 @@
 # AGENTS.md — この場所で作業する AI へ
 
-ここは **EC-CUBE 4 のお店を Docker で動かすための環境**（eccube-docker）です。お店のコードは
+ここは **EC-CUBE 4 のお店を Docker で動かすための環境**（EC-CUBE 運用キット / eccube-kit。旧名 eccube-docker）です。お店のコードは
 このリポジトリに、EC-CUBE 本体はイメージの中にあります。**本体（`/var/www/html` の `src/` や
 `vendor/`）は編集しません。** 直す場所は `app/`（PHP・テンプレート・プラグイン）と `html/user_data/`
 （CSS / JS）だけです。

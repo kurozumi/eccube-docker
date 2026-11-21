@@ -90,9 +90,9 @@ bin/self-update.sh           # 更新する
 docker compose up -d --force-recreate
 ```
 
-### リポジトリの名前を変えた（eccube-docker → eccube-keeper）
+### リポジトリの名前を変えた（eccube-docker → eccube-kit）
 
-2026-11 に、リポジトリの名前を `kurozumi/eccube-docker` から `kurozumi/eccube-keeper` に変えた。
+2026-11 に、リポジトリの名前を `kurozumi/eccube-docker` から `kurozumi/eccube-kit` に変えた。
 
 - **配布イメージの名前は変えていない**（`ghcr.io/kurozumi/eccube-docker/ec-cube`）。`.env` の `ECCUBE_IMAGE` はそのままでよい。
   `build-image.yml` は名前を固定して焼き続ける（`github.repository` から作ると、改名した翌朝から新しい名前へ焼き、
@@ -101,9 +101,9 @@ docker compose up -d --force-recreate
 - `git` と GitHub の API・ダウンロードは、古い名前から GitHub が転送する。
 - **`gh` にログインしていて、古い `self-update.sh` を使っている人は、署名の確認で止まることがある。** 改名後のリリースの
   署名は新しい名前で付き、古い `self-update.sh` は古い名前（`--repo kurozumi/eccube-docker`）で確かめるため。止まったら
-  `.env` に `ECCUBE_DOCKER_REPO=kurozumi/eccube-keeper` を 1 行足してから打ち直す。一度新しい版になれば要らない
+  `.env` に `ECCUBE_DOCKER_REPO=kurozumi/eccube-kit` を 1 行足してから打ち直す。一度新しい版になれば要らない
   （新しい `self-update.sh` は、古い名前が書いてあっても新しい名前で確かめる）。
-- 紹介サイトは `https://kurozumi.github.io/eccube-keeper/`。古い URL は新しい URL へ転送する。
+- 紹介サイトは `https://kurozumi.github.io/eccube-kit/`。古い URL は新しい URL へ転送する。
 - **古い名前で新しいリポジトリを作らない。** 作った時点で GitHub の転送が切れ、古い `self-update.sh` が見に行く先が変わる。
 
 ### 配布元を変える
@@ -194,7 +194,7 @@ release を publish すると `release-assets.yml` が **`eccube-docker-<ver>.ta
 ```bash
 gh release download v1.0.3 -p 'eccube-docker-*.tar.gz' -p SHA256SUMS
 sha256sum -c SHA256SUMS                                   # macOS: shasum -a 256 -c
-gh attestation verify eccube-docker-1.0.3.tar.gz --repo kurozumi/eccube-keeper
+gh attestation verify eccube-docker-1.0.3.tar.gz --repo kurozumi/eccube-kit
 ```
 
 ### 試し焼き
