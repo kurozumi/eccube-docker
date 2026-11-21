@@ -197,6 +197,8 @@ EOS
         # 切り替えたあとなら、壊れた画面を出さないよう残して、外し方を出す
         setup_on_exit() {
             rm -f "$S_ERR"   # 全体の EXIT の後始末を、この trap が置き換えるので
+            # .env を書いている途中で終わった（Ctrl-C・切断など）なら、控えから戻してから後始末する
+            if [ "${env_writing:-0}" = 1 ]; then env_writing=0; undo_env; fi
             # .env の控えは、戻せたときだけ消す（戻せなかったら、手で戻すために残す）
             [ "${keep_envbak:-0}" = 1 ] || rm -f "${S_ERR}.env"
             [ "$smine" = 1 ] && [ "$setup_done" != 1 ] || return 0
@@ -245,10 +247,11 @@ EOS
             echo "        空きを作ってから: cp ${S_ERR}.env .env" >&2
         fi
     }
+    env_writing=1
     if ! { set_env DB_ENGINE "$engine" && set_env DB_HOST "$host" && set_env DB_PORT "$port" && set_env DB_NAME "$name" &&
            set_env DB_USER "$user" && set_env DB_PASSWORD "$pass" && set_env COMPOSE_FILE "$files"; }; then
         echo "[setup] エラー: .env に書けませんでした。" >&2
-        undo_env
+        env_writing=0; undo_env
         exit 1
     fi
     # 表示の印を変える。**切り替えたあとの表示は、新しい DB で開くと確かめるまで外さない。** doctor は setup: を
@@ -257,9 +260,10 @@ EOS
     if [ "$migrate" = y ] && [ "${smine:-0}" = 1 ] &&
        ! docker compose exec -T ec-cube sh -c "if grep -q '^setup:' $sm; then printf 'setup-switched:%s' '${stoken}' > $sm; else grep -q '^setup-switched:' $sm; fi" 2>/dev/null; then
         echo "[setup] エラー: メンテナンス表示の印を変えられませんでした。切り替えずに戻します。" >&2
-        undo_env
+        env_writing=0; undo_env
         exit 1
     fi
+    env_writing=0
     rm -f "${S_ERR}.env"
     switched=1
     echo "[setup] .env に書きました（DB_HOST=${host}、COMPOSE_FILE=${files}）。"

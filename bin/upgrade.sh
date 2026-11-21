@@ -472,16 +472,17 @@ maint_off_running() {
 worker_stopped=0
 worker_back() { [ "$worker_stopped" = 1 ] && "${dc[@]}" start worker >/dev/null 2>&1; return 0; }
 backup_interrupted() {
-    trap - INT TERM HUP
+    [ "${BASH_SUBSHELL:-0}" = 0 ] || exit 1
+    trap - ERR INT TERM HUP
     worker_back
     cp -p "$work/env.new" .env 2>/dev/null || true
     maint_off_running
     restore_env
-    echo "[upgrade] バックアップの途中で止められました。稼働中の環境には触れていません。" >&2
+    echo "[upgrade] 上げる前（バックアップのあたり）で止まりました。.env と表示を元に戻しました。お店は元の版のまま動いています。" >&2
     exit 1
 }
-trap - ERR
-trap backup_interrupted INT TERM HUP
+# 思わぬ失敗（ERR。ディスクがいっぱいで .env を写せない、など）でも、表示・worker・.env を戻す。rollback_upgrade に渡すまで
+trap backup_interrupted ERR INT TERM HUP
 # メールの worker を止める。戻すと送ったはずのメールが DB に戻り、もう一度送られる（注文確認の二重送信）
 if printf '%s\n' "$services_now" | grep -qx worker && [ -n "$("${dc[@]}" ps -q --status running worker 2>/dev/null)" ]; then
     "${dc[@]}" stop worker >/dev/null 2>&1 && worker_stopped=1 && echo "[upgrade] メールの worker を止めました（終われば起動し直します）"
@@ -500,14 +501,14 @@ BACKUP_LABEL=upgrade BACKUP_RESULT_FILE="$rf" bin/backup.sh || backup_ok=0
 cp -p "$work/env.new" .env
 if [ "$backup_ok" != 1 ] || [ ! -s "$rf" ]; then
     echo "[upgrade] エラー: バックアップに失敗しました。中止します。稼働中の環境には触れていません。" >&2
-    trap - INT TERM HUP
+    trap - ERR INT TERM HUP
     worker_back
     maint_off_running
     restore_env
     exit 1
 fi
 backup_dir="$(cat "$rf")"
-trap - INT TERM HUP
+# 守り（backup_interrupted）は、止めて入れ替え始める直前（rollback_upgrade に替える）まで残す。まだ何も壊していない
 echo "[upgrade] バックアップ: ${backup_dir}"
 
 # ── ここから先で失敗したら、自動で元の版に戻す ──
