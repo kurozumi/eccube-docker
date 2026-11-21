@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>更新と反映 | eccube-docker</title>
+<title>更新と反映 | EC-CUBE 運用キット</title>
 <meta name="description" content="EC-CUBE・PHP・環境を別々に更新する仕組み、失敗したら元に戻る仕組み、本番にはレビュー済みの main しか出ない 3 枚の壁。">
-<meta property="og:title" content="eccube-docker — EC-CUBE 4 の運用を、いつもの 1 コマンドに">
+<meta property="og:title" content="EC-CUBE 運用キット — EC-CUBE 4 の運用を、いつもの 1 コマンドに">
 <meta property="og:description" content="インストール・バージョンアップ・サーバー移転・引き継ぎ。EC-CUBE 4 で止まりがちな 4 つを、手順ではなくコマンドにした Docker 環境。">
 <meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -19,7 +19,7 @@
 </head>
 <body>
 
-<div class="topnav"><div class="wrap"><a class="brand" href="index.html"><img src="favicon.svg" alt="">eccube-docker</a><nav aria-label="ページ"><a href="index.html">トップ</a><a href="guide.html">はじめる・上げる</a><a href="ops.html" aria-current="page">更新と反映</a><a href="scale.html">大規模アクセス</a><a href="https://github.com/kurozumi/eccube-docker">GitHub</a></nav></div></div>
+<div class="topnav"><div class="wrap"><a class="brand" href="index.html"><img src="favicon.svg" alt="">EC-CUBE 運用キット</a><nav aria-label="ページ"><a href="index.html">トップ</a><a href="guide.html">はじめる・上げる</a><a href="ops.html" aria-current="page">更新と反映</a><a href="scale.html">大規模アクセス</a><a href="https://github.com/kurozumi/eccube-kit">GitHub</a></nav></div></div>
 
 <header class="pagehead">
   <div class="wrap">
@@ -116,7 +116,7 @@
 
     <div class="note">
       <b>正直に</b>
-      <span>退避はどれも同じサーバーに置くので、サーバーごと失うと一緒に消えます（ほとんどは <code>backups/</code>。環境の更新の控えは <code>var/self-update/</code>、起動時の migration の前のダンプはコンテナの中の <code>var/migrate-backup/</code>）。<code>bin/setup.sh backup</code> を設定すると、<code>backups/</code> の分を外（S3・R2・NAS など）へ送れます。どの退避も、失敗の表示に場所と戻し方が出ます。詳しくは <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/data-safety.md">データを失わないために</a>。</span>
+      <span>退避はどれも同じサーバーに置くので、サーバーごと失うと一緒に消えます（ほとんどは <code>backups/</code>。環境の更新の控えは <code>var/self-update/</code>、起動時の migration の前のダンプはコンテナの中の <code>var/migrate-backup/</code>）。<code>bin/setup.sh backup</code> を設定すると、<code>backups/</code> の分を外（S3・R2・NAS など）へ送れます。どの退避も、失敗の表示に場所と戻し方が出ます。詳しくは <a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/data-safety.md">データを失わないために</a>。</span>
     </div>
   </div>
 </section>
@@ -135,7 +135,7 @@
     </div>
     <div class="note">
       <b>正直に</b>
-      <span>本番の SSH を持つ人は②③を素通りできます。壁は「うっかり」を止めるもので「故意」は止められない。だから本番の SSH はエンジニアに渡さない、と決めてください。詳しくは <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/deploy.md">本番デプロイ</a>。</span>
+      <span>本番の SSH を持つ人は②③を素通りできます。壁は「うっかり」を止めるもので「故意」は止められない。だから本番の SSH はエンジニアに渡さない、と決めてください。詳しくは <a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/deploy.md">本番デプロイ</a>。</span>
     </div>
   </div>
 </section>
@@ -150,7 +150,7 @@
 <footer>
   <div class="wrap">
     <p>Apache License 2.0。EC-CUBE は対象外で、EC-CUBE 自身のライセンスがそのまま適用されます（EC-CUBE は一切改変していません）。</p>
-    <p><a href="https://github.com/kurozumi/eccube-docker/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-docker/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-docker/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-docker/security/policy">脆弱性の報告（非公開）</a></p>
+    <p><a href="https://github.com/kurozumi/eccube-kit/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-kit/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-kit/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-kit/security/policy">脆弱性の報告（非公開）</a></p>
     <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）· <a href="index.html#contact">お問い合わせ</a></p>
     <p>この環境は非公式です。EC-CUBE は株式会社イーシーキューブの登録商標で、同社とは無関係です。</p>
   </div>
@@ -159,7 +159,7 @@
 <div class="fab" id="fab" hidden>
   <div class="fab-menu" id="fab-menu" role="dialog" aria-label="お問い合わせ / Issue">
     <div class="head">困ったこと、こう動いてほしい<small>どちらも歓迎です。うまく書けなくて構いません。</small></div>
-    <a class="fab-item" href="https://github.com/kurozumi/eccube-docker/issues/new" target="_blank" rel="noopener">
+    <a class="fab-item" href="https://github.com/kurozumi/eccube-kit/issues/new" target="_blank" rel="noopener">
       <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg></span>
       <span><b>Issue を書く</b><span>不具合・要望・質問。GitHub で公開の相談</span></span>
     </a>

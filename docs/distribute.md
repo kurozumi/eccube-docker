@@ -27,7 +27,7 @@
 
 ```bash
 # .env
-ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3
+ECCUBE_IMAGE=ghcr.io/kurozumi/eccube-kit/ec-cube:4.3-php8.3
 ```
 
 これだけで `bin/init.sh` は build せずに pull する。初回の起動が数分から数十秒になる。
@@ -89,6 +89,24 @@ bin/self-update.sh           # 更新する
 ```bash
 docker compose up -d --force-recreate
 ```
+
+### リポジトリの名前を変えた（eccube-docker → eccube-kit）
+
+2026-11 に、リポジトリの名前を `kurozumi/eccube-docker` から `kurozumi/eccube-kit` に変えた。
+
+- **配布イメージの名前も変えた**（`ghcr.io/kurozumi/eccube-docker/ec-cube` → `ghcr.io/kurozumi/eccube-kit/ec-cube`）。
+  そのとき使っていたのは作者だけだったので、移行の期間は設けていない。**古い名前のイメージは、もう焼き直されない**
+  （PHP と OS のパッチが入らない）。古い名前を `.env` の `ECCUBE_IMAGE` に書いているなら、新しい名前に書き換えて
+  `bin/deploy.sh` する。**日付やリリースで固定したタグ（`4.3-20260907`・`4.3-v1.0.20`）は、新しい名前には無い**（改名後に焼いた
+  ものしか無い）。系列の追跡タグ（`4.3`・`4.3-php8.3`）か、改名後の日付タグを選ぶ。
+- **リリースの添付の名前も変えていない**（`eccube-docker-<ver>.tar.gz`・`.eccube-docker-paths`）。古い `self-update.sh` が探す名前だから。
+- `git` と GitHub の API・ダウンロードは、古い名前から GitHub が転送する。
+- **`gh` にログインしていて、古い `self-update.sh` を使っている人は、署名の確認で止まることがある。** 改名後のリリースの
+  署名は新しい名前で付き、古い `self-update.sh` は古い名前（`--repo kurozumi/eccube-docker`）で確かめるため。止まったら
+  `.env` に `ECCUBE_DOCKER_REPO=kurozumi/eccube-kit` を 1 行足してから打ち直す。一度新しい版になれば要らない
+  （新しい `self-update.sh` は、古い名前が書いてあっても新しい名前で確かめる）。
+- 紹介サイトは `https://kurozumi.github.io/eccube-kit/`。古い URL は新しい URL へ転送する。
+- **古い名前で新しいリポジトリを作らない。** 作った時点で GitHub の転送が切れ、古い `self-update.sh` が見に行く先が変わる。
 
 ### 配布元を変える
 
@@ -178,7 +196,7 @@ release を publish すると `release-assets.yml` が **`eccube-docker-<ver>.ta
 ```bash
 gh release download v1.0.3 -p 'eccube-docker-*.tar.gz' -p SHA256SUMS
 sha256sum -c SHA256SUMS                                   # macOS: shasum -a 256 -c
-gh attestation verify eccube-docker-1.0.3.tar.gz --repo kurozumi/eccube-docker
+gh attestation verify eccube-docker-1.0.3.tar.gz --repo kurozumi/eccube-kit
 ```
 
 ### 試し焼き

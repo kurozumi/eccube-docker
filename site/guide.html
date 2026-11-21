@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>はじめる・上げる | eccube-docker</title>
+<title>はじめる・上げる | EC-CUBE 運用キット</title>
 <meta name="description" content="新規作成・EC-CUBE のバージョンアップ・環境のアップデートの手順を、流れ図で。">
-<meta property="og:title" content="eccube-docker — EC-CUBE 4 の運用を、いつもの 1 コマンドに">
+<meta property="og:title" content="EC-CUBE 運用キット — EC-CUBE 4 の運用を、いつもの 1 コマンドに">
 <meta property="og:description" content="インストール・バージョンアップ・サーバー移転・引き継ぎ。EC-CUBE 4 で止まりがちな 4 つを、手順ではなくコマンドにした Docker 環境。">
 <meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -19,7 +19,7 @@
 </head>
 <body>
 
-<div class="topnav"><div class="wrap"><a class="brand" href="index.html"><img src="favicon.svg" alt="">eccube-docker</a><nav aria-label="ページ"><a href="index.html">トップ</a><a href="guide.html" aria-current="page">はじめる・上げる</a><a href="ops.html">更新と反映</a><a href="scale.html">大規模アクセス</a><a href="https://github.com/kurozumi/eccube-docker">GitHub</a></nav></div></div>
+<div class="topnav"><div class="wrap"><a class="brand" href="index.html"><img src="favicon.svg" alt="">EC-CUBE 運用キット</a><nav aria-label="ページ"><a href="index.html">トップ</a><a href="guide.html" aria-current="page">はじめる・上げる</a><a href="ops.html">更新と反映</a><a href="scale.html">大規模アクセス</a><a href="https://github.com/kurozumi/eccube-kit">GitHub</a></nav></div></div>
 
 <header class="pagehead">
   <div class="wrap">
@@ -80,7 +80,7 @@
       <div class="pick">
         <span class="when">自分で直したところを、お店に出したい<small>CSS・テンプレート・プラグインなど</small></span>
         <span class="arrow" aria-hidden="true">→</span>
-        <span class="go"><span class="letter plain">–</span><b>いつもの <code>bin/deploy.sh</code></b><br>毎日の手順は <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/handbook.md">はじめての人のための手引き</a>。</span>
+        <span class="go"><span class="letter plain">–</span><b>いつもの <code>bin/deploy.sh</code></b><br>毎日の手順は <a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/handbook.md">はじめての人のための手引き</a>。</span>
       </div>
     </div>
 
@@ -94,13 +94,13 @@
       </div>
       <ol class="steps-v">
         <li><h4><span class="where pc">パソコン</span>中身をもらう</h4>
-<pre>curl -fsSL https://github.com/kurozumi/eccube-docker/releases/latest/download/eccube-docker.tar.gz | tar -xz
+<pre>curl -fsSL https://github.com/kurozumi/eccube-kit/releases/latest/download/eccube-docker.tar.gz | tar -xz
 mv eccube-docker-* myshop &amp;&amp; cd myshop</pre></li>
         <li><h4><span class="where pc">パソコン</span>自分の非公開リポジトリにする</h4>
 <pre>git init -b main &amp;&amp; git add -A &amp;&amp; git commit -m "eccube-docker から開始"
 gh repo create myshop --private --source=. --push</pre></li>
         <li><h4><span class="where pc">パソコン</span>動かしてみる</h4>
-<pre>bin/init.sh --image=ghcr.io/kurozumi/eccube-docker/ec-cube:4.3-php8.3</pre>
+<pre>bin/init.sh --image=ghcr.io/kurozumi/eccube-kit/ec-cube:4.3-php8.3</pre>
 <p>数十秒で終わり、URL（<code>http://localhost:8080/</code>）と管理画面のログイン情報が出ます。<code>4.3</code> が EC-CUBE の版、<code>php8.3</code> が PHP の版です。</p></li>
         <li><h4><span class="where srv">サーバー</span>サーバーを整える（パソコンから打つ）</h4>
 <pre>bin/bootstrap-server.sh user@サーバー /srv/myshop</pre>
@@ -113,7 +113,7 @@ bin/setup.sh tunnel --remote=user@サーバー:/srv/myshop</pre>
 <pre>bin/publish.sh      --remote=user@サーバー:/srv/myshop
 bin/setup.sh backup --remote=user@サーバー:/srv/myshop</pre></li>
         <li><h4><span class="where eye">ブラウザ</span>お店を開いて確かめる</h4>
-<p>これ以降、直したものを出すのは <code>bin/deploy.sh --remote=user@サーバー:/srv/myshop</code> だけです。詳しくは <a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/install.md">導入手順</a>。</p></li>
+<p>これ以降、直したものを出すのは <code>bin/deploy.sh --remote=user@サーバー:/srv/myshop</code> だけです。詳しくは <a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/install.md">導入手順</a>。</p></li>
       </ol>
     </div>
 
@@ -123,20 +123,20 @@ bin/setup.sh backup --remote=user@サーバー:/srv/myshop</pre></li>
         <h3>EC-CUBE のバージョンアップ</h3>
         <p>例: EC-CUBE 4.3.1 → 4.3.2。<strong>パソコンで試してから、サーバーで上げます。</strong></p>
         <p>時間: お店が止まるのは数分。</p>
-        <div class="keep"><b>そのまま残るもの:</b> 受注・会員・商品・画像、あなたが直したテンプレートや CSS、プラグイン。<br><b>止まったら:</b> たいていはお店に触る前に止まり、そのまま動き続けます。DB を変える途中で失敗したときは、<strong>自動で元の版に戻して</strong>起動し直します（バックアップはメンテナンス表示の中で自動で取ってあります。<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md#4-失敗したとき">失敗したとき</a>）。</div>
+        <div class="keep"><b>そのまま残るもの:</b> 受注・会員・商品・画像、あなたが直したテンプレートや CSS、プラグイン。<br><b>止まったら:</b> たいていはお店に触る前に止まり、そのまま動き続けます。DB を変える途中で失敗したときは、<strong>自動で元の版に戻して</strong>起動し直します（バックアップはメンテナンス表示の中で自動で取ってあります。<a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/upgrade.md#4-失敗したとき">失敗したとき</a>）。</div>
       </div>
       <ol class="steps-v">
         <li><h4>どの番号が変わるかを見る</h4>
           <div class="fork">
             <div><b>3 つ目だけ（4.3.1 → 4.3.2）</b>パッチ。このまま次へ。</div>
-            <div class="stop"><b>2 つ目（4.3 → 4.4）</b>プラグインの作り直しが要ります。ひとりで進めず、制作者に相談してください（<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md">バージョンアップ</a>）。</div>
+            <div class="stop"><b>2 つ目（4.3 → 4.4）</b>プラグインの作り直しが要ります。ひとりで進めず、制作者に相談してください（<a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/upgrade.md">バージョンアップ</a>）。</div>
           </div></li>
         <li><h4><span class="where pc">パソコン</span>先に環境を新しくする</h4>
 <p>下の <a href="#flow-env">C</a> を済ませます。古い道具で新しい EC-CUBE を扱わないためです。</p></li>
         <li><h4><span class="where pc">パソコン</span>パソコンで上げて、試す</h4>
 <pre>bin/upgrade.sh ~4.3.0</pre>
 <p><code>~4.3.0</code> は「4.3 の中で一番新しい版」。「取得したイメージの EC-CUBE: 4.3.2」と出たら、<strong>案内にあった版（またはそれより新しい版）か</strong>を見ます。古ければ <code>n</code> で止め、翌朝の配布イメージを待ちます。合っていれば番号を控えて <code>y</code>。終わったら <code>http://localhost:8080/</code> で、トップ・商品・カート・管理画面を開いてみます。</p>
-<p><strong>できれば本番のデータで試します。</strong>本番にだけ残っているプラグインの列なども、そこで見つかります。いつもの手元の環境に戻すと作業中のデータが上書きされるので、<strong>別のフォルダに検証用を作って</strong>本番のバックアップを戻します（<a href="https://github.com/kurozumi/eccube-docker/blob/main/docs/upgrade.md#2-ステージングで予行演習">ステージングで予行演習</a>）。</p></li>
+<p><strong>できれば本番のデータで試します。</strong>本番にだけ残っているプラグインの列なども、そこで見つかります。いつもの手元の環境に戻すと作業中のデータが上書きされるので、<strong>別のフォルダに検証用を作って</strong>本番のバックアップを戻します（<a href="https://github.com/kurozumi/eccube-kit/blob/main/docs/upgrade.md#2-ステージングで予行演習">ステージングで予行演習</a>）。</p></li>
         <li><h4><span class="where srv">サーバー</span>お客さんに告知してから、サーバーで上げる</h4>
 <pre>ssh user@サーバー
 cd /srv/myshop
@@ -158,7 +158,7 @@ bin/upgrade.sh ~4.3.0 --prod</pre>
       <ol class="steps-v">
         <li><h4><span class="where pc">パソコン</span>何が変わるかを見る</h4>
 <pre>bin/self-update.sh --check</pre>
-<p>まだ何も書き換えません。<a href="https://github.com/kurozumi/eccube-docker/releases">リリースノート</a>の「まずやること」も読みます。版によっては、ひと手間あります。</p></li>
+<p>まだ何も書き換えません。<a href="https://github.com/kurozumi/eccube-kit/releases">リリースノート</a>の「まずやること」も読みます。版によっては、ひと手間あります。</p></li>
         <li><h4><span class="where pc">パソコン</span>取り込む</h4>
 <pre>bin/self-update.sh</pre>
 <p>配布元が変えたファイルだけを差し替えます。あなたが手を入れたファイルとぶつかるときは、上書きせずに止まって知らせます。</p></li>
@@ -180,9 +180,9 @@ bin/upgrade.sh ~4.3.0 --prod</pre>
       <table>
         <thead><tr><th>系列</th><th>イメージ（本番はこれ）</th><th>選べる PHP</th><th>備考</th></tr></thead>
         <tbody>
-          <tr><td>4.3</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.3</code></td><td>8.1<sup>†</sup> / 8.2 / <strong>8.3</strong></td><td>推奨</td></tr>
-          <tr><td>4.2</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.2</code></td><td>8.1<sup>†</sup> / <strong>8.2</strong></td><td></td></tr>
-          <tr><td>4.4</td><td><code>ghcr.io/kurozumi/eccube-docker/ec-cube:4.4</code></td><td>8.2 / <strong>8.3</strong> / 8.4 / 8.5</td><td>上流の開発ブランチから焼いている。同じものを立てたいなら日付タグで固定</td></tr>
+          <tr><td>4.3</td><td><code>ghcr.io/kurozumi/eccube-kit/ec-cube:4.3</code></td><td>8.1<sup>†</sup> / 8.2 / <strong>8.3</strong></td><td>推奨</td></tr>
+          <tr><td>4.2</td><td><code>ghcr.io/kurozumi/eccube-kit/ec-cube:4.2</code></td><td>8.1<sup>†</sup> / <strong>8.2</strong></td><td></td></tr>
+          <tr><td>4.4</td><td><code>ghcr.io/kurozumi/eccube-kit/ec-cube:4.4</code></td><td>8.2 / <strong>8.3</strong> / 8.4 / 8.5</td><td>上流の開発ブランチから焼いている。同じものを立てたいなら日付タグで固定</td></tr>
         </tbody>
       </table>
     </div>
@@ -201,7 +201,7 @@ bin/upgrade.sh ~4.3.0 --prod</pre>
 <footer>
   <div class="wrap">
     <p>Apache License 2.0。EC-CUBE は対象外で、EC-CUBE 自身のライセンスがそのまま適用されます（EC-CUBE は一切改変していません）。</p>
-    <p><a href="https://github.com/kurozumi/eccube-docker/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-docker/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-docker/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-docker/security/policy">脆弱性の報告（非公開）</a></p>
+    <p><a href="https://github.com/kurozumi/eccube-kit/releases">リリース</a> · <a href="https://github.com/kurozumi/eccube-kit/issues">Issue</a> · <a href="https://github.com/kurozumi/eccube-kit/blob/main/LICENSE">LICENSE</a> · <a href="https://github.com/kurozumi/eccube-kit/security/policy">脆弱性の報告（非公開）</a></p>
     <p>作った人: Akira Kurozumi（<a href="https://a-zumi.net/">a-zumi.net</a>）· <a href="index.html#contact">お問い合わせ</a></p>
     <p>この環境は非公式です。EC-CUBE は株式会社イーシーキューブの登録商標で、同社とは無関係です。</p>
   </div>
@@ -210,7 +210,7 @@ bin/upgrade.sh ~4.3.0 --prod</pre>
 <div class="fab" id="fab" hidden>
   <div class="fab-menu" id="fab-menu" role="dialog" aria-label="お問い合わせ / Issue">
     <div class="head">困ったこと、こう動いてほしい<small>どちらも歓迎です。うまく書けなくて構いません。</small></div>
-    <a class="fab-item" href="https://github.com/kurozumi/eccube-docker/issues/new" target="_blank" rel="noopener">
+    <a class="fab-item" href="https://github.com/kurozumi/eccube-kit/issues/new" target="_blank" rel="noopener">
       <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg></span>
       <span><b>Issue を書く</b><span>不具合・要望・質問。GitHub で公開の相談</span></span>
     </a>

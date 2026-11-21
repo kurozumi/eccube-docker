@@ -89,6 +89,9 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
+  # 配布イメージの名前はリポジトリ名から作る（ghcr.io/kurozumi/eccube-kit/ec-cube）。**リポジトリの名前を変えると、
+  # 翌朝から新しい名前へ焼き、古い名前の追跡タグは二度と更新されない**（パッチが届かなくなる）。変えるときは、
+  # 利用者の .env の ECCUBE_IMAGE を書き換えてもらう（eccube-docker → eccube-kit のときは利用者が作者だけだった）。
   IMAGE_NAME: ${{ github.repository }}/ec-cube
 
 jobs:
@@ -187,7 +190,7 @@ jobs:
                 mode=retag
                 # 名前を足す元（追跡タグ）が全部あることを確かめる。無ければ焼く
                 for pair in $(printf '%s' "$MATRIX" | jq -r '.[] | "\(.series)-php\(.php)"'); do
-                  docker buildx imagetools inspect "ghcr.io/${{ github.repository }}/ec-cube:${pair}" >/dev/null 2>&1 || { echo "追跡タグ ${pair} が無いので焼く"; mode=build; break; }
+                  docker buildx imagetools inspect "${REGISTRY}/${IMAGE_NAME}:${pair}" >/dev/null 2>&1 || { echo "追跡タグ ${pair} が無いので焼く"; mode=build; break; }
                 done
               fi
               echo "前のタグ: $prev  変更ファイル: $changed  → $mode"
@@ -203,7 +206,7 @@ jobs:
         run: |
           matrix="$MATRIX"
           if [ "${{ github.event_name }}" = "schedule" ] && [ "$(date -u +%u)" != 7 ]; then
-            img="ghcr.io/${{ github.repository }}/ec-cube"
+            img="${REGISTRY}/${IMAGE_NAME}"
             changed='[]'
             for row in $(printf '%s' "$MATRIX" | jq -c '.[]'); do
               series="$(jq -r .series <<<"$row")"; php="$(jq -r .php <<<"$row")"
