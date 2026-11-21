@@ -428,6 +428,17 @@ maint_on=0
 manual_maint=""
 # 始める前に表示があったか（中身が空のファイルもある。中身ではなくこちらで「外さない」を決める）
 keep_maint=0
+# 本体ボリュームがあるか。「無い」と「確かめられなかった」を分ける（docker の失敗を「無い」と取り違えると、手で入れた表示を
+# 読まずに進み、終わったときに外してしまう）。確かめられなければ、何も変えずに止まる
+app_vol_present() {
+    local v
+    if ! v="$(docker volume ls -q --filter "name=^${app_vol}\$" 2>/dev/null)"; then
+        echo "[upgrade] エラー: 本体ボリュームがあるかを確かめられませんでした（docker の失敗）。中止します。稼働中の環境には触れていません。" >&2
+        restore_env
+        exit 1
+    fi
+    [ "$v" = "$app_vol" ]
+}
 if [ -n "$("${dc[@]}" ps -q --status running ec-cube 2>/dev/null)" ]; then
     if "${dc[@]}" exec -T ec-cube sh -c "test -f $MAINT" 2>/dev/null; then
         # 手で入れたメンテナンス中。その token を借りて確認する（あとで外さない）
@@ -444,7 +455,7 @@ if [ -n "$("${dc[@]}" ps -q --status running ec-cube 2>/dev/null)" ]; then
         restore_env
         exit 1
     fi
-elif docker volume inspect "$app_vol" >/dev/null 2>&1; then
+elif app_vol_present; then
     # **止まっているときも、手で入れていた表示を読む。** 読まないと新しい版のボリュームに upgrade: を置き、
     # 終わったときにそれを外すので、わざと閉じていた店を開けてしまう（#227 のレビュー）
     # 「無い」と「確かめられなかった」を分ける（docker の一時的な失敗を「無い」と取り違えると、閉じていた店を開ける）
