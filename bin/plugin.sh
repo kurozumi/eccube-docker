@@ -845,8 +845,14 @@ PHP
                     if (!$u || empty($u["host"])) { echo "$k: 未設定\n"; continue; }
                     try {
                         $r = new Redis();
-                        $r->connect($u["host"], (int) ($u["port"] ?? 6379), 3.0);
-                        if (isset($u["pass"]) && $u["pass"] !== "") { $r->auth(isset($u["user"]) && $u["user"] !== "" ? [urldecode($u["user"]), urldecode($u["pass"])] : urldecode($u["pass"])); }
+                        // rediss:// は TLS で繋ぐ（素の TCP に落とすとパスワードを平文で送る）。読み取りも 3 秒で切る
+                        $h = (($u["scheme"] ?? "") === "rediss" ? "tls://" : "").$u["host"];
+                        $r->connect($h, (int) ($u["port"] ?? 6379), 3.0, null, 0, 3.0);
+                        // 認証は Symfony の DSN の読み方に揃える: user:pass は ACL、片方だけならそれがパスワード
+                        $user = isset($u["user"]) ? urldecode($u["user"]) : "";
+                        $pass = isset($u["pass"]) ? urldecode($u["pass"]) : "";
+                        if ($user !== "" && $pass !== "") { $r->auth([$user, $pass]); }
+                        elseif ($pass !== "" || $user !== "") { $r->auth($pass !== "" ? $pass : $user); }
                         echo $k.": ".($r->ping() ? "OK" : "NG")." (".$u["host"].")\n";
                     } catch (Throwable $e) { echo $k.": NG (".$u["host"]."): ".$e->getMessage()."\n"; }
                 }' 2>/dev/null | tr -d '\r' || true)"
