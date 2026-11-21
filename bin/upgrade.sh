@@ -426,11 +426,14 @@ token="$(openssl rand -hex 16 2>/dev/null || date +%s)"
 maint_on=0
 # 手で入れていた表示の中身。新しい版のボリュームにも同じものを置き、終わっても外さない
 manual_maint=""
+# 始める前に表示があったか（中身が空のファイルもある。中身ではなくこちらで「外さない」を決める）
+keep_maint=0
 if [ -n "$("${dc[@]}" ps -q --status running ec-cube 2>/dev/null)" ]; then
     if "${dc[@]}" exec -T ec-cube sh -c "test -f $MAINT" 2>/dev/null; then
         # 手で入れたメンテナンス中。その token を借りて確認する（あとで外さない）
+        keep_maint=1
         manual_maint="$("${dc[@]}" exec -T ec-cube sh -c "head -1 $MAINT" 2>/dev/null | tr -d '\r\n' || true)"
-        token="${manual_maint#*:}"
+        [ -z "$manual_maint" ] || token="${manual_maint#*:}"
         echo "[upgrade] メンテナンス表示はすでに有効です（そのまま進めます。終わっても外しません）"
     elif "${dc[@]}" exec -T ec-cube runuser -u www-data -- sh -c "printf 'upgrade:%s' '$token' > $MAINT"; then
         maint_on=1
@@ -440,6 +443,15 @@ if [ -n "$("${dc[@]}" ps -q --status running ec-cube 2>/dev/null)" ]; then
         echo "[upgrade] エラー: メンテナンス表示を立てられませんでした。中止します。稼働中の環境には触れていません。" >&2
         restore_env
         exit 1
+    fi
+elif docker volume inspect "$app_vol" >/dev/null 2>&1; then
+    # **止まっているときも、手で入れていた表示を読む。** 読まないと新しい版のボリュームに upgrade: を置き、
+    # 終わったときにそれを外すので、わざと閉じていた店を開けてしまう（#227 のレビュー）
+    if docker run --rm -v "${app_vol}:/v:ro" alpine:3 test -f /v/.maintenance 2>/dev/null; then
+        keep_maint=1
+        manual_maint="$(docker run --rm -v "${app_vol}:/v:ro" alpine:3 head -1 /v/.maintenance 2>/dev/null | tr -d '\r\n' || true)"
+        [ -z "$manual_maint" ] || token="${manual_maint#*:}"
+        echo "[upgrade] メンテナンス表示はすでに有効です（そのまま進めます。終わっても外しません）"
     fi
 fi
 maint_off_running() {
@@ -756,10 +768,10 @@ trap - ERR INT TERM HUP
 # メンテナンス表示を外す。手で入れていたものは、新しい版にも同じものを置いたので残す。
 # **止まっていたスタックを上げたときも外す。** そのときは始めに表示を立てない（maint_on=0）が、新しい版のボリュームには
 # 必ず upgrade: の表示を置いて起動するので、maint_on で見ると外れずに 503 のまま残った（2 台の試験で踏んだ）
-if [ -z "$manual_maint" ] && "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' $MAINT && rm -f $MAINT" 2>/dev/null; then
+if [ "$keep_maint" = 0 ] && "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' $MAINT && rm -f $MAINT" 2>/dev/null; then
     echo "[upgrade] メンテナンス OFF"
-elif [ -n "$manual_maint" ]; then
-    echo "[upgrade] メンテナンス表示は、手で入れていたものなので残しています。"
+elif [ "$keep_maint" = 1 ]; then
+    echo "[upgrade] メンテナンス表示は、始める前から入っていたものなので残しています。"
 fi
 echo "[upgrade] 完了。${current:-?} -> ${ver} へ更新しました。"
 bin/healthcheck.sh || true
