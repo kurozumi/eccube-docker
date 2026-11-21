@@ -849,10 +849,12 @@ PHP
                         $h = (($u["scheme"] ?? "") === "rediss" ? "tls://" : "").$u["host"];
                         $r->connect($h, (int) ($u["port"] ?? 6379), 3.0, null, 0, 3.0);
                         // 認証は Symfony の DSN の読み方に揃える: user:pass は ACL、片方だけならそれがパスワード
-                        $user = isset($u["user"]) ? urldecode($u["user"]) : "";
-                        $pass = isset($u["pass"]) ? urldecode($u["pass"]) : "";
-                        if ($user !== "" && $pass !== "") { $r->auth([$user, $pass]); }
-                        elseif ($pass !== "" || $user !== "") { $r->auth($pass !== "" ? $pass : $user); }
+                        // rawurldecode: Symfony と同じく + を空白に変えない。user: のように pass があって空なら ACL（空のパスワード）
+                        $user = isset($u["user"]) ? rawurldecode($u["user"]) : "";
+                        $pass = isset($u["pass"]) ? rawurldecode($u["pass"]) : null;
+                        if ($user !== "" && $pass !== null) { $r->auth([$user, $pass]); }
+                        elseif ($pass !== null && $pass !== "") { $r->auth($pass); }
+                        elseif ($user !== "") { $r->auth($user); }
                         echo $k.": ".($r->ping() ? "OK" : "NG")." (".$u["host"].")\n";
                     } catch (Throwable $e) { echo $k.": NG (".$u["host"]."): ".$e->getMessage()."\n"; }
                 }' 2>/dev/null | tr -d '\r' || true)"
