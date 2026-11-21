@@ -606,6 +606,10 @@ rollback_upgrade() {
     # 状態そのもので、流すものは無い。流すと、上げる途中で失敗した migration（app/DoctrineMigrations の
     # 独自のもの）をもう一度当てて、戻したばかりの DB を書き換える（entrypoint は失敗を握る）。
     local started=0
+    # 新しい版が書いたキャッシュを、前の版に読ませない（読むと起動の確かめで落ち、メンテナンス表示のまま終わる）
+    if [ "$ok" = 1 ] && declare -F clear_pools >/dev/null; then
+        clear_pools || echo "[upgrade]   注意: キャッシュプールを消せませんでした" >&2
+    fi
     if [ "$ok" = 1 ] && ECCUBE_SKIP_DB_INIT=1 "${dc[@]}" up -d && started=1 && wait_site "$health_wait"; then
         if [ "$maint_on" = 1 ]; then
             "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' $MAINT && rm -f $MAINT" 2>/dev/null || true
@@ -714,6 +718,18 @@ offline() { # offline <表示名> <console の引数...>
 # 載らない。schema:update は *エンティティ定義に無い列を削除する* ので、そのまま
 # 流すとプラグインが追加した列（例: EntityExtension の dtb_customer.sort_no）を
 # データごと落とす。
+# 7a) キャッシュプール（Redis のキャッシュも）を消す。**前の版が書いたものを新しい版が読まないように。**
+#     Redis は前の版と同じ名前（prefix_seed）で引く。**メタデータを読む最初の手順（proxy の生成・スキーマの差分）より前に
+#     消す。** 残っていると前の版のメタデータで差分を取り、新しい版が要る列（4.2 → 4.3 の ga_id など）を落としうる。
+#     複数ホストでは共有の Redis を消す（ほかのホストは止めてある前提。docs/scale.md）。セッションの Redis は別なので消えない。
+clear_pools() {
+    "${dc[@]}" run --rm -e ECCUBE_SKIP_DB_INIT=1 -e ECCUBE_SKIP_CACHE_CLEAR=1 \
+        ec-cube runuser -u www-data -- php bin/console cache:pool:clear --all --no-interaction >/dev/null 2>&1
+}
+if ! clear_pools; then
+    echo "[upgrade] 注意: キャッシュプールを消せませんでした（このまま進め、開くかで確かめます）。" >&2
+fi
+
 echo "[upgrade] エンティティ proxy を生成します..."
 offline "proxy の生成" eccube:generate:proxies
 

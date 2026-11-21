@@ -190,15 +190,19 @@ nginx は Docker 内蔵 DNS を毎回引き直して各レプリカへ分散す�
 これにより **複数ホスト／複数レプリカでセッションが共有**され、ボリューム共有に依存せず
 カート・ログインが保たれる（LB を前に置いても成立する）。
 
-- 本体の `SameSiteNoneCompatSessionHandler`（決済リダイレクトの SameSite=None 対応）は
-  維持したまま、その内側のハンドラだけを `Customize\Session\RawRedisSessionHandler` で
-  Redis に差し替えている（`app/Customize/Resource/config/services.yaml`）。
+- セッションのハンドラを `Customize\Session\RawRedisSessionHandler` に差し替える
+  （`app/config/eccube/optional/redis/redis_session.yaml` の `framework.session.handler_id`）。
+  **EC-CUBE 4.2 / 4.3 では、本体の `SameSiteNoneCompatSessionHandler` で包み直す**
+  （`app/config/eccube/packages/redis_session_samesite.php`）。Cookie の SameSite=None・Secure・パスは
+  あのハンドラが付けているので、包まないと SameSite がブラウザの既定（Lax）になり、決済の戻り
+  （よそのサイトからの POST）でセッションが届かない。4.4 にはこのクラスが無く、本体の framework.yaml が
+  `cookie_secure: auto` と `cookie_samesite: none` を書いている（Redis にしてもそのまま効く）。
 - 接続先は `.env` の `SESSION_REDIS_URL`（本番はマネージド Redis に向けられる）。
 - キャッシュ用 `redis`（`allkeys-lru`）とは別インスタンスにして、セッションが LRU で
   勝手に消えないようにしている。上限は `.env` の `SESSION_REDIS_MAXMEMORY`（既定 256mb）。
   到達時は OOM ではなく新規セッションの書込エラーになり、既存ユーザーは守られる。
-- 単一ホストのみで運用するなら不要。この 3 定義（services.yaml）と `redis-session`
-  サービスを外せばファイルセッションに戻る。
+- 単一ホストのみで運用するなら不要。`.env` の `COMPOSE_PROFILES` から `redis` を外せば、
+  entrypoint が設定を外してファイルのセッションに戻る（`redis-session` も立たない）。
 
 > 実測: ログイン系ページで発行される `eccube` セッション ID が `redis-session` に
 > `ecses:<id>`（TTL≈`gc_maxlifetime`）として保存され、`--scale=2` でも両レプリカから
@@ -338,7 +342,15 @@ bin/plugin.sh doctor        # Redis は「外部」と出れば正しい
 
 - **自前の nginx**: `docker/nginx/lb.conf.example`。`upstream` に各ホストの `<プライベート IP>:8080` を並べる。
 - **Cloudflare Load Balancing / AWS ALB**: 各ホストの `:8080` をオリジン（ターゲット）に登録する。
-  ヘルスチェックは `/` が 200。
+- **ヘルスチェックは `/`。ただし、何を「正常」とするかに気をつける。** LB のヘルスチェックは
+  `X-Forwarded-Proto` を付けず、`Host` はホストの IP になる。**`ECCUBE_FORCE_SSL` の店は `/` に 301 を返し、
+  `TRUSTED_HOSTS` を書いた店は 400 を返す。** 200 だけを正常にすると全部のホストが外れ、サイトが落ちる。
+  - Cloudflare（モニターにヘッダーを足せる）: `Host: <店のドメイン>` と `X-Forwarded-Proto: https` を付け、200 を正常にする。
+  - ALB（ヘッダーを足せない）: 正常のコードを `200-399` にする（`TRUSTED_HOSTS` を書いているなら、その中に
+    ホストの IP も足す）。これは「nginx と PHP が返事をする」までしか見ないので、画面が組み立つかは
+    `bin/healthcheck.sh`（各ホストで）と `deploy.sh` の最後の確かめで見る。
+  - **`TRUSTED_HOSTS` を書いているなら、ホストのプライベート IP も足す。** `bin/healthcheck.sh` も ALB も、ホストの IP に
+    `Host` を付け替えずに聞くので、店のドメインだけだと 400 になる。
 - **スティッキーセッションは要らない**（セッションは Redis で共有）。
 - LB は `X-Forwarded-Proto` と `X-Forwarded-For` を付けて送る（ALB・Cloudflare は自分で付ける）。
 
@@ -359,7 +371,20 @@ LB のサブネット（`10.0.0.0/8` など）を書くと、お客さんの IP 
 
 そのぶん、**nginx に LB 以外から届かないこと**が前提になる。nginx は `X-Forwarded-For` の右端（直前の LB が
 付けた値）をお客さんの IP として使うので、直接届くとその値を偽れて、管理画面の IP 制限とログインの回数制限が
-抜ける。`HTTP_BIND` をプライベート IP にし（必須）、ファイアウォールでも `8080` を LB の IP にだけ開ける。
+抜ける。`HTTP_BIND` をプライベート IP にし（必須）、`8080` を LB にだけ開ける。**開ける・閉じるはクラウドの
+セキュリティグループ（または `DOCKER-USER` チェーン）で。** Docker が公開したポートは ufw / INPUT の規則より
+先に通るので、ufw で閉じたつもりでも同じネットワークのほかのマシンから届く。
+
+**LB の前にさらに CDN を置くとき**（Cloudflare のプロキシ〔オレンジの雲〕→ ALB、など）、右端の値は CDN の
+中継点の IP になる。**お客さんが中継点ごとにまとまり**、ログインの回数制限がよその人まで巻き込み、管理画面の
+IP 制限も効かなくなる。そのときは `docker/nginx/default.conf` の `real_ip_header` を `CF-Connecting-IP` に
+する（Cloudflare）か、`set_real_ip_from` を LB と CDN の範囲に絞って `real_ip_recursive on` にする。
+**`CF-Connecting-IP` にするなら、LB が「自分の店のゾーンを通った接続」しか受けないようにする。** nginx はこのヘッダーを
+どこから来ても信じるので、ほかから LB へ届くと、好きな値を書けて、管理画面の IP 制限とログインの回数制限が抜ける。
+**Cloudflare の IP 範囲で絞るだけでは足りない。** その範囲は Cloudflare の全利用者が共有していて、よそのアカウントの
+Workers からも、同じ範囲から LB へ好きなヘッダーを付けて送れる。全体共通の証明書の Authenticated Origin Pulls も同じ理由で
+足りない。**ゾーン（またはホスト名）ごとの Authenticated Origin Pulls を、自分の証明書で有効にし、LB でその
+クライアント証明書を確かめる。** それができない構成なら、`CF-Connecting-IP` は使わず、右端の値（既定）のままにする。
 
 ## 管理画面が書くファイルは 1 台にしか無い
 
@@ -400,6 +425,15 @@ bin/healthcheck.sh
   2 台目以降は `bin/deploy.sh --no-backup` でよい（init 役で取った直後なら）。
 - migration は**古いコードでも壊れない形**（列を足すだけ、など）にする。init 役で流したあと、残りの
   ホストが新しいコードになるまでの間、古いコードが新しいスキーマで動く。
+- **エンティティやプラグインが変わる反映は、1 台ずつではなく、LB をメンテナンス中にして全部まとめて行う。**
+  Doctrine のメタデータは共有のキャッシュの Redis に載るので、1 台ずつだと、新しいホストが書いたものを古いホストが読み、
+  `Unrecognized field` / `Property ... does not exist` で落ちる。順は:
+  1. LB を「メンテナンス中」にする（お客さんの要求をどのホストにも通さない）
+  2. init 役で `bin/deploy.sh`（migration とプラグインの DB を合わせる）
+  3. 残りのホストで、1 台ずつ `bin/deploy.sh`（`deploy.sh` は動いている ec-cube が要るので、ホストは止めない）
+  4. **最後に、キャッシュの Redis を空にする**（init 役で `bin/console.sh cache:pool:clear --all`）。3 の途中では、まだ古い
+     コードのホストがキャッシュを書きうる。全部が新しいコードになってから消せば、残るのは新しいものだけになる
+  5. LB を戻す
 
 ### PHP と Debian のパッチ（イメージの更新）
 
@@ -416,10 +450,12 @@ bin/healthcheck.sh
 2. init 役**以外**のホストを止める: `docker compose stop ec-cube`（`messenger` を使っていれば `worker` も）
 3. init 役で `bin/self-update.sh` → `bin/upgrade.sh <制約>`（外部 DB の退避・失敗したら自動で戻す、は
    1 台のときと同じ）。終わったら新しい日付タグを `.env` に控える
-4. 残りのホストで、`.env` の `ECCUBE_IMAGE` を同じタグにして `bin/upgrade.sh <制約>`（スキーマはもう
-   合っているので、差分なしで通る）
-5. キャッシュの Redis を空にする（`redis-cli -u "$REDIS_URL" FLUSHDB`。セッションの Redis は消さない）
-6. LB を戻す
+4. 残りのホストで、`bin/self-update.sh`（init 役と同じ版にそろえる）→ `.env` の `ECCUBE_IMAGE` を同じタグに
+   して `bin/upgrade.sh <制約>`（スキーマには触らない）
+5. LB を戻す
+
+キャッシュの Redis は `upgrade.sh` が空にする（`cache:pool:clear --all`。proxy の生成とスキーマの差分より前、つまり
+新しい版がメタデータを読む前。失敗して元の版に戻すときも、起動し直す前に空にする。セッションの Redis は別なので消えない）。前の版が書いたものを新しい版が読まないためで、ほかのホストを止めてあるのが前提。
 
 この手順は、2 台（共有の MariaDB・Redis 2 つ・LB）で通しで試してあります。init 役で upgrade が途中で失敗したときも、
 共有の DB を退避から戻し、元の版で起動し直すことを確かめました。
