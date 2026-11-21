@@ -195,7 +195,8 @@ nginx は Docker 内蔵 DNS を毎回引き直して各レプリカへ分散す�
   **EC-CUBE 4.2 / 4.3 では、本体の `SameSiteNoneCompatSessionHandler` で包み直す**
   （`app/config/eccube/packages/redis_session_samesite.php`）。Cookie の SameSite=None・Secure・パスは
   あのハンドラが付けているので、包まないと SameSite がブラウザの既定（Lax）になり、決済の戻り
-  （よそのサイトからの POST）でセッションが届かない。4.4 にはこのクラスが無く、本体も Lax のまま。
+  （よそのサイトからの POST）でセッションが届かない。4.4 にはこのクラスが無く、本体の framework.yaml が
+  `cookie_secure: auto` と `cookie_samesite: none` を書いている（Redis にしてもそのまま効く）。
 - 接続先は `.env` の `SESSION_REDIS_URL`（本番はマネージド Redis に向けられる）。
 - キャッシュ用 `redis`（`allkeys-lru`）とは別インスタンスにして、セッションが LRU で
   勝手に消えないようにしている。上限は `.env` の `SESSION_REDIS_MAXMEMORY`（既定 256mb）。

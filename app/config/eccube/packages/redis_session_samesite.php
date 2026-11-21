@@ -7,8 +7,8 @@
  * **4.2 / 4.3 の本体は、セッションの Cookie の属性をこのハンドラで決めている**（SameSite=None・Secure・
  * ECCUBE_COOKIE_PATH）。redis_session.yaml が handler_id を生の Redis ハンドラへ差し替えると誰も付けず、
  * SameSite はブラウザの既定（Lax）になる。**決済の戻り（よそのサイトからの POST）でセッションが届かず、
- * 注文の途中でカートやログインが消える。** 4.4 ではこのクラスが無く、本体も素のファイルのハンドラ（Lax）なので、
- * 包まない（同じ振る舞いのまま）。
+ * 注文の途中でカートやログインが消える。** 4.4 ではこのクラスが無く、本体の framework.yaml が cookie_secure: auto と
+ * cookie_samesite: none を書いているので、包まない（ハンドラを差し替えても、それはそのまま効く）。
  *
  * **packages/ に置き、Redis のセッションが入っているときだけ効かせる。** optional/ の中身は entrypoint が
  * *.yaml だけを packages/ へ写すので、ここで redis_session.yaml があるかを見る。handler_id を後から上書きすると
