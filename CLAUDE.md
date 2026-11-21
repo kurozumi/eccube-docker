@@ -100,6 +100,20 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   `upgrade.sh` / `switch-version.sh` は `--php=<版>` を受け、系列が対応しない版なら何も変えずに止まる
   （`image_resolve_php`）。いまの PHP は**イメージの** `ENV PHP_VERSION` から読む（コンテナの環境変数は
   env_file 経由で .env の値が混ざるので見ない）。
+- **本体の作りに触る変更は、配っている全部の系列（4.2・4.3・4.4）で確かめる。1 つの系列で確かめて全部に効かせない。**
+  同じ名前の設定・クラスでも、系列で中身が違う。実例: #133 は 4.4 のイメージだけを見て、Redis のセッションの
+  `SameSiteNoneCompatSessionHandler` の包みを全部の系列で外した。4.4 にはそのクラスが無いが、4.2 / 4.3 はそれが Cookie の
+  SameSite=None・Secure・パスを付けていたので、**決済の戻りでセッションが届かなくなった**（#228 で包み直す）。
+  確かめる順は 3 つ。
+  1. **公式ドキュメント**（https://doc4.ec-cube.net/ ）で、本体が想定している作りを知る。
+  2. **全部の系列のソース**（`docker run --rm --entrypoint sh <イメージ> -c '<読むコマンド>'` か `raw.githubusercontent.com/EC-CUBE/ec-cube/<系列>/…`）で、
+     いまもそうかを見る。**設定ファイルは最後まで読む**（`sed -n '/session:/,/cookie_httponly/p'` のように途中で切ったせいで、
+     4.4 の `cookie_samesite: none` を見落とし「4.4 は Lax」と書いた）。
+  3. **全部の系列で動かす。** 読むだけでは分からないことがある。
+  **公式ドキュメントも系列に追いついていないことがある。** session_handler_settings の例は、4.3 では例外で起動せず
+  （4.3 の `SameSiteNoneCompatSessionHandler` は親のコンストラクタで Symfony のハンドラを拒む）、4.4 ではクラスが無く、
+  MySQL の表（`sess_lifetime MEDIUMINT`）は 4.2 以降で保存できなかった（どれも動かして確かめた。2026-11-21）。
+  ドキュメントは「想定」として読み、事実はソースと動かした結果で決める。
 - **`image_check_version` は alpha / beta / RC を安定版として数えない。** 以前は「系列で始まる版が
   あるか」だけを見ていたので、4.4.0-alpha が Packagist に出た時点で `~4.4.0` を通し、build に入って
   から composer が落ちていた（create-project は stability を指定しないので安定版しか探さない）。
