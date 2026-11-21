@@ -212,8 +212,9 @@ DoctrineMigrations / config / Plugin）と `html/user_data`（独自 CSS/JS）�
   要る。無料なら 403 で止まり、手元とサーバーの壁だけになる）。詳細は `docs/deploy.md`。
 - **起動時の migration は、未適用が確かにあるときだけ、DB を取ってから流す。** entrypoint は DB に繋がるかと
   `doctrine:migrations:up-to-date` の出力（`Out-of-date`）で見る。**確かめられない（DB が起きていない・コンソールが
-  起動しない）ときは何もしない**（メンテナンスにもしない。次の起動でまた見る）。`deploy.sh` の最中（`deploy:` の表示）も
-  流さない（deploy が退避してから流す。同時に流すと二重に当たる）。未適用があれば `var/migrate-backup/` へダンプしてから
+  起動しない）ときは何もしない**（メンテナンスにもしない。次の起動でまた見る）。**メンテナンス表示があるときも
+  流さない**（`deploy:` の最中、前の起動で失敗した `entrypoint:`、手で入れたもの。deploy は手の表示を借りるので、
+  `deploy:` だけを見ていると二重に当たった。失敗のあとの再起動のたびに途中まで当たった DB へもう一度流していた）。未適用があれば `var/migrate-backup/` へダンプしてから
   流し、成功したらダンプは消す。取れない・失敗したらメンテナンス表示（`entrypoint:`）にして止める。表示は、後の起動で
   未適用が無くなっていれば entrypoint が外し、`deploy.sh` の成功でも外れる（`doctor` は外さない）。
   **PostgreSQL のクライアントは PGDG から 14〜17 を全部入れ、サーバーと同じ版の pg_dump を使う**（古い pg_dump は新しい

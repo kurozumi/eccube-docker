@@ -236,6 +236,23 @@ restore_env() {
     fi
     return 0
 }
+# **.env を書き換えてから、バックアップの守り（backup_interrupted）に渡すまでの間も戻す。** イメージの pull / build
+# （数分）や確認の質問の途中の Ctrl-C・切断・思わぬ失敗で終わると、.env だけ新しい版のまま古い本体が動き続け、
+# 次の up や deploy が新しいイメージで古い本体を動かす
+early_abort() {
+    [ "${BASH_SUBSHELL:-0}" = 0 ] || exit 1
+    trap - ERR INT TERM HUP
+    # 自分で立てた表示（upgrade:）なら外す。maint_on は表示を書く**前**に 1 にするので、書いた直後の中断でも外れる
+    if [ "${maint_on:-0}" = 1 ]; then
+        "${dc[@]}" exec -T ec-cube sh -c "grep -q '^upgrade:' ${MAINT:-/var/www/html/.maintenance} && rm -f ${MAINT:-/var/www/html/.maintenance}" 2>/dev/null \
+            && echo "[upgrade] メンテナンス OFF" >&2
+    fi
+    restore_env
+    echo "[upgrade] 中止しました。.env を元に戻しました（お店は元の版のまま動いています）。" >&2
+    exit 1
+}
+maint_on=0   # この upgrade が表示を立てたか（early_abort が見る）
+trap early_abort ERR INT TERM HUP
 if grep -qE '^ECCUBE_VERSION=' .env 2>/dev/null; then
     tmp="$(mktemp)"
     sed "s|^ECCUBE_VERSION=.*|ECCUBE_VERSION=${ver}|" .env > "$tmp" && mv "$tmp" .env
@@ -446,10 +463,11 @@ if [ -n "$("${dc[@]}" ps -q --status running ec-cube 2>/dev/null)" ]; then
         manual_maint="$("${dc[@]}" exec -T ec-cube sh -c "head -1 $MAINT" 2>/dev/null | tr -d '\r\n' || true)"
         [ -z "$manual_maint" ] || token="${manual_maint#*:}"
         echo "[upgrade] メンテナンス表示はすでに有効です（そのまま進めます。終わっても外しません）"
-    elif "${dc[@]}" exec -T ec-cube runuser -u www-data -- sh -c "printf 'upgrade:%s' '$token' > $MAINT"; then
-        maint_on=1
+    elif maint_on=1 && "${dc[@]}" exec -T ec-cube runuser -u www-data -- sh -c "printf 'upgrade:%s' '$token' > $MAINT"; then
+        # maint_on は書く前に 1 にする（書いた直後の中断でも、守りが外せるように。外すのは upgrade: だけ）
         echo "[upgrade] メンテナンス ON（お客さんには「メンテナンス中」。ログイン中の管理者は見えます）"
     else
+        maint_on=0
         # 立てられないまま進むと、お客さんが注文できる状態でバックアップを取り、その後の注文が戻すときに消える
         echo "[upgrade] エラー: メンテナンス表示を立てられませんでした。中止します。稼働中の環境には触れていません。" >&2
         restore_env
@@ -481,19 +499,28 @@ maint_off_running() {
     return 0
 }
 
+
 # バックアップの途中で Ctrl-C・ssh の切断があっても、表示と .env を残さない（まだ何も壊していない）
 worker_stopped=0
-worker_back() { [ "$worker_stopped" = 1 ] && "${dc[@]}" start worker >/dev/null 2>&1; return 0; }
+# 起動し直せなくても後始末を止めない（set -e の下で、守りの途中で落ちると .env と表示が残る）
+worker_back() {
+    if [ "$worker_stopped" = 1 ] && ! "${dc[@]}" start worker >/dev/null 2>&1; then
+        echo "[upgrade] 注意: メールの worker を起動し直せませんでした（docker compose start worker）" >&2
+    fi
+    return 0
+}
 backup_interrupted() {
-    trap - INT TERM HUP
+    [ "${BASH_SUBSHELL:-0}" = 0 ] || exit 1
+    trap - ERR INT TERM HUP
     worker_back
     cp -p "$work/env.new" .env 2>/dev/null || true
     maint_off_running
     restore_env
-    echo "[upgrade] バックアップの途中で止められました。稼働中の環境には触れていません。" >&2
+    echo "[upgrade] 上げる前（バックアップのあたり）で止まりました。.env と表示を元に戻しました。お店は元の版のまま動いています。" >&2
     exit 1
 }
-trap backup_interrupted INT TERM HUP
+# 思わぬ失敗（ERR。ディスクがいっぱいで .env を写せない、など）でも、表示・worker・.env を戻す。rollback_upgrade に渡すまで
+trap backup_interrupted ERR INT TERM HUP
 # メールの worker を止める。戻すと送ったはずのメールが DB に戻り、もう一度送られる（注文確認の二重送信）
 if printf '%s\n' "$services_now" | grep -qx worker && [ -n "$("${dc[@]}" ps -q --status running worker 2>/dev/null)" ]; then
     "${dc[@]}" stop worker >/dev/null 2>&1 && worker_stopped=1 && echo "[upgrade] メールの worker を止めました（終われば起動し直します）"
@@ -512,14 +539,14 @@ BACKUP_LABEL=upgrade BACKUP_RESULT_FILE="$rf" bin/backup.sh || backup_ok=0
 cp -p "$work/env.new" .env
 if [ "$backup_ok" != 1 ] || [ ! -s "$rf" ]; then
     echo "[upgrade] エラー: バックアップに失敗しました。中止します。稼働中の環境には触れていません。" >&2
-    trap - INT TERM HUP
+    trap - ERR INT TERM HUP
     worker_back
     maint_off_running
     restore_env
     exit 1
 fi
 backup_dir="$(cat "$rf")"
-trap - INT TERM HUP
+# 守り（backup_interrupted）は、止めて入れ替え始める直前（rollback_upgrade に替える）まで残す。まだ何も壊していない
 echo "[upgrade] バックアップ: ${backup_dir}"
 
 # ── ここから先で失敗したら、自動で元の版に戻す ──
